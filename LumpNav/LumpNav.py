@@ -715,7 +715,7 @@ class LumpNavGuidelet(Guidelet):
     self.onViewSelect(self.viewUltrasound3d) 
 
   def onUltrasoundPanelToggled(self, toggled):
-    Guidelet.onUltrasoundPanelToggled(self)
+    Guidelet.onUltrasoundPanelToggled(self, toggled)
     
     if self.tumorMarkups_Needle:
         self.tumorMarkups_Needle.SetDisplayVisibility(1)
