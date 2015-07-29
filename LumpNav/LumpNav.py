@@ -189,6 +189,7 @@ class LumpNavGuidelet(Guidelet):
     self.breachWarningNode.UnRegister(slicer.mrmlScene)
     self.setAndObserveTumorMarkupsNode(None)
     self.breachWarningLightLogic.stopLightFeedback()
+    self.tipToSurfaceDistanceLogic.removeCalculateDistanceObserver()  
     
   def setupConnections(self):
     logging.debug('LumpNav.setupConnections()')
@@ -208,7 +209,12 @@ class LumpNavGuidelet(Guidelet):
     self.leftCameraButton.connect('clicked()', self.onLeftCameraButtonClicked)
 
     self.placeTumorPointAtCauteryTipButton.connect('clicked(bool)', self.onPlaceTumorPointAtCauteryTipClicked)
-
+    
+    self.activateDistanceButton.connect('clicked(bool)', self.onActivateDistanceClicked)
+    self.trajectoryCheckBox.connect('stateChanged(int)', self.onTrajectoryCheckBoxStateChanged)
+    self.crosshairCheckBox.connect('stateChanged(int)', self.onCrosshairCheckBoxStateChanged)
+    self.distanceComboBox.connect('currentIndexChanged(const QString&)', self.onDistanceComboBoxIndexChanged)
+    
     self.pivotSamplingTimer.connect('timeout()',self.onPivotSamplingTimeout)
 
     import Viewpoint
@@ -261,11 +267,16 @@ class LumpNavGuidelet(Guidelet):
       self.needleModelToNeedleTip.SetName("NeedleModelToNeedleTip")
       m = vtk.vtkMatrix4x4()
       m.SetElement( 0, 0, 0 )
-      m.SetElement( 1, 1, 0 )
-      m.SetElement( 2, 2, 0 )
-      m.SetElement( 0, 1, 1 )
-      m.SetElement( 1, 2, 1 )
+      m.SetElement( 0, 2, 1 )
+      m.SetElement( 1, 1, -1 )
       m.SetElement( 2, 0, 1 )
+      m.SetElement( 2, 2, 0 )
+      # m.SetElement( 0, 0, 0 )
+      # m.SetElement( 1, 1, 0 )
+      # m.SetElement( 2, 2, 0 )
+      # m.SetElement( 0, 1, 1 )
+      # m.SetElement( 1, 2, 1 )
+      # m.SetElement( 2, 0, 1 )
       self.needleModelToNeedleTip.SetMatrixTransformToParent(m)
       slicer.mrmlScene.AddNode(self.needleModelToNeedleTip)
 
@@ -421,6 +432,11 @@ class LumpNavGuidelet(Guidelet):
     dataProbeParameterNode=dataProbeUtil.getParameterNode()
     dataProbeParameterNode.SetParameter('showSliceViewAnnotations', '0')
 
+    import TipToSurfaceDistance
+    self.tipToSurfaceDistanceLogic = TipToSurfaceDistance.TipToSurfaceDistanceLogic(self.tumorModel_Needle)
+    # Update position to default
+    self.onDistanceComboBoxIndexChanged()
+    
   def disconnect(self):#TODO see connect
     logging.debug('LumpNav.disconnect()')
     Guidelet.disconnect(self)
@@ -451,7 +467,11 @@ class LumpNavGuidelet(Guidelet):
     self.cameraZPosSlider.disconnect('valueChanged(double)', self.viewpointLogic.SetCameraZPosMm)
     
     self.placeTumorPointAtCauteryTipButton.disconnect('clicked(bool)', self.onPlaceTumorPointAtCauteryTipClicked)
-
+    
+    self.activateDistanceButton.disconnect('clicked(bool)', self.onActivateDistanceClicked)
+    self.trajectoryCheckBox.disconnect('stateChanged(int)', self.onTrajectoryCheckBoxStateChanged)
+    self.crosshairCheckBox.disconnect('stateChanged(int)', self.onCrosshairCheckBoxStateChanged)
+    self.distanceComboBox.disconnect('currentIndexChanged(const QString&)', self.onDistanceComboBoxIndexChanged)
     
   def onPivotSamplingTimeout(self):#lumpnav
     self.countdownLabel.setText("Pivot calibrating for {0:.0f} more seconds".format(self.pivotCalibrationStopTime-time.time())) 
@@ -533,7 +553,43 @@ class LumpNavGuidelet(Guidelet):
     cauteryTipToNeedle = vtk.vtkMatrix4x4()
     self.cauteryTipToCautery.GetMatrixTransformToNode(self.needleToReference, cauteryTipToNeedle)
     self.tumorMarkups_Needle.AddFiducial(cauteryTipToNeedle.GetElement(0,3), cauteryTipToNeedle.GetElement(1,3), cauteryTipToNeedle.GetElement(2,3))
-      
+  
+  def onActivateDistanceClicked(self):
+    if self.activateDistanceButton.checked:
+      self.activateDistanceButton.setText('Deactivate')
+      self.tipToSurfaceDistanceLogic.setVisibility(True)
+      self.crosshairCheckBox.checked = True
+      self.trajectoryCheckBox.checked = True
+      self.startTipToSurfaceDistance()
+    elif not self.activateDistanceButton.checked:
+      self.activateDistanceButton.setText('Activate')
+      self.stopTipToSurfaceDistance()
+      self.tipToSurfaceDistanceLogic.setVisibility(False)
+      self.crosshairCheckBox.checked = False
+      self.trajectoryCheckBox.checked = False
+        
+  def onCrosshairCheckBoxStateChanged(self):
+    if self.crosshairCheckBox.checked:
+      self.tipToSurfaceDistanceLogic.setCrosshairVisibility(True)
+    elif not self.crosshairCheckBox.checked:
+      self.tipToSurfaceDistanceLogic.setCrosshairVisibility(False)
+    
+  def onTrajectoryCheckBoxStateChanged(self):
+    if self.trajectoryCheckBox.checked:
+      self.tipToSurfaceDistanceLogic.setTrajectoryVisibility(True)
+    elif not self.trajectoryCheckBox.checked:
+      self.tipToSurfaceDistanceLogic.setTrajectoryVisibility(False)  
+  
+  def onDistanceComboBoxIndexChanged(self):
+    self.tipToSurfaceDistanceLogic.setTextPosition(self.distanceComboBox.currentText)
+    
+  def startTipToSurfaceDistance(self):
+    self.tipToSurfaceDistanceLogic.setMembers(self.needleToReference, self.cauteryTipToCautery, self.cauteryToReference)
+    self.tipToSurfaceDistanceLogic.addCalculateDistanceObserver()  
+
+  def stopTipToSurfaceDistance(self):
+    self.tipToSurfaceDistanceLogic.removeCalculateDistanceObserver()  
+    
   def setupCalibrationPanel(self):
     logging.debug('setupCalibrationPanel')
 
@@ -706,6 +762,45 @@ class LumpNavGuidelet(Guidelet):
     self.deleteLastFiducialDuringNavigationButton.setEnabled(False)
     self.contourAdjustmentFormLayout.addRow(self.deleteLastFiducialDuringNavigationButton)
 
+    # Distance Collapsible
+    self.distanceCollapsibleButton = ctk.ctkCollapsibleGroupBox()
+    self.distanceCollapsibleButton.title = "Distance"
+    self.distanceCollapsibleButton.collapsed=True
+    self.navigationCollapsibleLayout.addRow(self.distanceCollapsibleButton)
+
+    # Layout within the collapsible button
+    self.distanceFormLayout = qt.QFormLayout(self.distanceCollapsibleButton)        
+
+    self.activateDistanceButton = qt.QPushButton("Activate")
+    setButtonStyle(self.activateDistanceButton)
+    self.activateDistanceButton.setCheckable(True)
+    self.distanceFormLayout.addRow(self.activateDistanceButton)
+    
+    self.distanceComboBoxLabel = qt.QLabel('Text location:')
+    self.distanceComboBox = qt.QComboBox()
+    self.distanceComboBox.addItem("Left")
+    self.distanceComboBox.addItem("Right")
+    self.distanceComboBox.addItem("Up")
+    self.distanceComboBox.addItem("Down")
+    self.distanceComboBox.setCurrentIndex(3)
+        
+    self.crosshairCheckBoxLabel = qt.QLabel('Show crosshair:')
+    self.crosshairCheckBox = qt.QCheckBox()
+    self.crosshairCheckBox.setChecked(True)
+    
+    self.trajectoryCheckBoxLabel = qt.QLabel('Show trajectory:')
+    self.trajectoryCheckBox = qt.QCheckBox()
+    self.trajectoryCheckBox.setChecked(True)
+    
+    hboxDistance = qt.QHBoxLayout()
+    hboxDistance.addWidget(self.distanceComboBox)
+    hboxDistance.addStretch()
+    hboxDistance.addWidget(self.crosshairCheckBoxLabel)
+    hboxDistance.addWidget(self.crosshairCheckBox)
+    hboxDistance.addWidget(self.trajectoryCheckBoxLabel)
+    hboxDistance.addWidget(self.trajectoryCheckBox)
+    self.distanceFormLayout.addRow(hboxDistance)
+    
   def onCalibrationPanelToggled(self, toggled):
     if toggled == False:
       return
