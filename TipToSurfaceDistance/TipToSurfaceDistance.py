@@ -13,8 +13,8 @@ class TipToSurfaceDistance(ScriptedLoadableModule):
     self.parent.title = "TipToSurfaceDistance" 
     self.parent.categories = ["IGT"]
     self.parent.dependencies = []
-    self.parent.contributors = ["Mikael Brudfors (Laboratorio de Imagen Medica, Unidad de Medicina y Cirugia Experimental, Hospital General Universitario)"] 
-    self.parent.helpText = """Calculated the distance from a tool tip to a surface."""
+    self.parent.contributors = ["Mikael Brudfors, Laura Sanz, Javier Pascau (Laboratorio de Imagen Medica, Hospital Gregorio Maranon - http://image.hggm.es/)"] 
+    self.parent.helpText = """Calculates the distance from a tool tip to a surface."""
     self.parent.acknowledgementText = """Supported by projects IPT-2012-0401-300000, TEC2013-48251-C2-1-R, DTS14/00192, EU FP7 IRSES TAHITI (#269300) and FEDER funds."""
 
 class TipToSurfaceDistanceWidget(ScriptedLoadableModuleWidget):
