@@ -45,52 +45,43 @@ class LumpNavWidget(GuideletWidget):
     
     GuideletWidget.setup(self)
     
-    # Set configuration
-    #self.onConfigurationsComboBoxIndexChanged()
-    
   def addLauncherWidgets(self):
     GuideletWidget.addLauncherWidgets(self)
 
-    lnNode = slicer.util.getNode(self.moduleName)
+    self.lnNode = slicer.util.getNode(self.moduleName)
 
     # Configurations
     self.configurations()
     
     # BreachWarning
-    self.breachWarningLight(lnNode)  
+    self.breachWarningLight()  
  
   # Adds default configurations to Slicer.ini
   def addDefaultConfiguration(self):
     settings = slicer.app.userSettings()    
-    if not settings.value('LumpNav/Configurations/default/TipToSurfaceDistanceCrossHair'):
+    if not settings.value('LumpNav/Configurations/default/TipToSurfaceDistanceCrossHair'): # Better way to check if default already exists?
       settings.beginGroup('LumpNav/Configurations/default')
       settings.setValue('TipToSurfaceDistanceCrossHair', 'True')
       settings.setValue('TipToSurfaceDistanceText', 'True')
       settings.setValue('TipToSurfaceDistanceTrajectory', 'True')
-      # m.SetElement( 0, 0, 0 )
-      # m.SetElement( 1, 1, 0 )
-      # m.SetElement( 2, 2, 0 )
-      # m.SetElement( 0, 1, 1 )
-      # m.SetElement( 1, 2, 1 )
-      # m.SetElement( 2, 0, 1 )
-      settings.setValue('needleModelToNeedleTip', '1 0 0 0 0 1 0 0 0 0 1 0 0 0 0 1')
-      # m.SetElement( 0, 0, 0 )
-      # m.SetElement( 0, 2, 1 )
-      # m.SetElement( 1, 1, -1 )
-      # m.SetElement( 2, 2, 0 )
-      # m.SetElement( 2, 0, 1 )
-      settings.setValue('cauteryModelToCauteryTip', '1 0 0 0 0 1 0 0 0 0 1 0 0 0 0 1')
+      settings.setValue('needleModelToNeedleTip', '0 1 0 0 0 0 1 0 1 0 0 0 0 0 0 1')
+      settings.setValue('cauteryModelToCauteryTip', '0 0 1 0 0 -1 0 0 1 0 0 0 0 0 0 1')
       settings.endGroup()
-  
+    # Configurations\madrid\TipToSurfaceDistanceCrossHair=True
+    # Configurations\madrid\TipToSurfaceDistanceText=True
+    # Configurations\madrid\TipToSurfaceDistanceTrajectory=True
+    # Configurations\madrid\needleModelToNeedleTip=0 0 1 0 0 -1 0 0 1 0 0 0 0 0 0 1      
+    # Configurations\madrid\cauteryModelToCauteryTip=0 0 1 0 0 -1 0 0 1 0 0 0 0 0 0 1
+
   # Adds a list box populated with the available configurations in the Slicer.ini file
   def configurations(self):
     self.configurationsComboBox = qt.QComboBox()
     self.launcherFormLayout.addRow('Select Configuration: ', self.configurationsComboBox)
-    #self.configurationsComboBox.connect('currentIndexChanged(const QString &)', self.onConfigurationsComboBoxIndexChanged)
-    configs = self.getLumpNavConfigurations()
+    self.configurationsComboBox.connect('currentIndexChanged(const QString &)', self.onConfigurationsComboBoxIndexChanged)
+    currentConfiguration = self.getLumpNavConfigurations()
     
     # Populate ComboBox with available configurations
-    for configName in configs.keys():
+    for configName in currentConfiguration.keys():
       self.configurationsComboBox.addItem(configName)
   
   def getLumpNavConfigurations(self):
@@ -108,14 +99,12 @@ class LumpNavWidget(GuideletWidget):
           configs[configName] = [[param, value]]
     return configs    
     
-  def onConfigurationsComboBoxIndexChanged(self, text):
-    pass
-    # configs = self.getLumpNavConfigurations()
-    # params = configs[text]
-    # for param in params:
-      # self.guideletLogic.parameterNode.SetParameter(param[0], param[1])    
+  def onConfigurationsComboBoxIndexChanged(self, configName):
+    currentConfiguration = self.getLumpNavConfigurations() 
+    self.currentConfigurationParams = currentConfiguration[configName]
+    self.currentConfigurationName = configName
     
-  def breachWarningLight(self, lnNode):
+  def breachWarningLight(self):
     self.breachWarningLightCheckBox = qt.QCheckBox()
     checkBoxLabel = qt.QLabel()
     hBoxCheck = qt.QHBoxLayout()
@@ -126,9 +115,9 @@ class LumpNavWidget(GuideletWidget):
 
     self.launcherFormLayout.addRow(hBoxCheck)
 
-    if(lnNode is not None and lnNode.GetParameter('EnableBreachWarningLight')):
-        # logging.debug("There is already a connector EnableBreachWarningLight parameter " + lnNode.GetParameter('EnableBreachWarningLight'))
-        self.breachWarningLightCheckBox.checked = lnNode.GetParameter('EnableBreachWarningLight')
+    if(self.lnNode is not None and self.lnNode.GetParameter('EnableBreachWarningLight')):
+        # logging.debug("There is already a connector EnableBreachWarningLight parameter " + self.lnNode.GetParameter('EnableBreachWarningLight'))
+        self.breachWarningLightCheckBox.checked = self.lnNode.GetParameter('EnableBreachWarningLight')
         self.breachWarningLightCheckBox.setDisabled(True)
     else:
         self.breachWarningLightCheckBox.setEnabled(True)
@@ -149,6 +138,10 @@ class LumpNavWidget(GuideletWidget):
         settings = slicer.app.userSettings()
         settings.setValue(self.moduleName + '/EnableBreachWarningLight', lightEnabled)
 
+    parameterlist['Configuration'] = self.currentConfigurationName
+    for param in self.currentConfigurationParams:
+      parameterlist[param[0]] = param[1] 
+      
     return parameterlist
 
   def createGuideletInstance(self, parameterList = None):
@@ -256,6 +249,7 @@ class LumpNavGuidelet(Guidelet):
     Guidelet.cleanup(self)
     logging.debug('cleanup')
     self.breachWarningNode.UnRegister(slicer.mrmlScene)
+    self.stopTipToSurfaceDistance()
     self.setAndObserveTumorMarkupsNode(None)
     self.breachWarningLightLogic.stopLightFeedback()
     self.tipToSurfaceDistanceLogic.removeCalculateDistanceObserver()  
@@ -278,11 +272,6 @@ class LumpNavGuidelet(Guidelet):
     self.leftCameraButton.connect('clicked()', self.onLeftCameraButtonClicked)
 
     self.placeTumorPointAtCauteryTipButton.connect('clicked(bool)', self.onPlaceTumorPointAtCauteryTipClicked)
-    
-    self.activateDistanceButton.connect('clicked(bool)', self.onActivateDistanceClicked)
-    self.trajectoryCheckBox.connect('stateChanged(int)', self.onTrajectoryCheckBoxStateChanged)
-    self.crosshairCheckBox.connect('stateChanged(int)', self.onCrosshairCheckBoxStateChanged)
-    self.distanceComboBox.connect('currentIndexChanged(const QString&)', self.onDistanceComboBoxIndexChanged)
     
     self.pivotSamplingTimer.connect('timeout()',self.onPivotSamplingTimeout)
 
@@ -503,8 +492,6 @@ class LumpNavGuidelet(Guidelet):
 
     import TipToSurfaceDistance
     self.tipToSurfaceDistanceLogic = TipToSurfaceDistance.TipToSurfaceDistanceLogic(self.tumorModel_Needle)
-    # Update position to default
-    self.onDistanceComboBoxIndexChanged()
     
   def disconnect(self):#TODO see connect
     logging.debug('LumpNav.disconnect()')
@@ -536,11 +523,6 @@ class LumpNavGuidelet(Guidelet):
     self.cameraZPosSlider.disconnect('valueChanged(double)', self.viewpointLogic.SetCameraZPosMm)
     
     self.placeTumorPointAtCauteryTipButton.disconnect('clicked(bool)', self.onPlaceTumorPointAtCauteryTipClicked)
-    
-    self.activateDistanceButton.disconnect('clicked(bool)', self.onActivateDistanceClicked)
-    self.trajectoryCheckBox.disconnect('stateChanged(int)', self.onTrajectoryCheckBoxStateChanged)
-    self.crosshairCheckBox.disconnect('stateChanged(int)', self.onCrosshairCheckBoxStateChanged)
-    self.distanceComboBox.disconnect('currentIndexChanged(const QString&)', self.onDistanceComboBoxIndexChanged)
     
   def onPivotSamplingTimeout(self):#lumpnav
     self.countdownLabel.setText("Pivot calibrating for {0:.0f} more seconds".format(self.pivotCalibrationStopTime-time.time())) 
@@ -617,48 +599,7 @@ class LumpNavGuidelet(Guidelet):
     sphereSource.SetRadius(0.001)
     self.tumorModel_Needle.SetPolyDataConnection(sphereSource.GetOutputPort())      
     self.tumorModel_Needle.Modified()
-
-  def onPlaceTumorPointAtCauteryTipClicked(self):
-    cauteryTipToNeedle = vtk.vtkMatrix4x4()
-    self.cauteryTipToCautery.GetMatrixTransformToNode(self.needleToReference, cauteryTipToNeedle)
-    self.tumorMarkups_Needle.AddFiducial(cauteryTipToNeedle.GetElement(0,3), cauteryTipToNeedle.GetElement(1,3), cauteryTipToNeedle.GetElement(2,3))
   
-  def onActivateDistanceClicked(self):
-    if self.activateDistanceButton.checked:
-      self.activateDistanceButton.setText('Deactivate')
-      self.tipToSurfaceDistanceLogic.setVisibility(True)
-      self.crosshairCheckBox.checked = True
-      self.trajectoryCheckBox.checked = True
-      self.startTipToSurfaceDistance()
-    elif not self.activateDistanceButton.checked:
-      self.activateDistanceButton.setText('Activate')
-      self.stopTipToSurfaceDistance()
-      self.tipToSurfaceDistanceLogic.setVisibility(False)
-      self.crosshairCheckBox.checked = False
-      self.trajectoryCheckBox.checked = False
-        
-  def onCrosshairCheckBoxStateChanged(self):
-    if self.crosshairCheckBox.checked:
-      self.tipToSurfaceDistanceLogic.setCrosshairVisibility(True)
-    elif not self.crosshairCheckBox.checked:
-      self.tipToSurfaceDistanceLogic.setCrosshairVisibility(False)
-    
-  def onTrajectoryCheckBoxStateChanged(self):
-    if self.trajectoryCheckBox.checked:
-      self.tipToSurfaceDistanceLogic.setTrajectoryVisibility(True)
-    elif not self.trajectoryCheckBox.checked:
-      self.tipToSurfaceDistanceLogic.setTrajectoryVisibility(False)  
-  
-  def onDistanceComboBoxIndexChanged(self):
-    self.tipToSurfaceDistanceLogic.setTextPosition(self.distanceComboBox.currentText)
-    
-  def startTipToSurfaceDistance(self):
-    self.tipToSurfaceDistanceLogic.setMembers(self.needleToReference, self.cauteryTipToCautery, self.cauteryToReference)
-    self.tipToSurfaceDistanceLogic.addCalculateDistanceObserver()  
-
-  def stopTipToSurfaceDistance(self):
-    self.tipToSurfaceDistanceLogic.removeCalculateDistanceObserver()  
-    
   def setupCalibrationPanel(self):
     logging.debug('setupCalibrationPanel')
 
@@ -830,45 +771,6 @@ class LumpNavGuidelet(Guidelet):
     setButtonStyle(self.deleteLastFiducialDuringNavigationButton)
     self.deleteLastFiducialDuringNavigationButton.setEnabled(False)
     self.contourAdjustmentFormLayout.addRow(self.deleteLastFiducialDuringNavigationButton)
-
-    # Distance Collapsible
-    self.distanceCollapsibleButton = ctk.ctkCollapsibleGroupBox()
-    self.distanceCollapsibleButton.title = "Distance"
-    self.distanceCollapsibleButton.collapsed=True
-    self.navigationCollapsibleLayout.addRow(self.distanceCollapsibleButton)
-
-    # Layout within the collapsible button
-    self.distanceFormLayout = qt.QFormLayout(self.distanceCollapsibleButton)        
-
-    self.activateDistanceButton = qt.QPushButton("Activate")
-    setButtonStyle(self.activateDistanceButton)
-    self.activateDistanceButton.setCheckable(True)
-    self.distanceFormLayout.addRow(self.activateDistanceButton)
-    
-    self.distanceComboBoxLabel = qt.QLabel('Text location:')
-    self.distanceComboBox = qt.QComboBox()
-    self.distanceComboBox.addItem("Left")
-    self.distanceComboBox.addItem("Right")
-    self.distanceComboBox.addItem("Up")
-    self.distanceComboBox.addItem("Down")
-    self.distanceComboBox.setCurrentIndex(3)
-        
-    self.crosshairCheckBoxLabel = qt.QLabel('Show crosshair:')
-    self.crosshairCheckBox = qt.QCheckBox()
-    self.crosshairCheckBox.setChecked(True)
-    
-    self.trajectoryCheckBoxLabel = qt.QLabel('Show trajectory:')
-    self.trajectoryCheckBox = qt.QCheckBox()
-    self.trajectoryCheckBox.setChecked(True)
-    
-    hboxDistance = qt.QHBoxLayout()
-    hboxDistance.addWidget(self.distanceComboBox)
-    hboxDistance.addStretch()
-    hboxDistance.addWidget(self.crosshairCheckBoxLabel)
-    hboxDistance.addWidget(self.crosshairCheckBox)
-    hboxDistance.addWidget(self.trajectoryCheckBoxLabel)
-    hboxDistance.addWidget(self.trajectoryCheckBox)
-    self.distanceFormLayout.addRow(hboxDistance)
     
   def onCalibrationPanelToggled(self, toggled):
     if toggled == False:
@@ -985,6 +887,8 @@ class LumpNavGuidelet(Guidelet):
   def onLeftCameraButtonClicked(self):
     logging.debug("onLeftCameraButtonClicked {0}".format(self.leftCameraButton.isChecked()))
     if (self.leftCameraButton.isChecked() == True):
+      if (self.parameterNode.GetParameter('TipToSurfaceDistanceText') == 'True'):
+        self.startTipToSurfaceDistance()
       self.viewpointLogic.setCameraNode(self.LeftCamera)
       self.viewpointLogic.setTransformNode(self.cauteryCameraToCautery)
       self.viewpointLogic.startViewpoint()
@@ -1008,6 +912,20 @@ class LumpNavGuidelet(Guidelet):
     #if self.connectorNode != None:
     #  self.connectorNode.Stop()
 
+  def onPlaceTumorPointAtCauteryTipClicked(self):
+    cauteryTipToNeedle = vtk.vtkMatrix4x4()
+    self.cauteryTipToCautery.GetMatrixTransformToNode(self.needleToReference, cauteryTipToNeedle)
+    self.tumorMarkups_Needle.AddFiducial(cauteryTipToNeedle.GetElement(0,3), cauteryTipToNeedle.GetElement(1,3), cauteryTipToNeedle.GetElement(2,3))
+    
+  def startTipToSurfaceDistance(self):
+    self.tipToSurfaceDistanceLogic.setMembers(self.needleToReference, self.cauteryTipToCautery, self.cauteryToReference)
+    self.tipToSurfaceDistanceLogic.addCalculateDistanceObserver()  
+    self.tipToSurfaceDistanceLogic.setCrosshairVisibility(self.parameterNode.GetParameter('TipToSurfaceDistanceCrossHair') == 'True')
+    self.tipToSurfaceDistanceLogic.setTrajectoryVisibility(self.parameterNode.GetParameter('TipToSurfaceDistanceTrajectory') == 'True')  
+    
+  def stopTipToSurfaceDistance(self):
+    self.tipToSurfaceDistanceLogic.removeCalculateDistanceObserver()  
+    
   def onTumorMarkupsNodeModified(self, observer, eventid):
     self.createTumorFromMarkups()
 
