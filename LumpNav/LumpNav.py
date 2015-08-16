@@ -40,13 +40,50 @@ class LumpNavWidget(GuideletWidget):
     GuideletWidget.__init__(self, parent)
     
   def setup(self):
+    # Adds default configurations to Slicer.ini
+    self.addDefaultConfiguration()
+    
     GuideletWidget.setup(self)
 
   def addLauncherWidgets(self):
     GuideletWidget.addLauncherWidgets(self)
 
     lnNode = slicer.util.getNode(self.moduleName)
-    # Breach Warning
+
+    # Configurations
+    self.addAvailableConfigurations()
+    
+    # BreachWarning
+    self.breachWarningLight(lnNode)  
+ 
+  # Adds default configurations to Slicer.ini
+  def addDefaultConfiguration(self):
+    settings = slicer.app.userSettings()    
+    if not settings.value('LumpNav/Configurations/default/TipToSurfaceDistanceCrossHair'):
+      settings.beginGroup('LumpNav/Configurations/default')
+      settings.setValue('TipToSurfaceDistanceCrossHair', 'True')
+      settings.setValue('TipToSurfaceDistanceText', 'True')
+      settings.setValue('TipToSurfaceDistanceTrajectory', 'True')
+      # m.SetElement( 0, 0, 0 )
+      # m.SetElement( 1, 1, 0 )
+      # m.SetElement( 2, 2, 0 )
+      # m.SetElement( 0, 1, 1 )
+      # m.SetElement( 1, 2, 1 )
+      # m.SetElement( 2, 0, 1 )
+      settings.setValue('needleModelToNeedleTip', '1 0 0 0 0 1 0 0 0 0 1 0 0 0 0 1')
+      # m.SetElement( 0, 0, 0 )
+      # m.SetElement( 0, 2, 1 )
+      # m.SetElement( 1, 1, -1 )
+      # m.SetElement( 2, 2, 0 )
+      # m.SetElement( 2, 0, 1 )
+      settings.setValue('cauteryModelToCauteryTip', '1 0 0 0 0 1 0 0 0 0 1 0 0 0 0 1')
+      settings.endGroup()
+  
+  # Adds a list box populated with the available configurations in the Slicer.ini file
+  def addAvailableConfigurations(self):
+    pass
+    
+  def breachWarningLight(self, lnNode):
     self.breachWarningLightCheckBox = qt.QCheckBox()
     checkBoxLabel = qt.QLabel()
     hBoxCheck = qt.QHBoxLayout()
@@ -66,8 +103,8 @@ class LumpNavWidget(GuideletWidget):
         settings = slicer.app.userSettings()
         lightEnabled = settings.value(self.moduleName+'/EnableBreachWarningLight', 'True')
         self.breachWarningLightCheckBox.checked = (lightEnabled == 'True')
-        self.launcherFormLayout.addWidget(self.breachWarningLightCheckBox)       
-
+        self.launcherFormLayout.addWidget(self.breachWarningLightCheckBox)
+  
   def collectParameterList(self):
     parameterlist = GuideletWidget.collectParameterList(self)
 
