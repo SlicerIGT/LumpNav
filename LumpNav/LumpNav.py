@@ -40,13 +40,71 @@ class LumpNavWidget(GuideletWidget):
     GuideletWidget.__init__(self, parent)
     
   def setup(self):
+    # Adds default configurations to Slicer.ini
+    self.addDefaultConfiguration()
+    
     GuideletWidget.setup(self)
-
+    
   def addLauncherWidgets(self):
     GuideletWidget.addLauncherWidgets(self)
 
-    lnNode = slicer.util.getNode(self.moduleName)
-    # Breach Warning
+    self.lnNode = slicer.util.getNode(self.moduleName)
+
+    # Configurations
+    self.configurations()
+    
+    # BreachWarning
+    self.breachWarningLight()  
+ 
+  # Adds default configurations to Slicer.ini
+  def addDefaultConfiguration(self):
+    settings = slicer.app.userSettings()    
+    if not settings.value('LumpNav/Configurations/default/TipToSurfaceDistanceCrossHair'): # Better way to check if default already exists?
+      settings.beginGroup('LumpNav/Configurations/default')
+      settings.setValue('TipToSurfaceDistanceCrossHair', 'True')
+      settings.setValue('TipToSurfaceDistanceText', 'True')
+      settings.setValue('TipToSurfaceDistanceTrajectory', 'True')
+      settings.setValue('needleModelToNeedleTip', '0 1 0 0 0 0 1 0 1 0 0 0 0 0 0 1')
+      settings.setValue('cauteryModelToCauteryTip', '0 0 1 0 0 -1 0 0 1 0 0 0 0 0 0 1')
+      settings.endGroup()
+    # Configurations\madrid\TipToSurfaceDistanceCrossHair=True
+    # Configurations\madrid\TipToSurfaceDistanceText=True
+    # Configurations\madrid\TipToSurfaceDistanceTrajectory=True
+    # Configurations\madrid\needleModelToNeedleTip=0 0 1 0 0 -1 0 0 1 0 0 0 0 0 0 1      
+    # Configurations\madrid\cauteryModelToCauteryTip=0 0 1 0 0 -1 0 0 1 0 0 0 0 0 0 1
+
+  # Adds a list box populated with the available configurations in the Slicer.ini file
+  def configurations(self):
+    self.configurationsComboBox = qt.QComboBox()
+    self.launcherFormLayout.addRow('Select Configuration: ', self.configurationsComboBox)
+    self.configurationsComboBox.connect('currentIndexChanged(const QString &)', self.onConfigurationsComboBoxIndexChanged)
+    currentConfiguration = self.getLumpNavConfigurations()
+    
+    # Populate ComboBox with available configurations
+    for configName in currentConfiguration.keys():
+      self.configurationsComboBox.addItem(configName)
+  
+  def getLumpNavConfigurations(self):
+    configs = {}
+    settings = slicer.app.userSettings()
+    for key in settings.allKeys():
+      if 'LumpNav/Configurations' in key:
+        keySplit = key.split('/')
+        configName = keySplit[2]
+        param = keySplit[3]
+        value = settings.value(key)
+        if configs.has_key(configName):
+          configs[configName].append([param, value])
+        else:
+          configs[configName] = [[param, value]]
+    return configs    
+    
+  def onConfigurationsComboBoxIndexChanged(self, configName):
+    currentConfiguration = self.getLumpNavConfigurations() 
+    self.currentConfigurationParams = currentConfiguration[configName]
+    self.currentConfigurationName = configName
+    
+  def breachWarningLight(self):
     self.breachWarningLightCheckBox = qt.QCheckBox()
     checkBoxLabel = qt.QLabel()
     hBoxCheck = qt.QHBoxLayout()
@@ -57,17 +115,17 @@ class LumpNavWidget(GuideletWidget):
 
     self.launcherFormLayout.addRow(hBoxCheck)
 
-    if(lnNode is not None and lnNode.GetParameter('EnableBreachWarningLight')):
-        # logging.debug("There is already a connector EnableBreachWarningLight parameter " + lnNode.GetParameter('EnableBreachWarningLight'))
-        self.breachWarningLightCheckBox.checked = lnNode.GetParameter('EnableBreachWarningLight')
+    if(self.lnNode is not None and self.lnNode.GetParameter('EnableBreachWarningLight')):
+        # logging.debug("There is already a connector EnableBreachWarningLight parameter " + self.lnNode.GetParameter('EnableBreachWarningLight'))
+        self.breachWarningLightCheckBox.checked = self.lnNode.GetParameter('EnableBreachWarningLight')
         self.breachWarningLightCheckBox.setDisabled(True)
     else:
         self.breachWarningLightCheckBox.setEnabled(True)
         settings = slicer.app.userSettings()
         lightEnabled = settings.value(self.moduleName+'/EnableBreachWarningLight', 'True')
         self.breachWarningLightCheckBox.checked = (lightEnabled == 'True')
-        self.launcherFormLayout.addWidget(self.breachWarningLightCheckBox)       
-
+        self.launcherFormLayout.addWidget(self.breachWarningLightCheckBox)
+  
   def collectParameterList(self):
     parameterlist = GuideletWidget.collectParameterList(self)
 
@@ -80,6 +138,10 @@ class LumpNavWidget(GuideletWidget):
         settings = slicer.app.userSettings()
         settings.setValue(self.moduleName + '/EnableBreachWarningLight', lightEnabled)
 
+    parameterlist['Configuration'] = self.currentConfigurationName
+    for param in self.currentConfigurationParams:
+      parameterlist[param[0]] = param[1] 
+      
     return parameterlist
 
   def createGuideletInstance(self, parameterList = None):
@@ -187,8 +249,10 @@ class LumpNavGuidelet(Guidelet):
     Guidelet.cleanup(self)
     logging.debug('cleanup')
     self.breachWarningNode.UnRegister(slicer.mrmlScene)
+    self.stopTipToSurfaceDistance()
     self.setAndObserveTumorMarkupsNode(None)
     self.breachWarningLightLogic.stopLightFeedback()
+    self.tipToSurfaceDistanceLogic.removeCalculateDistanceObserver()  
     
   def setupConnections(self):
     logging.debug('LumpNav.setupConnections()')
@@ -208,7 +272,7 @@ class LumpNavGuidelet(Guidelet):
     self.leftCameraButton.connect('clicked()', self.onLeftCameraButtonClicked)
 
     self.placeTumorPointAtCauteryTipButton.connect('clicked(bool)', self.onPlaceTumorPointAtCauteryTipClicked)
-
+    
     self.pivotSamplingTimer.connect('timeout()',self.onPivotSamplingTimeout)
 
     import Viewpoint
@@ -261,11 +325,16 @@ class LumpNavGuidelet(Guidelet):
       self.needleModelToNeedleTip.SetName("NeedleModelToNeedleTip")
       m = vtk.vtkMatrix4x4()
       m.SetElement( 0, 0, 0 )
-      m.SetElement( 1, 1, 0 )
-      m.SetElement( 2, 2, 0 )
-      m.SetElement( 0, 1, 1 )
-      m.SetElement( 1, 2, 1 )
+      m.SetElement( 0, 2, 1 )
+      m.SetElement( 1, 1, -1 )
       m.SetElement( 2, 0, 1 )
+      m.SetElement( 2, 2, 0 )
+      # m.SetElement( 0, 0, 0 )
+      # m.SetElement( 1, 1, 0 )
+      # m.SetElement( 2, 2, 0 )
+      # m.SetElement( 0, 1, 1 )
+      # m.SetElement( 1, 2, 1 )
+      # m.SetElement( 2, 0, 1 )
       self.needleModelToNeedleTip.SetMatrixTransformToParent(m)
       slicer.mrmlScene.AddNode(self.needleModelToNeedleTip)
 
@@ -421,6 +490,9 @@ class LumpNavGuidelet(Guidelet):
     dataProbeParameterNode=dataProbeUtil.getParameterNode()
     dataProbeParameterNode.SetParameter('showSliceViewAnnotations', '0')
 
+    import TipToSurfaceDistance
+    self.tipToSurfaceDistanceLogic = TipToSurfaceDistance.TipToSurfaceDistanceLogic(self.tumorModel_Needle)
+    
   def disconnect(self):#TODO see connect
     logging.debug('LumpNav.disconnect()')
     Guidelet.disconnect(self)
@@ -451,7 +523,6 @@ class LumpNavGuidelet(Guidelet):
     self.cameraZPosSlider.disconnect('valueChanged(double)', self.viewpointLogic.SetCameraZPosMm)
     
     self.placeTumorPointAtCauteryTipButton.disconnect('clicked(bool)', self.onPlaceTumorPointAtCauteryTipClicked)
-
     
   def onPivotSamplingTimeout(self):#lumpnav
     self.countdownLabel.setText("Pivot calibrating for {0:.0f} more seconds".format(self.pivotCalibrationStopTime-time.time())) 
@@ -528,12 +599,7 @@ class LumpNavGuidelet(Guidelet):
     sphereSource.SetRadius(0.001)
     self.tumorModel_Needle.SetPolyDataConnection(sphereSource.GetOutputPort())      
     self.tumorModel_Needle.Modified()
-
-  def onPlaceTumorPointAtCauteryTipClicked(self):
-    cauteryTipToNeedle = vtk.vtkMatrix4x4()
-    self.cauteryTipToCautery.GetMatrixTransformToNode(self.needleToReference, cauteryTipToNeedle)
-    self.tumorMarkups_Needle.AddFiducial(cauteryTipToNeedle.GetElement(0,3), cauteryTipToNeedle.GetElement(1,3), cauteryTipToNeedle.GetElement(2,3))
-      
+  
   def setupCalibrationPanel(self):
     logging.debug('setupCalibrationPanel')
 
@@ -705,7 +771,7 @@ class LumpNavGuidelet(Guidelet):
     setButtonStyle(self.deleteLastFiducialDuringNavigationButton)
     self.deleteLastFiducialDuringNavigationButton.setEnabled(False)
     self.contourAdjustmentFormLayout.addRow(self.deleteLastFiducialDuringNavigationButton)
-
+    
   def onCalibrationPanelToggled(self, toggled):
     if toggled == False:
       return
@@ -821,6 +887,8 @@ class LumpNavGuidelet(Guidelet):
   def onLeftCameraButtonClicked(self):
     logging.debug("onLeftCameraButtonClicked {0}".format(self.leftCameraButton.isChecked()))
     if (self.leftCameraButton.isChecked() == True):
+      if (self.parameterNode.GetParameter('TipToSurfaceDistanceText') == 'True'):
+        self.startTipToSurfaceDistance()
       self.viewpointLogic.setCameraNode(self.LeftCamera)
       self.viewpointLogic.setTransformNode(self.cauteryCameraToCautery)
       self.viewpointLogic.startViewpoint()
@@ -844,6 +912,20 @@ class LumpNavGuidelet(Guidelet):
     #if self.connectorNode != None:
     #  self.connectorNode.Stop()
 
+  def onPlaceTumorPointAtCauteryTipClicked(self):
+    cauteryTipToNeedle = vtk.vtkMatrix4x4()
+    self.cauteryTipToCautery.GetMatrixTransformToNode(self.needleToReference, cauteryTipToNeedle)
+    self.tumorMarkups_Needle.AddFiducial(cauteryTipToNeedle.GetElement(0,3), cauteryTipToNeedle.GetElement(1,3), cauteryTipToNeedle.GetElement(2,3))
+    
+  def startTipToSurfaceDistance(self):
+    self.tipToSurfaceDistanceLogic.setMembers(self.needleToReference, self.cauteryTipToCautery, self.cauteryToReference)
+    self.tipToSurfaceDistanceLogic.addCalculateDistanceObserver()  
+    self.tipToSurfaceDistanceLogic.setCrosshairVisibility(self.parameterNode.GetParameter('TipToSurfaceDistanceCrossHair') == 'True')
+    self.tipToSurfaceDistanceLogic.setTrajectoryVisibility(self.parameterNode.GetParameter('TipToSurfaceDistanceTrajectory') == 'True')  
+    
+  def stopTipToSurfaceDistance(self):
+    self.tipToSurfaceDistanceLogic.removeCalculateDistanceObserver()  
+    
   def onTumorMarkupsNodeModified(self, observer, eventid):
     self.createTumorFromMarkups()
 

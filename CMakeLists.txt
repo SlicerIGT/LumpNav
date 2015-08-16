@@ -21,6 +21,7 @@ include(${Slicer_USE_FILE})
 add_subdirectory(BreachWarningLight)
 add_subdirectory(Viewpoint)
 add_subdirectory(LumpNav)
+add_subdirectory(TipToSurfaceDistance)
 ## NEXT_MODULE
 
 #-----------------------------------------------------------------------------
