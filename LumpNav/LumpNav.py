@@ -44,14 +44,17 @@ class LumpNavWidget(GuideletWidget):
     self.addDefaultConfiguration()
     
     GuideletWidget.setup(self)
-
+    
+    # Set configuration
+    #self.onConfigurationsComboBoxIndexChanged()
+    
   def addLauncherWidgets(self):
     GuideletWidget.addLauncherWidgets(self)
 
     lnNode = slicer.util.getNode(self.moduleName)
 
     # Configurations
-    self.addAvailableConfigurations()
+    self.configurations()
     
     # BreachWarning
     self.breachWarningLight(lnNode)  
@@ -80,8 +83,37 @@ class LumpNavWidget(GuideletWidget):
       settings.endGroup()
   
   # Adds a list box populated with the available configurations in the Slicer.ini file
-  def addAvailableConfigurations(self):
+  def configurations(self):
+    self.configurationsComboBox = qt.QComboBox()
+    self.launcherFormLayout.addRow('Select Configuration: ', self.configurationsComboBox)
+    #self.configurationsComboBox.connect('currentIndexChanged(const QString &)', self.onConfigurationsComboBoxIndexChanged)
+    configs = self.getLumpNavConfigurations()
+    
+    # Populate ComboBox with available configurations
+    for configName in configs.keys():
+      self.configurationsComboBox.addItem(configName)
+  
+  def getLumpNavConfigurations(self):
+    configs = {}
+    settings = slicer.app.userSettings()
+    for key in settings.allKeys():
+      if 'LumpNav/Configurations' in key:
+        keySplit = key.split('/')
+        configName = keySplit[2]
+        param = keySplit[3]
+        value = settings.value(key)
+        if configs.has_key(configName):
+          configs[configName].append([param, value])
+        else:
+          configs[configName] = [[param, value]]
+    return configs    
+    
+  def onConfigurationsComboBoxIndexChanged(self, text):
     pass
+    # configs = self.getLumpNavConfigurations()
+    # params = configs[text]
+    # for param in params:
+      # self.guideletLogic.parameterNode.SetParameter(param[0], param[1])    
     
   def breachWarningLight(self, lnNode):
     self.breachWarningLightCheckBox = qt.QCheckBox()
