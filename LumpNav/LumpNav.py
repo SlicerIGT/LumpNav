@@ -40,18 +40,71 @@ class LumpNavWidget(GuideletWidget):
     GuideletWidget.__init__(self, parent)
     
   def setup(self):
+    # Adds default configurations to Slicer.ini
+    self.addDefaultConfiguration()
+    
     GuideletWidget.setup(self)
-
+    
   def addLauncherWidgets(self):
     GuideletWidget.addLauncherWidgets(self)
 
+    # Configurations
+    self.configurations()
+    
+    # BreachWarning
+    self.breachWarningLight()  
+ 
+  # Adds default configurations to Slicer.ini
+  def addDefaultConfiguration(self):
+    settings = slicer.app.userSettings()    
+    if not settings.value(self.moduleName + '/Configurations/default/TipToSurfaceDistanceCrossHair'):
+      settings.beginGroup(self.moduleName + '/Configurations/default')
+      settings.setValue('TipToSurfaceDistanceCrossHair', 'True')
+      settings.setValue('TipToSurfaceDistanceText', 'True')
+      settings.setValue('TipToSurfaceDistanceTrajectory', 'True')
+      settings.setValue('needleModelToNeedleTip', '0 1 0 0 0 0 1 0 1 0 0 0 0 0 0 1')
+      settings.setValue('cauteryModelToCauteryTip', '0 0 1 0 0 -1 0 0 1 0 0 0 0 0 0 1')
+      settings.endGroup()
+
+  # Adds a list box populated with the available configurations in the Slicer.ini file
+  def configurations(self):
+    self.configurationsComboBox = qt.QComboBox()
+    self.launcherFormLayout.addRow('Select Configuration: ', self.configurationsComboBox)
+    self.configurationsComboBox.connect('currentIndexChanged(const QString &)', self.onConfigurationsComboBoxIndexChanged)
+    currentConfiguration = self.getLumpNavConfigurations()
+    
+    # Populate ComboBox with available configurations
+    for configName in currentConfiguration.keys():
+      self.configurationsComboBox.addItem(configName)
+  
+  def getLumpNavConfigurations(self):
+    configs = {}
+    settings = slicer.app.userSettings()
+    for key in settings.allKeys():
+      if (self.moduleName + '/Configurations') in key:
+        keySplit = key.split('/')
+        configName = keySplit[2]
+        param = keySplit[3]
+        value = settings.value(key)
+        if configs.has_key(configName):
+          configs[configName].append([param, value])
+        else:
+          configs[configName] = [[param, value]]
+    return configs    
+    
+  def onConfigurationsComboBoxIndexChanged(self, configName):
+    currentConfiguration = self.getLumpNavConfigurations() 
+    self.currentConfigurationParams = currentConfiguration[configName]
+    self.currentConfigurationName = configName
+    
+  def breachWarningLight(self):
     lnNode = slicer.util.getNode(self.moduleName)
-    # Breach Warning
+    
     self.breachWarningLightCheckBox = qt.QCheckBox()
     checkBoxLabel = qt.QLabel()
     hBoxCheck = qt.QHBoxLayout()
     hBoxCheck.setAlignment(0x0001)
-    checkBoxLabel.setText("Use breach warning light")
+    checkBoxLabel.setText("Use Breach Warning Light: ")
     hBoxCheck.addWidget(checkBoxLabel)
     hBoxCheck.addWidget(self.breachWarningLightCheckBox)
 
@@ -66,8 +119,8 @@ class LumpNavWidget(GuideletWidget):
         settings = slicer.app.userSettings()
         lightEnabled = settings.value(self.moduleName+'/EnableBreachWarningLight', 'True')
         self.breachWarningLightCheckBox.checked = (lightEnabled == 'True')
-        self.launcherFormLayout.addWidget(self.breachWarningLightCheckBox)       
-
+        self.launcherFormLayout.addWidget(self.breachWarningLightCheckBox)
+  
   def collectParameterList(self):
     parameterlist = GuideletWidget.collectParameterList(self)
 
@@ -80,6 +133,10 @@ class LumpNavWidget(GuideletWidget):
         settings = slicer.app.userSettings()
         settings.setValue(self.moduleName + '/EnableBreachWarningLight', lightEnabled)
 
+    parameterlist['Configuration'] = self.currentConfigurationName
+    for param in self.currentConfigurationParams:
+      parameterlist[param[0]] = param[1] 
+      
     return parameterlist
 
   def createGuideletInstance(self, parameterList = None):
@@ -228,7 +285,7 @@ class LumpNavGuidelet(Guidelet):
     if not self.cauteryTipToCautery:
       self.cauteryTipToCautery=slicer.vtkMRMLLinearTransformNode()
       self.cauteryTipToCautery.SetName("CauteryTipToCautery")
-      m = self.readTransformFromSettings('CauteryTipToCautery')
+      m = self.readTransformFromSettings('Configurations/' + self.parameterNode.GetParameter('Configuration') + '/CauteryTipToCautery') 
       if m:
         self.cauteryTipToCautery.SetMatrixTransformToParent(m)
       slicer.mrmlScene.AddNode(self.cauteryTipToCautery)
@@ -237,12 +294,9 @@ class LumpNavGuidelet(Guidelet):
     if not self.cauteryModelToCauteryTip:
       self.cauteryModelToCauteryTip=slicer.vtkMRMLLinearTransformNode()
       self.cauteryModelToCauteryTip.SetName("CauteryModelToCauteryTip")
-      m = vtk.vtkMatrix4x4()
-      m.SetElement( 0, 0, 0 )
-      m.SetElement( 0, 2, 1 )
-      m.SetElement( 1, 1, -1 )
-      m.SetElement( 2, 2, 0 )
-      m.SetElement( 2, 0, 1 )
+      m = self.readTransformFromSettings('Configurations/' + self.parameterNode.GetParameter('Configuration') + '/CauteryModelToCauteryTip') 
+      if m:
+        self.cauteryTipToCautery.SetMatrixTransformToParent(m)
       self.cauteryModelToCauteryTip.SetMatrixTransformToParent(m)
       slicer.mrmlScene.AddNode(self.cauteryModelToCauteryTip)
 
@@ -250,7 +304,7 @@ class LumpNavGuidelet(Guidelet):
     if not self.needleTipToNeedle:
       self.needleTipToNeedle=slicer.vtkMRMLLinearTransformNode()
       self.needleTipToNeedle.SetName("NeedleTipToNeedle")
-      m = self.readTransformFromSettings('NeedleTipToNeedle')
+      m = self.readTransformFromSettings('Configurations/' + self.parameterNode.GetParameter('Configuration') + '/NeedleTipToNeedle') 
       if m:
         self.needleTipToNeedle.SetMatrixTransformToParent(m)
       slicer.mrmlScene.AddNode(self.needleTipToNeedle)      
@@ -259,13 +313,9 @@ class LumpNavGuidelet(Guidelet):
     if not self.needleModelToNeedleTip:
       self.needleModelToNeedleTip=slicer.vtkMRMLLinearTransformNode()
       self.needleModelToNeedleTip.SetName("NeedleModelToNeedleTip")
-      m = vtk.vtkMatrix4x4()
-      m.SetElement( 0, 0, 0 )
-      m.SetElement( 1, 1, 0 )
-      m.SetElement( 2, 2, 0 )
-      m.SetElement( 0, 1, 1 )
-      m.SetElement( 1, 2, 1 )
-      m.SetElement( 2, 0, 1 )
+      m = self.readTransformFromSettings('Configurations/' + self.parameterNode.GetParameter('Configuration') + '/NeedleModelToNeedleTip') 
+      if m:
+        self.cauteryTipToCautery.SetMatrixTransformToParent(m)
       self.needleModelToNeedleTip.SetMatrixTransformToParent(m)
       slicer.mrmlScene.AddNode(self.needleModelToNeedleTip)
 
@@ -485,7 +535,7 @@ class LumpNavGuidelet(Guidelet):
     self.pivotCalibrationLogic.GetToolTipToToolMatrix(tooltipToToolMatrix)
     self.pivotCalibrationLogic.ClearToolToReferenceMatrices()
     self.pivotCalibrationResultTargetNode.SetMatrixTransformToParent(tooltipToToolMatrix)
-    self.writeTransformToSettings(self.pivotCalibrationResultTargetName, tooltipToToolMatrix)
+    self.writeTransformToSettings('Configurations/' + self.parameterNode.GetParameter('Configuration') + '/' + self.pivotCalibrationResultTargetName, tooltipToToolMatrix)
     self.countdownLabel.setText("Calibration completed, error = %f mm" % self.pivotCalibrationLogic.GetPivotRMSE())
     logging.debug("Pivot calibration completed. Tool: {0}. RMSE = {1} mm".format(self.pivotCalibrationResultTargetNode.GetName(), self.pivotCalibrationLogic.GetPivotRMSE()))
 
