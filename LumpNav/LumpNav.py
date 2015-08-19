@@ -60,6 +60,7 @@ class LumpNavWidget(GuideletWidget):
     settings = slicer.app.userSettings() 
     settings.beginGroup(self.moduleName + '/Configurations/Default')
     if not settings.allKeys(): # If no keys     
+      settings.setValue('EnableBreachWarningLight', 'True')
       settings.setValue('TipToSurfaceDistanceCrossHair', 'True')
       settings.setValue('TipToSurfaceDistanceText', 'True')
       settings.setValue('TipToSurfaceDistanceTrajectory', 'True')
@@ -106,7 +107,7 @@ class LumpNavWidget(GuideletWidget):
     else:
         self.breachWarningLightCheckBox.setEnabled(True)
         settings = slicer.app.userSettings()
-        lightEnabled = settings.value(self.moduleName+'/EnableBreachWarningLight', 'True')
+        lightEnabled = settings.value(self.moduleName + '/Configurations/' + self.selectedConfigurationName + '/EnableBreachWarningLight', 'True')
         self.breachWarningLightCheckBox.checked = (lightEnabled == 'True')
         self.launcherFormLayout.addWidget(self.breachWarningLightCheckBox)
   
@@ -121,7 +122,7 @@ class LumpNavWidget(GuideletWidget):
         if parameterlist!=None:
           parameterlist['EnableBreachWarningLight'] = lightEnabled
         settings = slicer.app.userSettings()
-        settings.setValue(self.moduleName + '/EnableBreachWarningLight', lightEnabled)
+        settings.setValue(self.moduleName + '/Configurations/' + self.selectedConfigurationName + '/EnableBreachWarningLight', lightEnabled)
 
     # Configuration   
     settings = slicer.app.userSettings() 
