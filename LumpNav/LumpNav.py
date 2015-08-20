@@ -46,15 +46,15 @@ class LumpNavWidget(GuideletWidget):
     
     GuideletWidget.setup(self)
     
-  def addLauncherWidgets(self):
+  def addLauncherWidgets(self):  
     GuideletWidget.addLauncherWidgets(self)
-
+    
     # Configurations
     self.addConfigurationsSelector()
     
     # BreachWarning
     self.breachWarningLight()  
- 
+    
   # Adds a default configurations to Slicer.ini
   def addDefaultConfiguration(self):
     settings = slicer.app.userSettings() 
@@ -72,7 +72,12 @@ class LumpNavWidget(GuideletWidget):
   # Adds a list box populated with the available configurations in the Slicer.ini file
   def addConfigurationsSelector(self):
     self.configurationsComboBox = qt.QComboBox()
-    self.launcherFormLayout.addRow('Select Configuration: ', self.configurationsComboBox)
+    configurationsLabel = qt.QLabel("Select Configuration: ")
+    hBox = qt.QHBoxLayout()
+    hBox.addWidget(configurationsLabel)
+    hBox.addWidget(self.configurationsComboBox)    
+    hBox.setStretch(1,2)
+    self.launcherFormLayout.addRow(hBox)
     
     # Populate configurationsComboBox with available configurations
     settings = slicer.app.userSettings() 
@@ -97,7 +102,7 @@ class LumpNavWidget(GuideletWidget):
     checkBoxLabel.setText("Use Breach Warning Light: ")
     hBoxCheck.addWidget(checkBoxLabel)
     hBoxCheck.addWidget(self.breachWarningLightCheckBox)
-
+    hBoxCheck.setStretch(1,2)
     self.launcherFormLayout.addRow(hBoxCheck)
 
     if(lnNode is not None and lnNode.GetParameter('EnableBreachWarningLight')):
@@ -109,7 +114,6 @@ class LumpNavWidget(GuideletWidget):
         settings = slicer.app.userSettings()
         lightEnabled = settings.value(self.moduleName + '/Configurations/' + self.selectedConfigurationName + '/EnableBreachWarningLight', 'True')
         self.breachWarningLightCheckBox.checked = (lightEnabled == 'True')
-        self.launcherFormLayout.addWidget(self.breachWarningLightCheckBox)
   
   def collectParameterList(self):
     parameterlist = GuideletWidget.collectParameterList(self)
