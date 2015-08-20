@@ -9,7 +9,7 @@ set(EXTENSION_CATEGORY "IGT")
 set(EXTENSION_CONTRIBUTORS "Tamas Ungi, Andras Lasso, Thomas Vaughan, Kaci Carter, Padina Pezeshki, Gabor Fichtinger (Queen's University, PerkLab), Gabrielle Gauvin, Caitlin T. Yeo, John Rudan, Jay C Engel (Department of Surgery, Queen's University)")
 set(EXTENSION_DESCRIPTION "Breast tumor resection using tracked ultrasound and cautery")
 set(EXTENSION_ICONURL "https://raw.githubusercontent.com/SlicerIGT/LumpNav/master/LumpNav.png")
-set(EXTENSION_SCREENSHOTURLS "http://www.na-mic.org/Wiki/images/0/0d/FullScreenModule02.png;http://www.na-mic.org/Wiki/images/3/32/FullScreenModule01.png;http://www.na-mic.org/Wiki/images/5/5e/LumpNav-Touchscreen.png")
+set(EXTENSION_SCREENSHOTURLS "http://www.na-mic.org/Wiki/images/0/0d/FullScreenModule02.png http://www.na-mic.org/Wiki/images/3/32/FullScreenModule01.png http://www.na-mic.org/Wiki/images/5/5e/LumpNav-Touchscreen.png")
 set(EXTENSION_DEPENDS "SlicerIGT")
 
 #-----------------------------------------------------------------------------
