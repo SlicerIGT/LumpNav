@@ -139,7 +139,7 @@ class LumpNavWidget(GuideletWidget):
     return parameterlist
 
   def createGuideletInstance(self, parameterList = None):
-    return LumpNavGuidelet(None, self.guideletLogic,  self.selectedConfigurationName, parameterList)
+    return LumpNavGuidelet(None, self.guideletLogic, parameterList,  self.selectedConfigurationName)
 
   def createGuideletLogic(self):
     return LumpNavLogic()
@@ -189,8 +189,8 @@ class LumpNavTest(GuideletTest):
 
 class LumpNavGuidelet(Guidelet):
 
-  def __init__(self, parent, logic, configurationName='Default', parameterList=None, widgetClass=None):
-    Guidelet.__init__(self, parent, logic, configurationName, parameterList, widgetClass)
+  def __init__(self, parent, logic, parameterList=None, widgetClass=None, configurationName='Default'):
+    Guidelet.__init__(self, parent, logic, parameterList, widgetClass, configurationName)
     logging.debug('LumpNavGuidelet.__init__')
 
     moduleDirectoryPath = slicer.modules.lumpnav.path.replace('LumpNav.py', '')
@@ -204,10 +204,10 @@ class LumpNavGuidelet(Guidelet):
     
     self.pivotCalibrationLogic=slicer.modules.pivotcalibration.logic()
 
-    self.addConnectorObservers()
+    #self.addConnectorObservers()
     
     # Setting up callback functions for widgets.
-    self.setupConnections()
+    #self.setupConnections()
     
     # Set needle and cautery transforms and models
     self.tumorMarkups_Needle = None
@@ -295,8 +295,8 @@ class LumpNavGuidelet(Guidelet):
       self.cauteryModelToCauteryTip.SetName("CauteryModelToCauteryTip")
       m = self.readTransformFromSettings('CauteryModelToCauteryTip') 
       if m:
-        self.cauteryTipToCautery.SetMatrixTransformToParent(m)
-      self.cauteryModelToCauteryTip.SetMatrixTransformToParent(m)
+        #self.cauteryTipToCautery.SetMatrixTransformToParent(m)
+        self.cauteryModelToCauteryTip.SetMatrixTransformToParent(m)
       slicer.mrmlScene.AddNode(self.cauteryModelToCauteryTip)
 
     self.needleTipToNeedle = slicer.util.getNode('NeedleTipToNeedle')
@@ -314,8 +314,8 @@ class LumpNavGuidelet(Guidelet):
       self.needleModelToNeedleTip.SetName("NeedleModelToNeedleTip")
       m = self.readTransformFromSettings('NeedleModelToNeedleTip') 
       if m:
-        self.cauteryTipToCautery.SetMatrixTransformToParent(m)
-      self.needleModelToNeedleTip.SetMatrixTransformToParent(m)
+        #self.cauteryTipToCautery.SetMatrixTransformToParent(m)
+        self.needleModelToNeedleTip.SetMatrixTransformToParent(m)
       slicer.mrmlScene.AddNode(self.needleModelToNeedleTip)
 
     self.cauteryCameraToCautery = slicer.util.getNode('CauteryCameraToCautery')
@@ -761,7 +761,7 @@ class LumpNavGuidelet(Guidelet):
 
     logging.debug('onCalibrationPanelToggled: {0}'.format(toggled))
     
-    self.onViewSelect(self.viewUltrasound3d) 
+    self.selectView(self.VIEW_ULTRASOUND_3D) 
 
   def onUltrasoundPanelToggled(self, toggled):
     Guidelet.onUltrasoundPanelToggled(self, toggled)
@@ -885,7 +885,7 @@ class LumpNavGuidelet(Guidelet):
       return
 
     logging.debug('onNavigationPanelToggled')
-    self.onViewSelect(self.viewDual3d)
+    self.selectView(self.VIEW_DUAL_3D)
     self.tumorMarkups_Needle.SetDisplayVisibility(0)
     self.setupViewpoint()
 
