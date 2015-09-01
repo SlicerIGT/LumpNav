@@ -89,6 +89,7 @@ class LumpNavWidget(GuideletWidget):
     
     # Set latest used configuration
     if settings.value(self.moduleName + '/MostRecentConfiguration'):
+      self.selectedConfigurationName = settings.value(self.moduleName + '/MostRecentConfiguration')
       idx = self.configurationsComboBox.findText(settings.value(self.moduleName + '/MostRecentConfiguration'))
       self.configurationsComboBox.setCurrentIndex(idx)      
     
@@ -295,7 +296,6 @@ class LumpNavGuidelet(Guidelet):
     self.cameraZPosSlider.connect('valueChanged(double)', self.viewpointLogic.SetCameraZPosMm)    
     
   def setupScene(self): #applet specific
-    print (self.parameterNode.GetParameter('EnableBreachWarningLight')=='True')
     logging.debug('setupScene')
     Guidelet.setupScene(self)
 
