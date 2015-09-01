@@ -59,15 +59,15 @@ class LumpNavWidget(GuideletWidget):
   def addDefaultConfiguration(self):
     settings = slicer.app.userSettings() 
     settings.beginGroup(self.moduleName + '/Configurations/Default')
-    if not settings.allKeys(): # If no keys     
+    if not settings.allKeys(): # If no keys in /Configurations/Default     
       settings.setValue('EnableBreachWarningLight', 'True')
       settings.setValue('TipToSurfaceDistanceCrossHair', 'True')
       settings.setValue('TipToSurfaceDistanceText', 'True')
       settings.setValue('TipToSurfaceDistanceTrajectory', 'True')
       settings.setValue('needleModelToNeedleTip', '0 1 0 0 0 0 1 0 1 0 0 0 0 0 0 1')
       settings.setValue('cauteryModelToCauteryTip', '0 0 1 0 0 -1 0 0 1 0 0 0 0 0 0 1')      
-      logging.debug('Default configuration added')
-    settings.endGroup()
+      logging.debug('Default configuration added')                
+    settings.endGroup()      
 
   # Adds a list box populated with the available configurations in the Slicer.ini file
   def addConfigurationsSelector(self):
@@ -87,10 +87,19 @@ class LumpNavWidget(GuideletWidget):
       self.configurationsComboBox.addItem(configuration)
     settings.endGroup()
     
+    # Set latest used configuration
+    if settings.value(self.moduleName + '/MostRecentConfiguration'):
+      idx = self.configurationsComboBox.findText(settings.value(self.moduleName + '/MostRecentConfiguration'))
+      self.configurationsComboBox.setCurrentIndex(idx)      
+    
     self.configurationsComboBox.connect('currentIndexChanged(const QString &)', self.onConfigurationChanged)
     
   def onConfigurationChanged(self, selectedConfigurationName):
     self.selectedConfigurationName = selectedConfigurationName
+    settings = slicer.app.userSettings() 
+    settings.setValue(self.moduleName + '/MostRecentConfiguration', selectedConfigurationName)   
+    lightEnabled = settings.value(self.moduleName + '/Configurations/' + selectedConfigurationName + '/EnableBreachWarningLight')    
+    self.breachWarningLightCheckBox.checked = (lightEnabled == 'True')  
     
   def breachWarningLight(self):
     lnNode = slicer.util.getNode(self.moduleName)
@@ -114,6 +123,17 @@ class LumpNavWidget(GuideletWidget):
         settings = slicer.app.userSettings()
         lightEnabled = settings.value(self.moduleName + '/Configurations/' + self.selectedConfigurationName + '/EnableBreachWarningLight', 'True')
         self.breachWarningLightCheckBox.checked = (lightEnabled == 'True')
+        
+    self.breachWarningLightCheckBox.connect('stateChanged(int)', self.onBreachWarningLightChanged)
+  
+  def onBreachWarningLightChanged(self, state):    
+    lightEnabled = ''
+    if self.breachWarningLightCheckBox.checked:
+      lightEnabled = 'True'
+    elif not self.breachWarningLightCheckBox.checked:
+      lightEnabled = 'False'    
+    settings = slicer.app.userSettings()   
+    settings.setValue(self.moduleName + '/Configurations/' + self.selectedConfigurationName + '/EnableBreachWarningLight', lightEnabled)
   
   def collectParameterList(self):
     parameterlist = GuideletWidget.collectParameterList(self)
@@ -275,6 +295,7 @@ class LumpNavGuidelet(Guidelet):
     self.cameraZPosSlider.connect('valueChanged(double)', self.viewpointLogic.SetCameraZPosMm)    
     
   def setupScene(self): #applet specific
+    print (self.parameterNode.GetParameter('EnableBreachWarningLight')=='True')
     logging.debug('setupScene')
     Guidelet.setupScene(self)
 
