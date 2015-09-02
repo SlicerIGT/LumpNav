@@ -1,8 +1,7 @@
 import os
-import unittest
 from __main__ import vtk, qt, ctk, slicer
 
-from GuideletLib import *
+from GuideletLib.GuideletLoadable import GuideletLoadable, Guidelet, GuideletLogic, GuideletTest, GuideletWidget, setButtonStyle
 import logging
 import time
 
@@ -160,7 +159,7 @@ class LumpNavWidget(GuideletWidget):
     return parameterlist
 
   def createGuideletInstance(self, parameterList = None):
-    return LumpNavGuidelet(None, self.guideletLogic,  self.selectedConfigurationName, parameterList)
+    return LumpNavGuidelet(None, self.guideletLogic, parameterList,  self.selectedConfigurationName)
 
   def createGuideletLogic(self):
     return LumpNavLogic()
@@ -193,7 +192,6 @@ class LumpNavLogic(GuideletLogic):
         node.SetParameter(parameter, str(parameterList[parameter]))
 
     return node
-	
 #	
 #	LumpNavTest ###
 #
@@ -210,8 +208,8 @@ class LumpNavTest(GuideletTest):
 
 class LumpNavGuidelet(Guidelet):
 
-  def __init__(self, parent, logic, configurationName='Default', parameterList=None, widgetClass=None):
-    Guidelet.__init__(self, parent, logic, configurationName, parameterList, widgetClass)
+  def __init__(self, parent, logic, parameterList=None, configurationName='Default'):
+    Guidelet.__init__(self, parent, logic, parameterList, configurationName)
     logging.debug('LumpNavGuidelet.__init__')
 
     moduleDirectoryPath = slicer.modules.lumpnav.path.replace('LumpNav.py', '')
@@ -224,11 +222,6 @@ class LumpNavGuidelet(Guidelet):
     self.mainWindow.windowIcon = qt.QIcon(moduleDirectoryPath + '/Resources/Icons/LumpNav.png')
     
     self.pivotCalibrationLogic=slicer.modules.pivotcalibration.logic()
-
-    self.addConnectorObservers()
-    
-    # Setting up callback functions for widgets.
-    self.setupConnections()
     
     # Set needle and cautery transforms and models
     self.tumorMarkups_Needle = None
@@ -241,15 +234,15 @@ class LumpNavGuidelet(Guidelet):
     self.showFullScreen()
 
   def createFeaturePanels(self):
-    featurePanelList = Guidelet.createFeaturePanels(self)
-
-     # Create GUI panels.
+    # Create GUI panels.
 
     self.calibrationCollapsibleButton = ctk.ctkCollapsibleButton()
-    self.addTumorContouringToUltrasoundPanel()
-    self.navigationCollapsibleButton = ctk.ctkCollapsibleButton()
-
     self.setupCalibrationPanel()
+    
+    featurePanelList = Guidelet.createFeaturePanels(self)
+    self.addTumorContouringToUltrasoundPanel()
+    
+    self.navigationCollapsibleButton = ctk.ctkCollapsibleButton()
     self.setupNavigationPanel()
 
     featurePanelList[len(featurePanelList):] = [self.calibrationCollapsibleButton, self.navigationCollapsibleButton]
@@ -317,7 +310,6 @@ class LumpNavGuidelet(Guidelet):
       m = self.readTransformFromSettings('CauteryModelToCauteryTip') 
       if m:
         self.cauteryModelToCauteryTip.SetMatrixTransformToParent(m)
-      self.cauteryModelToCauteryTip.SetMatrixTransformToParent(m)
       slicer.mrmlScene.AddNode(self.cauteryModelToCauteryTip)
 
     self.needleTipToNeedle = slicer.util.getNode('NeedleTipToNeedle')
@@ -336,7 +328,6 @@ class LumpNavGuidelet(Guidelet):
       m = self.readTransformFromSettings('NeedleModelToNeedleTip') 
       if m:
         self.needleModelToNeedleTip.SetMatrixTransformToParent(m)
-      self.needleModelToNeedleTip.SetMatrixTransformToParent(m)
       slicer.mrmlScene.AddNode(self.needleModelToNeedleTip)
 
     self.cauteryCameraToCautery = slicer.util.getNode('CauteryCameraToCautery')
@@ -782,13 +773,16 @@ class LumpNavGuidelet(Guidelet):
 
     logging.debug('onCalibrationPanelToggled: {0}'.format(toggled))
     
-    self.onViewSelect(self.viewUltrasound3d) 
+    if self.tumorMarkups_Needle:
+      self.tumorMarkups_Needle.SetDisplayVisibility(0)
+
+    self.selectView(self.VIEW_ULTRASOUND_3D) 
 
   def onUltrasoundPanelToggled(self, toggled):
     Guidelet.onUltrasoundPanelToggled(self, toggled)
     
     if self.tumorMarkups_Needle:
-        self.tumorMarkups_Needle.SetDisplayVisibility(1)
+        self.tumorMarkups_Needle.SetDisplayVisibility(0)
   
   def createTumorFromMarkups(self):
     logging.debug('createTumorFromMarkups')
@@ -906,8 +900,9 @@ class LumpNavGuidelet(Guidelet):
       return
 
     logging.debug('onNavigationPanelToggled')
-    self.onViewSelect(self.viewDual3d)
-    self.tumorMarkups_Needle.SetDisplayVisibility(0)
+    self.selectView(self.VIEW_DUAL_3D)
+    if self.tumorMarkups_Needle:
+      self.tumorMarkups_Needle.SetDisplayVisibility(0)
     self.setupViewpoint()
 
     ## Stop live ultrasound.
@@ -929,4 +924,5 @@ class LumpNavGuidelet(Guidelet):
     self.tumorMarkups_Needle = tumorMarkups_Needle
     if self.tumorMarkups_Needle:
       self.tumorMarkups_NeedleObserver = self.tumorMarkups_Needle.AddObserver(vtk.vtkCommand.ModifiedEvent, self.onTumorMarkupsNodeModified)
-     
+      
+      
