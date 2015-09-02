@@ -316,7 +316,7 @@ class LumpNavGuidelet(Guidelet):
       self.cauteryModelToCauteryTip.SetName("CauteryModelToCauteryTip")
       m = self.readTransformFromSettings('CauteryModelToCauteryTip') 
       if m:
-        self.cauteryTipToCautery.SetMatrixTransformToParent(m)
+        self.cauteryModelToCauteryTip.SetMatrixTransformToParent(m)
       self.cauteryModelToCauteryTip.SetMatrixTransformToParent(m)
       slicer.mrmlScene.AddNode(self.cauteryModelToCauteryTip)
 
@@ -335,7 +335,7 @@ class LumpNavGuidelet(Guidelet):
       self.needleModelToNeedleTip.SetName("NeedleModelToNeedleTip")
       m = self.readTransformFromSettings('NeedleModelToNeedleTip') 
       if m:
-        self.cauteryTipToCautery.SetMatrixTransformToParent(m)
+        self.needleModelToNeedleTip.SetMatrixTransformToParent(m)
       self.needleModelToNeedleTip.SetMatrixTransformToParent(m)
       slicer.mrmlScene.AddNode(self.needleModelToNeedleTip)
 
