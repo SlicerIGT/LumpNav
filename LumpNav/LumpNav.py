@@ -1,7 +1,7 @@
 import os
 from __main__ import vtk, qt, ctk, slicer
 
-from GuideletLib.GuideletLoadable import GuideletLoadable, Guidelet, GuideletLogic, GuideletTest, GuideletWidget, setButtonStyle
+from GuideletLib.GuideletLoadable import GuideletLoadable, Guidelet, GuideletLogic, GuideletTest, GuideletWidget
 import logging
 import time
 
@@ -599,7 +599,6 @@ class LumpNavGuidelet(Guidelet):
     logging.debug('setupCalibrationPanel')
 
     self.calibrationCollapsibleButton.setProperty('collapsedHeight', 20)
-    setButtonStyle(self.calibrationCollapsibleButton, 2.0)
     self.calibrationCollapsibleButton.text = 'Tool calibration'
     self.sliceletPanelLayout.addWidget(self.calibrationCollapsibleButton)
 
@@ -608,11 +607,9 @@ class LumpNavGuidelet(Guidelet):
     self.calibrationLayout.setSpacing(4)
 
     self.cauteryPivotButton = qt.QPushButton('Start cautery calibration')
-    setButtonStyle(self.cauteryPivotButton)
     self.calibrationLayout.addRow(self.cauteryPivotButton)
 
     self.needlePivotButton = qt.QPushButton('Start needle calibration')
-    setButtonStyle(self.needlePivotButton)
     self.calibrationLayout.addRow(self.needlePivotButton)
 
     self.countdownLabel = qt.QLabel()
@@ -629,17 +626,14 @@ class LumpNavGuidelet(Guidelet):
     self.placeButton = qt.QPushButton("Mark points")
     self.placeButton.setCheckable(True)
     self.placeButton.setIcon(qt.QIcon(":/Icons/MarkupsMouseModePlace.png"))
-    setButtonStyle(self.placeButton)
     self.ultrasoundLayout.addRow(self.placeButton)
 
     self.deleteLastFiducialButton = qt.QPushButton("Delete last")
     self.deleteLastFiducialButton.setIcon(qt.QIcon(":/Icons/MarkupsDelete.png"))
-    setButtonStyle(self.deleteLastFiducialButton)
     self.deleteLastFiducialButton.setEnabled(False)
 
     self.deleteAllFiducialsButton = qt.QPushButton("Delete all")
     self.deleteAllFiducialsButton.setIcon(qt.QIcon(":/Icons/MarkupsDeleteAllRows.png"))
-    setButtonStyle(self.deleteAllFiducialsButton)
     self.deleteAllFiducialsButton.setEnabled(False)
 
     hbox = qt.QHBoxLayout()
@@ -661,7 +655,6 @@ class LumpNavGuidelet(Guidelet):
     self.sliderPageStepValue   = 10
 
     self.navigationCollapsibleButton.setProperty('collapsedHeight', 20)
-    setButtonStyle(self.navigationCollapsibleButton, 2.0)
     self.navigationCollapsibleButton.text = "Navigation"
     self.sliceletPanelLayout.addWidget(self.navigationCollapsibleButton)
 
@@ -671,11 +664,9 @@ class LumpNavGuidelet(Guidelet):
 
     self.rightCameraButton = qt.QPushButton("Setup right camera")
     self.rightCameraButton.setCheckable(True)
-    setButtonStyle(self.rightCameraButton)
 
     self.leftCameraButton = qt.QPushButton("Setup left camera")
     self.leftCameraButton.setCheckable(True)
-    setButtonStyle(self.leftCameraButton)
 
     hbox = qt.QHBoxLayout()
     hbox.addWidget(self.leftCameraButton)
@@ -715,7 +706,6 @@ class LumpNavGuidelet(Guidelet):
     self.cameraXPosLabel = qt.QLabel(qt.Qt.Horizontal,None)
     self.cameraXPosLabel.text = "Left/Right [mm]: "
     self.cameraXPosSlider = slicer.qMRMLSliderWidget()
-    setButtonStyle(self.cameraXPosSlider)
     self.cameraXPosSlider.minimum = self.sliderTranslationMinMm
     self.cameraXPosSlider.maximum = self.sliderTranslationMaxMm
     self.cameraXPosSlider.value = self.sliderTranslationDefaultMm
@@ -727,7 +717,6 @@ class LumpNavGuidelet(Guidelet):
     self.cameraYPosLabel = qt.QLabel(qt.Qt.Horizontal,None)
     self.cameraYPosLabel.setText("Down/Up [mm]: ")
     self.cameraYPosSlider = slicer.qMRMLSliderWidget()
-    setButtonStyle(self.cameraYPosSlider)
     self.cameraYPosSlider.minimum = self.sliderTranslationMinMm
     self.cameraYPosSlider.maximum = self.sliderTranslationMaxMm
     self.cameraYPosSlider.value = self.sliderTranslationDefaultMm
@@ -739,7 +728,6 @@ class LumpNavGuidelet(Guidelet):
     self.cameraZPosLabel = qt.QLabel(qt.Qt.Horizontal,None)
     self.cameraZPosLabel.setText("Front/Back [mm]: ")
     self.cameraZPosSlider = slicer.qMRMLSliderWidget()
-    setButtonStyle(self.cameraZPosSlider)
     self.cameraZPosSlider.minimum = self.sliderTranslationMinMm
     self.cameraZPosSlider.maximum = self.sliderTranslationMaxMm
     self.cameraZPosSlider.value = self.sliderTranslationDefaultMm
@@ -758,12 +746,10 @@ class LumpNavGuidelet(Guidelet):
     self.contourAdjustmentFormLayout = qt.QFormLayout(self.contourAdjustmentCollapsibleButton)
 
     self.placeTumorPointAtCauteryTipButton = qt.QPushButton("Mark point at cautery tip")
-    setButtonStyle(self.placeTumorPointAtCauteryTipButton)
     self.contourAdjustmentFormLayout.addRow(self.placeTumorPointAtCauteryTipButton)
     
     self.deleteLastFiducialDuringNavigationButton = qt.QPushButton("Delete last")
     self.deleteLastFiducialDuringNavigationButton.setIcon(qt.QIcon(":/Icons/MarkupsDelete.png"))
-    setButtonStyle(self.deleteLastFiducialDuringNavigationButton)
     self.deleteLastFiducialDuringNavigationButton.setEnabled(False)
     self.contourAdjustmentFormLayout.addRow(self.deleteLastFiducialDuringNavigationButton)
 
