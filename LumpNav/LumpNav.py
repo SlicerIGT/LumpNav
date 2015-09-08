@@ -230,8 +230,6 @@ class LumpNavGuidelet(Guidelet):
 
     # Setting button open on startup.
     self.calibrationCollapsibleButton.setProperty('collapsed', False)
-    
-    self.showFullScreen()
 
   def createFeaturePanels(self):
     # Create GUI panels.
