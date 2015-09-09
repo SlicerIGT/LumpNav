@@ -40,67 +40,30 @@ class LumpNavWidget(GuideletWidget):
     self.selectedConfigurationName = 'Default'
     
   def setup(self):
-    # Adds default configurations to Slicer.ini
-    self.addDefaultConfiguration()
-    
     GuideletWidget.setup(self)
-    
-  def addLauncherWidgets(self):  
-    GuideletWidget.addLauncherWidgets(self)
-    
-    # Configurations
-    self.addConfigurationsSelector()
-    
-    # BreachWarning
-    self.breachWarningLight()  
-    
-  # Adds a default configurations to Slicer.ini
-  def addDefaultConfiguration(self):
-    settings = slicer.app.userSettings() 
-    settings.beginGroup(self.moduleName + '/Configurations/Default')
-    if not settings.allKeys(): # If no keys in /Configurations/Default     
-      settings.setValue('EnableBreachWarningLight', 'True')
-      settings.setValue('TipToSurfaceDistanceCrossHair', 'True')
-      settings.setValue('TipToSurfaceDistanceText', 'True')
-      settings.setValue('TipToSurfaceDistanceTrajectory', 'True')
-      settings.setValue('needleModelToNeedleTip', '0 1 0 0 0 0 1 0 1 0 0 0 0 0 0 1')
-      settings.setValue('cauteryModelToCauteryTip', '0 0 1 0 0 -1 0 0 1 0 0 0 0 0 0 1')      
-      logging.debug('Default configuration added')                
-    settings.endGroup()      
 
-  # Adds a list box populated with the available configurations in the Slicer.ini file
-  def addConfigurationsSelector(self):
-    self.configurationsComboBox = qt.QComboBox()
-    configurationsLabel = qt.QLabel("Select Configuration: ")
-    hBox = qt.QHBoxLayout()
-    hBox.addWidget(configurationsLabel)
-    hBox.addWidget(self.configurationsComboBox)    
-    hBox.setStretch(1,2)
-    self.launcherFormLayout.addRow(hBox)
-    
-    # Populate configurationsComboBox with available configurations
-    settings = slicer.app.userSettings() 
-    settings.beginGroup(self.moduleName + '/Configurations')
-    configurations = settings.childGroups()
-    for configuration in configurations:
-      self.configurationsComboBox.addItem(configuration)
-    settings.endGroup()
-    
-    # Set latest used configuration
-    if settings.value(self.moduleName + '/MostRecentConfiguration'):
-      self.selectedConfigurationName = settings.value(self.moduleName + '/MostRecentConfiguration')
-      idx = self.configurationsComboBox.findText(settings.value(self.moduleName + '/MostRecentConfiguration'))
-      self.configurationsComboBox.setCurrentIndex(idx)      
-    
-    self.configurationsComboBox.connect('currentIndexChanged(const QString &)', self.onConfigurationChanged)
-    
+  def addLauncherWidgets(self):
+    GuideletWidget.addLauncherWidgets(self)
+
+    # BreachWarning
+    self.breachWarningLight()
+
+  # Adds a default configurations to Slicer.ini
+  def addDefaultConfiguration(self, settings):
+    GuideletWidget.addDefaultConfiguration(self, settings)
+    settings.setValue('EnableBreachWarningLight', 'True')
+    settings.setValue('TipToSurfaceDistanceCrossHair', 'True')
+    settings.setValue('TipToSurfaceDistanceText', 'True')
+    settings.setValue('TipToSurfaceDistanceTrajectory', 'True')
+    settings.setValue('needleModelToNeedleTip', '0 1 0 0 0 0 1 0 1 0 0 0 0 0 0 1')
+    settings.setValue('cauteryModelToCauteryTip', '0 0 1 0 0 -1 0 0 1 0 0 0 0 0 0 1')
+
   def onConfigurationChanged(self, selectedConfigurationName):
-    self.selectedConfigurationName = selectedConfigurationName
-    settings = slicer.app.userSettings() 
-    settings.setValue(self.moduleName + '/MostRecentConfiguration', selectedConfigurationName)   
-    lightEnabled = settings.value(self.moduleName + '/Configurations/' + selectedConfigurationName + '/EnableBreachWarningLight')    
-    self.breachWarningLightCheckBox.checked = (lightEnabled == 'True')  
-    
+    GuideletWidget.onConfigurationChanged(self, selectedConfigurationName)
+    settings = slicer.app.userSettings()
+    lightEnabled = settings.value(self.moduleName + '/Configurations/' + selectedConfigurationName + '/EnableBreachWarningLight')
+    self.breachWarningLightCheckBox.checked = (lightEnabled == 'True')
+
   def breachWarningLight(self):
     lnNode = slicer.util.getNode(self.moduleName)
     
