@@ -1,7 +1,8 @@
 import os
 from __main__ import vtk, qt, ctk, slicer
 
-from GuideletLib.GuideletLoadable import GuideletLoadable, Guidelet, GuideletLogic, GuideletTest, GuideletWidget, setButtonStyle
+from Guidelet import GuideletLoadable, GuideletLogic, GuideletTest, GuideletWidget
+from Guidelet import Guidelet
 import logging
 import time
 
@@ -37,71 +38,23 @@ class LumpNavWidget(GuideletWidget):
 
   def __init__(self, parent = None):
     GuideletWidget.__init__(self, parent)
-    self.selectedConfigurationName = 'Default'
     
   def setup(self):
-    # Adds default configurations to Slicer.ini
-    self.addDefaultConfiguration()
-    
     GuideletWidget.setup(self)
-    
-  def addLauncherWidgets(self):  
-    GuideletWidget.addLauncherWidgets(self)
-    
-    # Configurations
-    self.addConfigurationsSelector()
-    
-    # BreachWarning
-    self.breachWarningLight()  
-    
-  # Adds a default configurations to Slicer.ini
-  def addDefaultConfiguration(self):
-    settings = slicer.app.userSettings() 
-    settings.beginGroup(self.moduleName + '/Configurations/Default')
-    if not settings.allKeys(): # If no keys in /Configurations/Default     
-      settings.setValue('EnableBreachWarningLight', 'True')
-      settings.setValue('TipToSurfaceDistanceCrossHair', 'True')
-      settings.setValue('TipToSurfaceDistanceText', 'True')
-      settings.setValue('TipToSurfaceDistanceTrajectory', 'True')
-      settings.setValue('needleModelToNeedleTip', '0 1 0 0 0 0 1 0 1 0 0 0 0 0 0 1')
-      settings.setValue('cauteryModelToCauteryTip', '0 0 1 0 0 -1 0 0 1 0 0 0 0 0 0 1')      
-      logging.debug('Default configuration added')                
-    settings.endGroup()      
 
-  # Adds a list box populated with the available configurations in the Slicer.ini file
-  def addConfigurationsSelector(self):
-    self.configurationsComboBox = qt.QComboBox()
-    configurationsLabel = qt.QLabel("Select Configuration: ")
-    hBox = qt.QHBoxLayout()
-    hBox.addWidget(configurationsLabel)
-    hBox.addWidget(self.configurationsComboBox)    
-    hBox.setStretch(1,2)
-    self.launcherFormLayout.addRow(hBox)
-    
-    # Populate configurationsComboBox with available configurations
-    settings = slicer.app.userSettings() 
-    settings.beginGroup(self.moduleName + '/Configurations')
-    configurations = settings.childGroups()
-    for configuration in configurations:
-      self.configurationsComboBox.addItem(configuration)
-    settings.endGroup()
-    
-    # Set latest used configuration
-    if settings.value(self.moduleName + '/MostRecentConfiguration'):
-      self.selectedConfigurationName = settings.value(self.moduleName + '/MostRecentConfiguration')
-      idx = self.configurationsComboBox.findText(settings.value(self.moduleName + '/MostRecentConfiguration'))
-      self.configurationsComboBox.setCurrentIndex(idx)      
-    
-    self.configurationsComboBox.connect('currentIndexChanged(const QString &)', self.onConfigurationChanged)
-    
+  def addLauncherWidgets(self):
+    GuideletWidget.addLauncherWidgets(self)
+
+    # BreachWarning
+    self.addBreachWarningLightPreferences()
+
   def onConfigurationChanged(self, selectedConfigurationName):
-    self.selectedConfigurationName = selectedConfigurationName
-    settings = slicer.app.userSettings() 
-    settings.setValue(self.moduleName + '/MostRecentConfiguration', selectedConfigurationName)   
-    lightEnabled = settings.value(self.moduleName + '/Configurations/' + selectedConfigurationName + '/EnableBreachWarningLight')    
-    self.breachWarningLightCheckBox.checked = (lightEnabled == 'True')  
-    
-  def breachWarningLight(self):
+    GuideletWidget.onConfigurationChanged(self, selectedConfigurationName)
+    settings = slicer.app.userSettings()
+    lightEnabled = settings.value(self.moduleName + '/Configurations/' + self.selectedConfigurationName + '/EnableBreachWarningLight')
+    self.breachWarningLightCheckBox.checked = (lightEnabled == 'True')
+
+  def addBreachWarningLightPreferences(self):
     lnNode = slicer.util.getNode(self.moduleName)
     
     self.breachWarningLightCheckBox = qt.QCheckBox()
@@ -131,35 +84,11 @@ class LumpNavWidget(GuideletWidget):
     if self.breachWarningLightCheckBox.checked:
       lightEnabled = 'True'
     elif not self.breachWarningLightCheckBox.checked:
-      lightEnabled = 'False'    
-    settings = slicer.app.userSettings()   
-    settings.setValue(self.moduleName + '/Configurations/' + self.selectedConfigurationName + '/EnableBreachWarningLight', lightEnabled)
-  
-  def collectParameterList(self):
-    parameterlist = GuideletWidget.collectParameterList(self)
+      lightEnabled = 'False'
+    self.guideletLogic.updateSettings({'EnableBreachWarningLight' : lightEnabled}, self.selectedConfigurationName)
 
-    # BreachWarning
-    if(self.breachWarningLightCheckBox.isEnabled()):
-        lightEnabled = 'False'
-        if self.breachWarningLightCheckBox.isChecked():
-          lightEnabled = 'True'
-        if parameterlist!=None:
-          parameterlist['EnableBreachWarningLight'] = lightEnabled
-        settings = slicer.app.userSettings()
-        settings.setValue(self.moduleName + '/Configurations/' + self.selectedConfigurationName + '/EnableBreachWarningLight', lightEnabled)
-
-    # Configuration   
-    settings = slicer.app.userSettings() 
-    settings.beginGroup(self.moduleName + '/Configurations/' + self.selectedConfigurationName)    
-    keys = settings.allKeys()
-    for key in keys:
-      parameterlist[key] = settings.value(key) 
-    settings.endGroup()
-    
-    return parameterlist
-
-  def createGuideletInstance(self, parameterList = None):
-    return LumpNavGuidelet(None, self.guideletLogic, parameterList,  self.selectedConfigurationName)
+  def createGuideletInstance(self):
+    return LumpNavGuidelet(None, self.guideletLogic, self.selectedConfigurationName)
 
   def createGuideletLogic(self):
     return LumpNavLogic()
@@ -175,24 +104,27 @@ class LumpNavLogic(GuideletLogic):
   def __init__(self, parent = None):
     GuideletLogic.__init__(self, parent)
 
-  def createParameterNode(self):
-    node = GuideletLogic.createParameterNode(self)
-    parameterList = {'RecordingFilenamePrefix': "LumpNavRecording-",
-                     'RecordingFilenameExtension': ".mhd",
-                     'DefaultSavedScenesPath': os.path.dirname(slicer.modules.lumpnav.path)+'/SavedScenes',
-                     'PivotCalibrationErrorThresholdMm':  0.9,
-                     'PivotCalibrationDurationSec': 5,
-                     'EnableBreachWarningLight':'True',
-                     'BreachWarningLightMarginSizeMm':2.0,
-                     'TestMode':'False',
-                     }
+  def addValuesToDefaultConfiguration(self):
+    GuideletLogic.addValuesToDefaultConfiguration(self)
+    moduleDir = os.path.dirname(slicer.modules.lumpnav.path)
+    defaultSavePathOfLumpNav = os.path.join(moduleDir, 'SavedScenes')
+    settingList = {'EnableBreachWarningLight' : 'True',
+                   'BreachWarningLightMarginSizeMm' : '2.0',
+                   'TipToSurfaceDistanceCrossHair' : 'True',
+                   'TipToSurfaceDistanceText' : 'True',
+                   'TipToSurfaceDistanceTrajectory' : 'True',
+                   'NeedleModelToNeedleTip' : '0 1 0 0 0 0 1 0 1 0 0 0 0 0 0 1',
+                   'CauteryModelToCauteryTip' : '0 0 1 0 0 -1 0 0 1 0 0 0 0 0 0 1',
+                   'PivotCalibrationErrorThresholdMm' :  '0.9',
+                   'PivotCalibrationDurationSec' : '5',
+                   'TestMode' : 'False',
+                   'RecordingFilenamePrefix' : 'LumpNavRecording-',
+                   'SavedScenesDirectory': defaultSavePathOfLumpNav,#overwrites the default setting param of base
+                   }
+    self.updateSettings(settingList, 'Default')
 
-    for parameter in parameterList:
-      if not node.GetParameter(parameter):
-        node.SetParameter(parameter, str(parameterList[parameter]))
 
-    return node
-#	
+#
 #	LumpNavTest ###
 #
 
@@ -208,8 +140,8 @@ class LumpNavTest(GuideletTest):
 
 class LumpNavGuidelet(Guidelet):
 
-  def __init__(self, parent, logic, parameterList=None, configurationName='Default'):
-    Guidelet.__init__(self, parent, logic, parameterList, configurationName)
+  def __init__(self, parent, logic, configurationName='Default'):
+    Guidelet.__init__(self, parent, logic, configurationName)
     logging.debug('LumpNavGuidelet.__init__')
 
     moduleDirectoryPath = slicer.modules.lumpnav.path.replace('LumpNav.py', '')
@@ -230,8 +162,6 @@ class LumpNavGuidelet(Guidelet):
 
     # Setting button open on startup.
     self.calibrationCollapsibleButton.setProperty('collapsed', False)
-    
-    self.showFullScreen()
 
   def createFeaturePanels(self):
     # Create GUI panels.
@@ -298,7 +228,7 @@ class LumpNavGuidelet(Guidelet):
     if not self.cauteryTipToCautery:
       self.cauteryTipToCautery=slicer.vtkMRMLLinearTransformNode()
       self.cauteryTipToCautery.SetName("CauteryTipToCautery")
-      m = self.readTransformFromSettings('CauteryTipToCautery') 
+      m = self.logic.readTransformFromSettings('CauteryTipToCautery', self.configurationName) 
       if m:
         self.cauteryTipToCautery.SetMatrixTransformToParent(m)
       slicer.mrmlScene.AddNode(self.cauteryTipToCautery)
@@ -307,7 +237,7 @@ class LumpNavGuidelet(Guidelet):
     if not self.cauteryModelToCauteryTip:
       self.cauteryModelToCauteryTip=slicer.vtkMRMLLinearTransformNode()
       self.cauteryModelToCauteryTip.SetName("CauteryModelToCauteryTip")
-      m = self.readTransformFromSettings('CauteryModelToCauteryTip') 
+      m = self.logic.readTransformFromSettings('CauteryModelToCauteryTip', self.configurationName) 
       if m:
         self.cauteryModelToCauteryTip.SetMatrixTransformToParent(m)
       slicer.mrmlScene.AddNode(self.cauteryModelToCauteryTip)
@@ -316,7 +246,7 @@ class LumpNavGuidelet(Guidelet):
     if not self.needleTipToNeedle:
       self.needleTipToNeedle=slicer.vtkMRMLLinearTransformNode()
       self.needleTipToNeedle.SetName("NeedleTipToNeedle")
-      m = self.readTransformFromSettings('NeedleTipToNeedle') 
+      m = self.logic.readTransformFromSettings('NeedleTipToNeedle', self.configurationName) 
       if m:
         self.needleTipToNeedle.SetMatrixTransformToParent(m)
       slicer.mrmlScene.AddNode(self.needleTipToNeedle)      
@@ -325,7 +255,7 @@ class LumpNavGuidelet(Guidelet):
     if not self.needleModelToNeedleTip:
       self.needleModelToNeedleTip=slicer.vtkMRMLLinearTransformNode()
       self.needleModelToNeedleTip.SetName("NeedleModelToNeedleTip")
-      m = self.readTransformFromSettings('NeedleModelToNeedleTip') 
+      m = self.logic.readTransformFromSettings('NeedleModelToNeedleTip', self.configurationName) 
       if m:
         self.needleModelToNeedleTip.SetMatrixTransformToParent(m)
       slicer.mrmlScene.AddNode(self.needleModelToNeedleTip)
@@ -546,7 +476,7 @@ class LumpNavGuidelet(Guidelet):
     self.pivotCalibrationLogic.GetToolTipToToolMatrix(tooltipToToolMatrix)
     self.pivotCalibrationLogic.ClearToolToReferenceMatrices()
     self.pivotCalibrationResultTargetNode.SetMatrixTransformToParent(tooltipToToolMatrix)
-    self.writeTransformToSettings(self.pivotCalibrationResultTargetName, tooltipToToolMatrix)
+    self.logic.writeTransformToSettings(self.pivotCalibrationResultTargetName, tooltipToToolMatrix, self.configurationName)
     self.countdownLabel.setText("Calibration completed, error = %f mm" % self.pivotCalibrationLogic.GetPivotRMSE())
     logging.debug("Pivot calibration completed. Tool: {0}. RMSE = {1} mm".format(self.pivotCalibrationResultTargetNode.GetName(), self.pivotCalibrationLogic.GetPivotRMSE()))
 
@@ -599,7 +529,6 @@ class LumpNavGuidelet(Guidelet):
     logging.debug('setupCalibrationPanel')
 
     self.calibrationCollapsibleButton.setProperty('collapsedHeight', 20)
-    setButtonStyle(self.calibrationCollapsibleButton, 2.0)
     self.calibrationCollapsibleButton.text = 'Tool calibration'
     self.sliceletPanelLayout.addWidget(self.calibrationCollapsibleButton)
 
@@ -608,11 +537,9 @@ class LumpNavGuidelet(Guidelet):
     self.calibrationLayout.setSpacing(4)
 
     self.cauteryPivotButton = qt.QPushButton('Start cautery calibration')
-    setButtonStyle(self.cauteryPivotButton)
     self.calibrationLayout.addRow(self.cauteryPivotButton)
 
     self.needlePivotButton = qt.QPushButton('Start needle calibration')
-    setButtonStyle(self.needlePivotButton)
     self.calibrationLayout.addRow(self.needlePivotButton)
 
     self.countdownLabel = qt.QLabel()
@@ -629,17 +556,14 @@ class LumpNavGuidelet(Guidelet):
     self.placeButton = qt.QPushButton("Mark points")
     self.placeButton.setCheckable(True)
     self.placeButton.setIcon(qt.QIcon(":/Icons/MarkupsMouseModePlace.png"))
-    setButtonStyle(self.placeButton)
     self.ultrasoundLayout.addRow(self.placeButton)
 
     self.deleteLastFiducialButton = qt.QPushButton("Delete last")
     self.deleteLastFiducialButton.setIcon(qt.QIcon(":/Icons/MarkupsDelete.png"))
-    setButtonStyle(self.deleteLastFiducialButton)
     self.deleteLastFiducialButton.setEnabled(False)
 
     self.deleteAllFiducialsButton = qt.QPushButton("Delete all")
     self.deleteAllFiducialsButton.setIcon(qt.QIcon(":/Icons/MarkupsDeleteAllRows.png"))
-    setButtonStyle(self.deleteAllFiducialsButton)
     self.deleteAllFiducialsButton.setEnabled(False)
 
     hbox = qt.QHBoxLayout()
@@ -661,7 +585,6 @@ class LumpNavGuidelet(Guidelet):
     self.sliderPageStepValue   = 10
 
     self.navigationCollapsibleButton.setProperty('collapsedHeight', 20)
-    setButtonStyle(self.navigationCollapsibleButton, 2.0)
     self.navigationCollapsibleButton.text = "Navigation"
     self.sliceletPanelLayout.addWidget(self.navigationCollapsibleButton)
 
@@ -671,11 +594,9 @@ class LumpNavGuidelet(Guidelet):
 
     self.rightCameraButton = qt.QPushButton("Setup right camera")
     self.rightCameraButton.setCheckable(True)
-    setButtonStyle(self.rightCameraButton)
 
     self.leftCameraButton = qt.QPushButton("Setup left camera")
     self.leftCameraButton.setCheckable(True)
-    setButtonStyle(self.leftCameraButton)
 
     hbox = qt.QHBoxLayout()
     hbox.addWidget(self.leftCameraButton)
@@ -715,7 +636,6 @@ class LumpNavGuidelet(Guidelet):
     self.cameraXPosLabel = qt.QLabel(qt.Qt.Horizontal,None)
     self.cameraXPosLabel.text = "Left/Right [mm]: "
     self.cameraXPosSlider = slicer.qMRMLSliderWidget()
-    setButtonStyle(self.cameraXPosSlider)
     self.cameraXPosSlider.minimum = self.sliderTranslationMinMm
     self.cameraXPosSlider.maximum = self.sliderTranslationMaxMm
     self.cameraXPosSlider.value = self.sliderTranslationDefaultMm
@@ -727,7 +647,6 @@ class LumpNavGuidelet(Guidelet):
     self.cameraYPosLabel = qt.QLabel(qt.Qt.Horizontal,None)
     self.cameraYPosLabel.setText("Down/Up [mm]: ")
     self.cameraYPosSlider = slicer.qMRMLSliderWidget()
-    setButtonStyle(self.cameraYPosSlider)
     self.cameraYPosSlider.minimum = self.sliderTranslationMinMm
     self.cameraYPosSlider.maximum = self.sliderTranslationMaxMm
     self.cameraYPosSlider.value = self.sliderTranslationDefaultMm
@@ -739,7 +658,6 @@ class LumpNavGuidelet(Guidelet):
     self.cameraZPosLabel = qt.QLabel(qt.Qt.Horizontal,None)
     self.cameraZPosLabel.setText("Front/Back [mm]: ")
     self.cameraZPosSlider = slicer.qMRMLSliderWidget()
-    setButtonStyle(self.cameraZPosSlider)
     self.cameraZPosSlider.minimum = self.sliderTranslationMinMm
     self.cameraZPosSlider.maximum = self.sliderTranslationMaxMm
     self.cameraZPosSlider.value = self.sliderTranslationDefaultMm
@@ -758,12 +676,10 @@ class LumpNavGuidelet(Guidelet):
     self.contourAdjustmentFormLayout = qt.QFormLayout(self.contourAdjustmentCollapsibleButton)
 
     self.placeTumorPointAtCauteryTipButton = qt.QPushButton("Mark point at cautery tip")
-    setButtonStyle(self.placeTumorPointAtCauteryTipButton)
     self.contourAdjustmentFormLayout.addRow(self.placeTumorPointAtCauteryTipButton)
     
     self.deleteLastFiducialDuringNavigationButton = qt.QPushButton("Delete last")
     self.deleteLastFiducialDuringNavigationButton.setIcon(qt.QIcon(":/Icons/MarkupsDelete.png"))
-    setButtonStyle(self.deleteLastFiducialDuringNavigationButton)
     self.deleteLastFiducialDuringNavigationButton.setEnabled(False)
     self.contourAdjustmentFormLayout.addRow(self.deleteLastFiducialDuringNavigationButton)
 
