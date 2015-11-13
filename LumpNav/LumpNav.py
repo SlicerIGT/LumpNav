@@ -774,9 +774,9 @@ class LumpNavGuidelet(Guidelet):
     self.tumorModel_Needle.Modified()
 
   def setupViewpoint(self):
-    rightView = slicer.util.getNode("view2")
+    rightView = slicer.util.getNode("View2")
     self.RightCamera.SetActiveTag(rightView.GetID())
-    leftView = slicer.util.getNode("view1")
+    leftView = slicer.util.getNode("View1")
     self.LeftCamera.SetActiveTag(leftView.GetID())
 
   def setDisableSliders(self, disable):
