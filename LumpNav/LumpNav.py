@@ -199,6 +199,7 @@ class LumpNavGuidelet(Guidelet):
 
     self.cauteryPivotButton.connect('clicked()', self.onCauteryPivotClicked)
     self.needlePivotButton.connect('clicked()', self.onNeedlePivotClicked)
+    self.needleLengthSBox.connect('valueChanged(int)', self.onNeedleLengthModified)
     self.placeButton.connect('clicked(bool)', self.onPlaceClicked)
     self.deleteLastFiducialButton.connect('clicked()', self.onDeleteLastFiducialClicked)
     self.deleteLastFiducialDuringNavigationButton.connect('clicked()', self.onDeleteLastFiducialClicked)    
@@ -249,7 +250,8 @@ class LumpNavGuidelet(Guidelet):
       m = self.logic.readTransformFromSettings('NeedleTipToNeedle', self.configurationName) 
       if m:
         self.needleTipToNeedle.SetMatrixTransformToParent(m)
-      slicer.mrmlScene.AddNode(self.needleTipToNeedle)      
+      slicer.mrmlScene.AddNode(self.needleTipToNeedle)
+    self.updateSpinBoxFromPivotCalibration()
       
     self.needleModelToNeedleTip = slicer.util.getNode('NeedleModelToNeedleTip')
     if not self.needleModelToNeedleTip:
@@ -477,6 +479,7 @@ class LumpNavGuidelet(Guidelet):
     self.pivotCalibrationLogic.ClearToolToReferenceMatrices()
     self.pivotCalibrationResultTargetNode.SetMatrixTransformToParent(tooltipToToolMatrix)
     self.logic.writeTransformToSettings(self.pivotCalibrationResultTargetName, tooltipToToolMatrix, self.configurationName)
+    self.updateSpinBoxFromPivotCalibration()
     self.countdownLabel.setText("Calibration completed, error = %f mm" % self.pivotCalibrationLogic.GetPivotRMSE())
     logging.debug("Pivot calibration completed. Tool: {0}. RMSE = {1} mm".format(self.pivotCalibrationResultTargetNode.GetName(), self.pivotCalibrationLogic.GetPivotRMSE()))
 
@@ -545,6 +548,13 @@ class LumpNavGuidelet(Guidelet):
     self.countdownLabel = qt.QLabel()
     self.calibrationLayout.addRow(self.countdownLabel)
 
+    self.needleLengthLayout = qt.QFormLayout(self.calibrationCollapsibleButton)
+    self.needleLengthSBox = qt.QSpinBox()
+    self.needleLengthSBox.setMinimum(10)
+    self.needleLengthSBox.setMaximum(200)
+    self.needleLengthLayout.addRow('Needle length (mm)', self.needleLengthSBox)
+    self.calibrationLayout.addRow(self.needleLengthLayout)
+    
     self.pivotSamplingTimer = qt.QTimer()
     self.pivotSamplingTimer.setInterval(500)
     self.pivotSamplingTimer.setSingleShot(True)
@@ -841,4 +851,22 @@ class LumpNavGuidelet(Guidelet):
     if self.tumorMarkups_Needle:
       self.tumorMarkups_NeedleObserver = self.tumorMarkups_Needle.AddObserver(vtk.vtkCommand.ModifiedEvent, self.onTumorMarkupsNodeModified)
       
-      
+  def onNeedleLengthModified(self, newLength):
+    logging.debug('onNeedleLengthModified {0}'.format(newLength))
+    
+    needleTipToNeedleTransform = self.needleTipToNeedle.GetTransformToParent()
+    translation = [0,0,0] # Units are millimeters
+    orientation = [0,0,0,0] # W X Y Z
+    needleTipToNeedleTransform.GetPosition(translation)
+    needleTipToNeedleTransform.GetOrientationWXYZ(orientation)
+    translation[1]=newLength-5 # TODO: For some reason Y is along needle axis.
+    newNeedleTipToNeedleTransform = vtk.vtkTransform()
+    newNeedleTipToNeedleTransform.Translate(translation)
+    newNeedleTipToNeedleTransform.RotateWXYZ(orientation[0], orientation[1], orientation[2], orientation[3])
+    self.needleTipToNeedle.SetMatrixTransformToParent(newNeedleTipToNeedleTransform.GetMatrix())
+    
+  def updateSpinBoxFromPivotCalibration(self):
+    needleTipToNeedleTransform = self.needleTipToNeedle.GetTransformToParent()
+    translation = [0,0,0] # Units are millimeters
+    needleTipToNeedleTransform.GetPosition(translation)
+    self.needleLengthSBox.setValue(translation[1])
