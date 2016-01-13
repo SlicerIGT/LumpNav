@@ -5,6 +5,7 @@ from Guidelet import GuideletLoadable, GuideletLogic, GuideletTest, GuideletWidg
 from Guidelet import Guidelet
 import logging
 import time
+import math
 
 #
 # LumpNav ###
@@ -108,12 +109,12 @@ class LumpNavLogic(GuideletLogic):
     GuideletLogic.addValuesToDefaultConfiguration(self)
     moduleDir = os.path.dirname(slicer.modules.lumpnav.path)
     defaultSavePathOfLumpNav = os.path.join(moduleDir, 'SavedScenes')
-    settingList = {'EnableBreachWarningLight' : 'True',
+    settingList = {'EnableBreachWarningLight' : 'False',
                    'BreachWarningLightMarginSizeMm' : '2.0',
-                   'TipToSurfaceDistanceCrossHair' : 'True',
-                   'TipToSurfaceDistanceText' : 'True',
+                   'TipToSurfaceDistanceTextScale' : '3',
                    'TipToSurfaceDistanceTrajectory' : 'True',
                    'NeedleModelToNeedleTip' : '0 1 0 0 0 0 1 0 1 0 0 0 0 0 0 1',
+                   'NeedleBaseToNeedle' : '1 0 0 20.93 0 1 0 -6.00 0 0 1 -4.27 0 0 0 1',
                    'CauteryModelToCauteryTip' : '0 0 1 0 0 -1 0 0 1 0 0 0 0 0 0 1',
                    'PivotCalibrationErrorThresholdMm' :  '0.9',
                    'PivotCalibrationDurationSec' : '5',
@@ -199,7 +200,7 @@ class LumpNavGuidelet(Guidelet):
 
     self.cauteryPivotButton.connect('clicked()', self.onCauteryPivotClicked)
     self.needlePivotButton.connect('clicked()', self.onNeedlePivotClicked)
-    self.needleLengthSBox.connect('valueChanged(int)', self.onNeedleLengthModified)
+    self.needleLengthSpinBox.connect('valueChanged(int)', self.onNeedleLengthModified)
     self.placeButton.connect('clicked(bool)', self.onPlaceClicked)
     self.deleteLastFiducialButton.connect('clicked()', self.onDeleteLastFiducialClicked)
     self.deleteLastFiducialDuringNavigationButton.connect('clicked()', self.onDeleteLastFiducialClicked)    
@@ -251,7 +252,18 @@ class LumpNavGuidelet(Guidelet):
       if m:
         self.needleTipToNeedle.SetMatrixTransformToParent(m)
       slicer.mrmlScene.AddNode(self.needleTipToNeedle)
-    self.updateSpinBoxFromPivotCalibration()
+
+    self.needleBaseToNeedle = slicer.util.getNode('NeedleBaseToNeedle')
+    if not self.needleBaseToNeedle:
+      self.needleBaseToNeedle=slicer.vtkMRMLLinearTransformNode()
+      self.needleBaseToNeedle.SetName("NeedleBaseToNeedle")
+      m = self.logic.readTransformFromSettings('NeedleBaseToNeedle', self.configurationName) 
+      if m:
+        self.needleBaseToNeedle.SetMatrixTransformToParent(m)
+      slicer.mrmlScene.AddNode(self.needleBaseToNeedle)
+    
+    # Update the displayed needle length based on NeedleTipToNeedle and NeedleTipToNeedleBase
+    self.updateDisplayedNeedleLength()
       
     self.needleModelToNeedleTip = slicer.util.getNode('NeedleModelToNeedleTip')
     if not self.needleModelToNeedleTip:
@@ -374,10 +386,12 @@ class LumpNavGuidelet(Guidelet):
       self.breachWarningNode.SetName("LumpNavBreachWarning")
       slicer.mrmlScene.AddNode(self.breachWarningNode)
       self.breachWarningNode.SetPlayWarningSound(True)
-      self.breachWarningNode.SetWarningColor(1,0,0)
+      self.breachWarningNode.SetWarningColor(1,0,0)      
       self.breachWarningNode.SetOriginalColor(self.tumorModel_Needle.GetDisplayNode().GetColor())
       self.breachWarningNode.SetAndObserveToolTransformNodeId(self.cauteryTipToCautery.GetID())
       self.breachWarningNode.SetAndObserveWatchedModelNodeID(self.tumorModel_Needle.GetID())
+      breachWarningLogic = slicer.modules.breachwarning.logic()
+      breachWarningLogic.SetLineToClosestPointVisibility(False, self.breachWarningNode)
       
     # Set up breach warning light
     import BreachWarningLight
@@ -399,6 +413,7 @@ class LumpNavGuidelet(Guidelet):
     self.cauteryModelToCauteryTip.SetAndObserveTransformNodeID(self.cauteryTipToCautery.GetID())
     self.needleToReference.SetAndObserveTransformNodeID(self.ReferenceToRas.GetID())
     self.needleTipToNeedle.SetAndObserveTransformNodeID(self.needleToReference.GetID())
+    self.needleBaseToNeedle.SetAndObserveTransformNodeID(self.needleToReference.GetID())
     self.needleModelToNeedleTip.SetAndObserveTransformNodeID(self.needleTipToNeedle.GetID())
     self.cauteryModel_CauteryTip.SetAndObserveTransformNodeID(self.cauteryModelToCauteryTip.GetID())
     self.needleModel_NeedleTip.SetAndObserveTransformNodeID(self.needleModelToNeedleTip.GetID())
@@ -479,15 +494,23 @@ class LumpNavGuidelet(Guidelet):
     self.pivotCalibrationLogic.ClearToolToReferenceMatrices()
     self.pivotCalibrationResultTargetNode.SetMatrixTransformToParent(tooltipToToolMatrix)
     self.logic.writeTransformToSettings(self.pivotCalibrationResultTargetName, tooltipToToolMatrix, self.configurationName)
-    self.updateSpinBoxFromPivotCalibration()
     self.countdownLabel.setText("Calibration completed, error = %f mm" % self.pivotCalibrationLogic.GetPivotRMSE())
     logging.debug("Pivot calibration completed. Tool: {0}. RMSE = {1} mm".format(self.pivotCalibrationResultTargetNode.GetName(), self.pivotCalibrationLogic.GetPivotRMSE()))
+    # We compute approximate needle length if we perform pivot calibration for the needle
+    if self.pivotCalibrationResultTargetName == 'NeedleTipToNeedle':
+      self.updateDisplayedNeedleLength()
 
   def onCauteryPivotClicked(self):#lumpnav
     logging.debug('onCauteryPivotClicked')
     self.startPivotCalibration('CauteryTipToCautery', self.CauteryToNeedle, self.cauteryTipToCautery)
 
   def onNeedlePivotClicked(self):#lumpnav
+    # NeedleTipToNeedle transform can be computed in two ways:
+    # A. Pivot calibration: NeedleTipToNeedle is computed by pivot calibration;
+    #    needle length is computed from difference of NeedleTipToNeedle and NeedleBaseToNeedle transform
+    # B. Needle length specification: NeedleTipToNeedle is computed by offsetting NeedleBaseToNeedle by the
+    #    needle length the user specifies.
+    # (NeedleBaseToNeedle is constant, depends on the geometry of the needle clip)
     logging.debug('onNeedlePivotClicked')
     self.startPivotCalibration('NeedleTipToNeedle', self.needleToReference, self.needleTipToNeedle)
 
@@ -542,18 +565,27 @@ class LumpNavGuidelet(Guidelet):
     self.cauteryPivotButton = qt.QPushButton('Start cautery calibration')
     self.calibrationLayout.addRow(self.cauteryPivotButton)
 
+    self.needleLengthLayout = qt.QFormLayout(self.calibrationCollapsibleButton)
+    self.needleLengthSpinBox = qt.QSpinBox()
+    self.needleLengthSpinBox.setMinimum(10)
+    self.needleLengthSpinBox.setMaximum(200)
+    self.needleLengthLayout.addRow('Needle length (mm)', self.needleLengthSpinBox)
+    self.calibrationLayout.addRow(self.needleLengthLayout)
+    
+    # "Advanced needle calibration" Collapsible
+    self.advancedNeedleCalibrationCollapsibleButton = ctk.ctkCollapsibleGroupBox()
+    self.advancedNeedleCalibrationCollapsibleButton.title = "Advanced needle calibration"
+    self.advancedNeedleCalibrationCollapsibleButton.collapsed=True
+    self.calibrationLayout.addRow(self.advancedNeedleCalibrationCollapsibleButton)
+
+    # Layout within the collapsible button
+    self.advancedNeedleCalibrationFormLayout = qt.QFormLayout(self.advancedNeedleCalibrationCollapsibleButton)
+    
     self.needlePivotButton = qt.QPushButton('Start needle calibration')
-    self.calibrationLayout.addRow(self.needlePivotButton)
+    self.advancedNeedleCalibrationFormLayout.addRow(self.needlePivotButton)
 
     self.countdownLabel = qt.QLabel()
     self.calibrationLayout.addRow(self.countdownLabel)
-
-    self.needleLengthLayout = qt.QFormLayout(self.calibrationCollapsibleButton)
-    self.needleLengthSBox = qt.QSpinBox()
-    self.needleLengthSBox.setMinimum(10)
-    self.needleLengthSBox.setMaximum(200)
-    self.needleLengthLayout.addRow('Needle length (mm)', self.needleLengthSBox)
-    self.calibrationLayout.addRow(self.needleLengthLayout)
     
     self.pivotSamplingTimer = qt.QTimer()
     self.pivotSamplingTimer.setInterval(500)
@@ -822,6 +854,14 @@ class LumpNavGuidelet(Guidelet):
       self.rightCameraButton.setDisabled(False)
 
   def onNavigationPanelToggled(self, toggled):
+  
+    breachWarningLogic = slicer.modules.breachwarning.logic()
+    showTrajectoryToClosestPoint = toggled and (self.parameterNode.GetParameter('TipToSurfaceDistanceTrajectory')=='True')
+    breachWarningLogic.SetLineToClosestPointVisibility(showTrajectoryToClosestPoint, self.breachWarningNode)
+    if showTrajectoryToClosestPoint:
+      breachWarningLogic.SetLineToClosestPointTextScale(float(self.parameterNode.GetParameter('TipToSurfaceDistanceTextScale')), self.breachWarningNode)
+      breachWarningLogic.SetLineToClosestPointColor(0,0,1, self.breachWarningNode)
+  
     if toggled == False:
       return
 
@@ -853,20 +893,20 @@ class LumpNavGuidelet(Guidelet):
       
   def onNeedleLengthModified(self, newLength):
     logging.debug('onNeedleLengthModified {0}'.format(newLength))
-    
-    needleTipToNeedleTransform = self.needleTipToNeedle.GetTransformToParent()
-    translation = [0,0,0] # Units are millimeters
-    orientation = [0,0,0,0] # W X Y Z
-    needleTipToNeedleTransform.GetPosition(translation)
-    needleTipToNeedleTransform.GetOrientationWXYZ(orientation)
-    translation[1]=newLength-5 # TODO: For some reason Y is along needle axis.
-    newNeedleTipToNeedleTransform = vtk.vtkTransform()
-    newNeedleTipToNeedleTransform.Translate(translation)
-    newNeedleTipToNeedleTransform.RotateWXYZ(orientation[0], orientation[1], orientation[2], orientation[3])
-    self.needleTipToNeedle.SetMatrixTransformToParent(newNeedleTipToNeedleTransform.GetMatrix())
-    
-  def updateSpinBoxFromPivotCalibration(self):
-    needleTipToNeedleTransform = self.needleTipToNeedle.GetTransformToParent()
-    translation = [0,0,0] # Units are millimeters
-    needleTipToNeedleTransform.GetPosition(translation)
-    self.needleLengthSBox.setValue(translation[1])
+    needleBaseToNeedleMatrix = self.needleBaseToNeedle.GetMatrixTransformToParent()
+    # NeedleTip and NeedleBase coordinate system have the same axes, just the origin is different (tip/base of the needle)
+    needleTipToNeedleBaseMatrix = vtk.vtkMatrix4x4()
+    needleTipToNeedleBaseMatrix.SetElement(1,3,newLength)
+    needleTipToNeedleMatrix = vtk.vtkMatrix4x4()
+    # needleBaseToNeedleMatrix * needleTipToNeedleBaseMatrix = needleTipToNeedleMatrix
+    vtk.vtkMatrix4x4.Multiply4x4(needleBaseToNeedleMatrix, needleTipToNeedleBaseMatrix, needleTipToNeedleMatrix)
+    self.needleTipToNeedle.SetMatrixTransformToParent(needleTipToNeedleMatrix)
+    self.logic.writeTransformToSettings('NeedleTipToNeedle', needleTipToNeedleMatrix, self.configurationName)
+
+  def updateDisplayedNeedleLength(self):
+    needleTipToNeedleBaseTransform = vtk.vtkMatrix4x4()
+    self.needleTipToNeedle.GetMatrixTransformToNode(self.needleBaseToNeedle, needleTipToNeedleBaseTransform)
+    needleLength = math.sqrt(needleTipToNeedleBaseTransform.GetElement(0,3)**2+needleTipToNeedleBaseTransform.GetElement(1,3)**2+needleTipToNeedleBaseTransform.GetElement(2,3)**2)
+    wasBlocked = self.needleLengthSpinBox.blockSignals(True)
+    self.needleLengthSpinBox.setValue(needleLength)
+    self.needleLengthSpinBox.blockSignals(wasBlocked)
