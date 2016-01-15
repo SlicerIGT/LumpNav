@@ -261,10 +261,7 @@ class LumpNavGuidelet(Guidelet):
       if m:
         self.needleBaseToNeedle.SetMatrixTransformToParent(m)
       slicer.mrmlScene.AddNode(self.needleBaseToNeedle)
-    
-    # Update the displayed needle length based on NeedleTipToNeedle and NeedleTipToNeedleBase
-    self.updateDisplayedNeedleLength()
-      
+
     self.needleModelToNeedleTip = slicer.util.getNode('NeedleModelToNeedleTip')
     if not self.needleModelToNeedleTip:
       self.needleModelToNeedleTip=slicer.vtkMRMLLinearTransformNode()
@@ -429,6 +426,9 @@ class LumpNavGuidelet(Guidelet):
     dataProbeParameterNode=dataProbeUtil.getParameterNode()
     dataProbeParameterNode.SetParameter('showSliceViewAnnotations', '0')
 
+    # Update the displayed needle length based on NeedleTipToNeedle and NeedleTipToNeedleBase
+    self.updateDisplayedNeedleLength()
+
   def disconnect(self):#TODO see connect
     logging.debug('LumpNav.disconnect()')
     Guidelet.disconnect(self)
@@ -484,18 +484,22 @@ class LumpNavGuidelet(Guidelet):
     self.pivotCalibrationLogic.SetRecordingState(False)
     self.needlePivotButton.setEnabled(True)
     self.cauteryPivotButton.setEnabled(True)
-    self.pivotCalibrationLogic.ComputePivotCalibration()
+    calibrationSuccess = self.pivotCalibrationLogic.ComputePivotCalibration()
+    if not calibrationSuccess:
+      self.countdownLabel.setText("Calibration failed: " + self.pivotCalibrationLogic.GetErrorText())
+      self.pivotCalibrationLogic.ClearToolToReferenceMatrices()
+      return
     if(self.pivotCalibrationLogic.GetPivotRMSE() >= float(self.parameterNode.GetParameter('PivotCalibrationErrorThresholdMm'))):
-        self.countdownLabel.setText("Calibration failed, error = %f mm, please calibrate again!"  % self.pivotCalibrationLogic.GetPivotRMSE())
-        self.pivotCalibrationLogic.ClearToolToReferenceMatrices()
-        return
+      self.countdownLabel.setText("Calibration failed, error = {0:.2f} mm, please calibrate again!".format(self.pivotCalibrationLogic.GetPivotRMSE()))
+      self.pivotCalibrationLogic.ClearToolToReferenceMatrices()
+      return
     tooltipToToolMatrix = vtk.vtkMatrix4x4()
     self.pivotCalibrationLogic.GetToolTipToToolMatrix(tooltipToToolMatrix)
     self.pivotCalibrationLogic.ClearToolToReferenceMatrices()
     self.pivotCalibrationResultTargetNode.SetMatrixTransformToParent(tooltipToToolMatrix)
     self.logic.writeTransformToSettings(self.pivotCalibrationResultTargetName, tooltipToToolMatrix, self.configurationName)
-    self.countdownLabel.setText("Calibration completed, error = %f mm" % self.pivotCalibrationLogic.GetPivotRMSE())
-    logging.debug("Pivot calibration completed. Tool: {0}. RMSE = {1} mm".format(self.pivotCalibrationResultTargetNode.GetName(), self.pivotCalibrationLogic.GetPivotRMSE()))
+    self.countdownLabel.setText("Calibration completed, error = {0:.2f} mm".format(self.pivotCalibrationLogic.GetPivotRMSE()))
+    logging.debug("Pivot calibration completed. Tool: {0}. RMSE = {1:.2f} mm".format(self.pivotCalibrationResultTargetNode.GetName(), self.pivotCalibrationLogic.GetPivotRMSE()))
     # We compute approximate needle length if we perform pivot calibration for the needle
     if self.pivotCalibrationResultTargetName == 'NeedleTipToNeedle':
       self.updateDisplayedNeedleLength()
@@ -890,7 +894,8 @@ class LumpNavGuidelet(Guidelet):
     self.tumorMarkups_Needle = tumorMarkups_Needle
     if self.tumorMarkups_Needle:
       self.tumorMarkups_NeedleObserver = self.tumorMarkups_Needle.AddObserver(vtk.vtkCommand.ModifiedEvent, self.onTumorMarkupsNodeModified)
-      
+
+  # Called when the user changes the needle length
   def onNeedleLengthModified(self, newLength):
     logging.debug('onNeedleLengthModified {0}'.format(newLength))
     needleBaseToNeedleMatrix = self.needleBaseToNeedle.GetMatrixTransformToParent()
@@ -902,7 +907,10 @@ class LumpNavGuidelet(Guidelet):
     vtk.vtkMatrix4x4.Multiply4x4(needleBaseToNeedleMatrix, needleTipToNeedleBaseMatrix, needleTipToNeedleMatrix)
     self.needleTipToNeedle.SetMatrixTransformToParent(needleTipToNeedleMatrix)
     self.logic.writeTransformToSettings('NeedleTipToNeedle', needleTipToNeedleMatrix, self.configurationName)
+    # Update the needle model
+    slicer.modules.createmodels.logic().CreateNeedle(newLength,1.0,2.5, False, self.needleModel_NeedleTip)
 
+  # Called after a successful pivot calibration
   def updateDisplayedNeedleLength(self):
     needleTipToNeedleBaseTransform = vtk.vtkMatrix4x4()
     self.needleTipToNeedle.GetMatrixTransformToNode(self.needleBaseToNeedle, needleTipToNeedleBaseTransform)
@@ -910,3 +918,5 @@ class LumpNavGuidelet(Guidelet):
     wasBlocked = self.needleLengthSpinBox.blockSignals(True)
     self.needleLengthSpinBox.setValue(needleLength)
     self.needleLengthSpinBox.blockSignals(wasBlocked)
+    # Update the needle model
+    slicer.modules.createmodels.logic().CreateNeedle(needleLength,1.0,2.5, False, self.needleModel_NeedleTip)
