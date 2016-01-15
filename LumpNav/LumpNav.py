@@ -738,7 +738,8 @@ class LumpNavGuidelet(Guidelet):
     if self.tumorMarkups_Needle:
       self.tumorMarkups_Needle.SetDisplayVisibility(0)
 
-    self.selectView(self.VIEW_ULTRASOUND_3D) 
+    self.selectView(self.VIEW_ULTRASOUND_3D)
+    self.placeButton.checked = False
 
   def onUltrasoundPanelToggled(self, toggled):
     Guidelet.onUltrasoundPanelToggled(self, toggled)
@@ -871,6 +872,7 @@ class LumpNavGuidelet(Guidelet):
 
     logging.debug('onNavigationPanelToggled')
     self.selectView(self.VIEW_DUAL_3D)
+    self.placeButton.checked = False
     if self.tumorMarkups_Needle:
       self.tumorMarkups_Needle.SetDisplayVisibility(0)
     self.setupViewpoint()
