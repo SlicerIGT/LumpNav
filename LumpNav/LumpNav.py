@@ -638,11 +638,11 @@ class LumpNavGuidelet(Guidelet):
     self.navigationCollapsibleLayout.setContentsMargins(12, 4, 4, 4)
     self.navigationCollapsibleLayout.setSpacing(4)
 
-    self.rightCameraButton = qt.QPushButton("Setup right camera")
-    self.rightCameraButton.setCheckable(True)
-
-    self.leftCameraButton = qt.QPushButton("Setup left camera")
+    self.leftCameraButton = qt.QPushButton("Left camera")
     self.leftCameraButton.setCheckable(True)
+
+    self.rightCameraButton = qt.QPushButton("Right camera")
+    self.rightCameraButton.setCheckable(True)
 
     hbox = qt.QHBoxLayout()
     hbox.addWidget(self.leftCameraButton)
