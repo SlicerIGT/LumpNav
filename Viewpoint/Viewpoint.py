@@ -650,7 +650,15 @@ class ViewpointLogic:
     else:
       logging.error("Error in Viewpoint: cameraParallelProjection is not 0 or 1. No projection mode has been set! No updates are being performed.")
       return
-    camera.SetParallelProjection(self.cameraParallelProjection)
+    # Parallel (a.k.a. orthographic) / perspective projection mode is stored in the view node.
+    # Change it in the view node instead of directly in the camera VTK object
+    # (if we changed the projection mode in the camera VTK object then the next time the camera is updated from the view node
+    # the rendering mode is reset to the value stored in the view node).
+    viewNode = slicer.mrmlScene.GetNodeByID(self.cameraNode.GetActiveTag())
+    viewNodeParallelProjection = (viewNode.GetRenderMode() == slicer.vtkMRMLViewNode.Orthographic)
+    if viewNodeParallelProjection != self.cameraParallelProjection:
+      viewNode.SetRenderMode(slicer.vtkMRMLViewNode.Orthographic if self.cameraParallelProjection else slicer.vtkMRMLViewNode.Perspective)
+
     camera.SetRoll(180) # appears to be the default value for a camera in Slicer
     camera.SetPosition(cameraOriginInRASMm)
     camera.SetFocalPoint(focalPointInRASMm)
