@@ -379,6 +379,7 @@ class LumpNavGuidelet(Guidelet):
 
     if not self.breachWarningNode:
       self.breachWarningNode = slicer.mrmlScene.CreateNodeByClass('vtkMRMLBreachWarningNode')
+      self.breachWarningNode.UnRegister(None) # Python variable already holds a reference to it
       self.breachWarningNode.SetName("LumpNavBreachWarning")
       slicer.mrmlScene.AddNode(self.breachWarningNode)
       self.breachWarningNode.SetPlayWarningSound(True)
@@ -387,6 +388,10 @@ class LumpNavGuidelet(Guidelet):
       self.breachWarningNode.SetAndObserveToolTransformNodeId(self.cauteryTipToCautery.GetID())
       self.breachWarningNode.SetAndObserveWatchedModelNodeID(self.tumorModel_Needle.GetID())
       breachWarningLogic = slicer.modules.breachwarning.logic()
+      # Line properties can only be set after the line is creaed (made visible at least once)
+      breachWarningLogic.SetLineToClosestPointVisibility(True, self.breachWarningNode)
+      breachWarningLogic.SetLineToClosestPointTextScale(float(self.parameterNode.GetParameter('TipToSurfaceDistanceTextScale')), self.breachWarningNode)
+      breachWarningLogic.SetLineToClosestPointColor(0,0,1, self.breachWarningNode)
       breachWarningLogic.SetLineToClosestPointVisibility(False, self.breachWarningNode)
 
     # Set up breach warning light
@@ -906,9 +911,6 @@ class LumpNavGuidelet(Guidelet):
     breachWarningLogic = slicer.modules.breachwarning.logic()
     showTrajectoryToClosestPoint = toggled and (self.parameterNode.GetParameter('TipToSurfaceDistanceTrajectory')=='True')
     breachWarningLogic.SetLineToClosestPointVisibility(showTrajectoryToClosestPoint, self.breachWarningNode)
-    if showTrajectoryToClosestPoint:
-      breachWarningLogic.SetLineToClosestPointTextScale(float(self.parameterNode.GetParameter('TipToSurfaceDistanceTextScale')), self.breachWarningNode)
-      breachWarningLogic.SetLineToClosestPointColor(0,0,1, self.breachWarningNode)
 
     if toggled == False:
       return
