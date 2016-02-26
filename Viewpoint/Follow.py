@@ -43,9 +43,9 @@ class FollowWidget:
     self.logic = FollowLogic()
     
     self.rangeSliderMaximum = 100
-    self.rangeSliderMinimum = 0
-    self.rangeSliderMaximumValueDefault = 80
-    self.rangeSliderMinimumValueDefault = 20
+    self.rangeSliderMinimum = -100
+    self.rangeSliderMaximumValueDefault = 100
+    self.rangeSliderMinimumValueDefault = -100
     
     self.sliderSingleStepValue = 0.01
     self.sliderPageStepValue   = 0.1
@@ -274,11 +274,11 @@ class FollowWidget:
 class FollowLogic:
   def __init__(self):
     #inputs
-    self.safeXMinimumNormalizedViewport = 0
+    self.safeXMinimumNormalizedViewport = -1
     self.safeXMaximumNormalizedViewport = 1
-    self.safeYMinimumNormalizedViewport = 0
+    self.safeYMinimumNormalizedViewport = -1
     self.safeYMaximumNormalizedViewport = 1
-    self.safeZMinimumNormalizedViewport = 0
+    self.safeZMinimumNormalizedViewport = -1
     self.safeZMaximumNormalizedViewport = 1
     
     self.adjustX = True
@@ -392,10 +392,7 @@ class FollowLogic:
     if not self.modelNode:
       logging.warning("Model node not set. Will not proceed until model node is selected.")
       return
-      
-    self.addObservers()
     self.updateModelTargetPositionViewport()
-    
     self.systemTimeAtLastUpdateSeconds = time.time()
     nextUpdateTimerMilliseconds = self.updateRateSeconds * 1000
     qt.QTimer.singleShot(nextUpdateTimerMilliseconds ,self.onUpdateEvent)
@@ -403,26 +400,36 @@ class FollowLogic:
     self.active = True
     
   def stop(self):
-    self.removeObservers()
     self.active = False
-
-  def addObservers(self): # mostly copied from PositionErrorMapping.py in PLUS
-    logging.debug("Adding observers...")
-    transformModifiedEvent = 15000
-    transformNode = self.modelNode
-    while transformNode:
-      logging.debug("Add observer to {0}".format(transformNode.GetName()))
-      self.transformNodeObserverTags.append([transformNode, transformNode.AddObserver(transformModifiedEvent, self.onTransformModifiedEvent)])
-      transformNode = transformNode.GetParentTransformNode()
-    logging.debug("Done adding observers")
-
-  def removeObservers(self):
-    logging.debug("Removing observers...")
-    for nodeTagPair in self.transformNodeObserverTags:
-      nodeTagPair[0].RemoveObserver(nodeTagPair[1])
-    logging.debug("Done removing observers")
     
-  def onTransformModifiedEvent(self, observer, eventid):
+  def onUpdateEvent(self):
+    logging.debug("onUpdateEvent")
+    if (not self.active):
+      return
+      
+    deltaTimeSeconds = time.time() - self.systemTimeAtLastUpdateSeconds
+    self.systemTimeAtLastUpdateSeconds = time.time()
+
+    self.updateSafeOrUnsafeState()
+    self.timeInStateSeconds = self.timeInStateSeconds + deltaTimeSeconds
+    
+    if (self.state == self.stateUNSAFE and self.timeInStateSeconds >= self.timeUnsafeToAdjustMaximumSeconds):
+      self.updateCameraBasePositionAndTranslationRas()
+      self.state = self.stateADJUST
+      self.timeInStateSeconds = 0
+    if (self.state == self.stateADJUST):
+      self.updateCameraCurrentPositionRas()
+      if (self.timeInStateSeconds >= self.timeAdjustToRestMaximumSeconds):
+        self.state = self.stateREST
+        self.timeInStateSeconds = 0
+    if (self.state == self.stateREST and self.timeInStateSeconds >= self.timeRestToSafeMaximumSeconds):
+      self.state = self.stateSAFE
+      self.timeInStateSeconds = 0
+      
+    nextUpdateTimerMilliseconds = self.updateRateSeconds * 1000
+    qt.QTimer.singleShot(nextUpdateTimerMilliseconds ,self.onUpdateEvent)
+    
+  def updateSafeOrUnsafeState(self):
     if (self.state == self.stateADJUST or
         self.state == self.stateREST):
       return
@@ -432,10 +439,10 @@ class FollowLogic:
     # Assume we are safe, until shown otherwise
     foundUnsafe = False
     for pointRas in pointsRas:
-      coordsNormalizedViewPort = self.convertRasToViewport(pointRas)
-      XNormalizedViewport = coordsNormalizedViewPort[0]
-      YNormalizedViewport = coordsNormalizedViewPort[1]
-      ZNormalizedViewport = coordsNormalizedViewPort[2]
+      coordsNormalizedViewport = self.convertRasToViewport(pointRas)
+      XNormalizedViewport = coordsNormalizedViewport[0]
+      YNormalizedViewport = coordsNormalizedViewport[1]
+      ZNormalizedViewport = coordsNormalizedViewport[2]
       if ( XNormalizedViewport > self.safeXMaximumNormalizedViewport or 
            XNormalizedViewport < self.safeXMinimumNormalizedViewport or
            YNormalizedViewport > self.safeYMaximumNormalizedViewport or 
@@ -450,35 +457,6 @@ class FollowLogic:
     if (foundUnsafe == False and self.state == self.stateUNSAFE):
       self.state = self.stateSAFE
       self.timeInStateSeconds = 0
-    
-  def onUpdateEvent(self):
-    logging.debug("onUpdateEvent")
-    if (not self.active):
-      return
-      
-    deltaTimeSeconds = time.time() - self.systemTimeAtLastUpdateSeconds
-    self.systemTimeAtLastUpdateSeconds = time.time()
-    
-    self.timeInStateSeconds = self.timeInStateSeconds + deltaTimeSeconds
-    
-    if (self.state == self.stateUNSAFE and self.timeInStateSeconds >= self.timeUnsafeToAdjustMaximumSeconds):
-      print '0'
-      self.updateCameraBasePositionAndTranslationRas()
-      self.state = self.stateADJUST
-      self.timeInStateSeconds = 0
-    elif (self.state == self.stateADJUST):
-      self.updateCameraCurrentPositionRas()
-      if (self.timeInStateSeconds >= self.timeAdjustToRestMaximumSeconds):
-        print '1'
-        self.state = self.stateREST
-        self.timeInStateSeconds = 0
-    elif (self.state == self.stateREST and self.timeInStateSeconds >= self.timeRestToSafeMaximumSeconds):
-      print '2'
-      self.state = self.stateSAFE
-      self.timeInStateSeconds = 0
-      
-    nextUpdateTimerMilliseconds = self.updateRateSeconds * 1000
-    qt.QTimer.singleShot(nextUpdateTimerMilliseconds ,self.onUpdateEvent)
     
   def getPointsOnModelBoundingBox(self):
     pointsRas = []
@@ -551,7 +529,7 @@ class FollowLogic:
   def updateCameraCurrentPositionRas(self):
     # linear interpolation between base and target positions, based on the timer
     weightTarget = 1 # default value
-    if (self.timeAdjustToRestMaximumSeconds is not 0):
+    if (self.timeAdjustToRestMaximumSeconds != 0):
       weightTarget = self.timeInStateSeconds / self.timeAdjustToRestMaximumSeconds
     if (weightTarget > 1):
       weightTarget = 1
