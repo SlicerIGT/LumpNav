@@ -212,15 +212,17 @@ class FollowWidget:
   def enableFollowButtonPressed(self):
     if self.enableFollowButtonState == 0:
       self.updateLogicParameters()
-      self.logic.start()
-      self.disableWidgets()
-      self.enableFollowButtonState = 1
-      self.enableFollowButton.setText(self.enableFollowButtonTextState1)
+      self.logic.startFollow()
+      if (self.logic.getActive()):
+        self.disableWidgets()
+        self.enableFollowButtonState = 1
+        self.enableFollowButton.setText(self.enableFollowButtonTextState1)
     else:
-      self.logic.stop()
-      self.enableWidgets()
-      self.enableFollowButtonState = 0
-      self.enableFollowButton.setText(self.enableFollowButtonTextState0)
+      self.logic.stopFollow()
+      if (not self.logic.getActive()):
+        self.enableWidgets()
+        self.enableFollowButtonState = 0
+        self.enableFollowButton.setText(self.enableFollowButtonTextState0)
   
   def updateLogicParameters(self):
     self.logic.setModelNode(self.modelSelector.currentNode())
@@ -308,6 +310,7 @@ class FollowLogic:
     self.baseCameraTranslationRas = [0,0,0]
     self.baseCameraPositionRas = [0,0,0]
     self.baseCameraFocalPointRas = [0,0,0]
+    self.modelInSafeZone = True 
     
     self.threeDWidgetIndex = 0 #TODO: Determine this
     self.modelTargetPositionViewport = [0,0,0]
@@ -385,40 +388,55 @@ class FollowLogic:
   def setModelNode(self, node):
     self.modelNode = node
     
-  def start(self):
+  def getActive():
+    return self.active
+    
+  def startFollow(self):
     if not self.viewNode:
       logging.warning("View node not set. Will not proceed until view node is selected.")
       return
     if not self.modelNode:
       logging.warning("Model node not set. Will not proceed until model node is selected.")
       return
-    self.updateModelTargetPositionViewport()
+    self.setModelTargetPositionViewport()
     self.systemTimeAtLastUpdateSeconds = time.time()
     nextUpdateTimerMilliseconds = self.updateRateSeconds * 1000
-    qt.QTimer.singleShot(nextUpdateTimerMilliseconds ,self.onUpdateEvent)
+    qt.QTimer.singleShot(nextUpdateTimerMilliseconds ,self.update)
     
     self.active = True
     
-  def stop(self):
+  def stopFollow(self):
+    logging.debug("update")
     self.active = False
     
-  def onUpdateEvent(self):
-    logging.debug("onUpdateEvent")
+  def update(self):
     if (not self.active):
       return
       
     deltaTimeSeconds = time.time() - self.systemTimeAtLastUpdateSeconds
     self.systemTimeAtLastUpdateSeconds = time.time()
-
-    self.updateSafeOrUnsafeState()
-    self.timeInStateSeconds = self.timeInStateSeconds + deltaTimeSeconds
     
+    self.timeInStateSeconds = self.timeInStateSeconds + deltaTimeSeconds
+
+    self.updateModelInSafeZone()
+    self.applyStateMachine()
+      
+    nextUpdateTimerMilliseconds = self.updateRateSeconds * 1000
+    qt.QTimer.singleShot(nextUpdateTimerMilliseconds ,self.update)
+
+  def applyStateMachine(self):
+    if (self.state == self.stateUNSAFE and modelInSafeZone):
+      self.state = self.stateSAFE
+      self.timeInStateSeconds = 0
+    if (self.state == self.stateSAFE and not modelInSafeZone):
+      self.state = self.stateUNSAFE
+      self.timeInStateSeconds = 0
     if (self.state == self.stateUNSAFE and self.timeInStateSeconds >= self.timeUnsafeToAdjustMaximumSeconds):
-      self.updateCameraBasePositionAndTranslationRas()
+      self.setCameraTranslationParameters()
       self.state = self.stateADJUST
       self.timeInStateSeconds = 0
     if (self.state == self.stateADJUST):
-      self.updateCameraCurrentPositionRas()
+      self.translateCamera()
       if (self.timeInStateSeconds >= self.timeAdjustToRestMaximumSeconds):
         self.state = self.stateREST
         self.timeInStateSeconds = 0
@@ -426,18 +444,13 @@ class FollowLogic:
       self.state = self.stateSAFE
       self.timeInStateSeconds = 0
       
-    nextUpdateTimerMilliseconds = self.updateRateSeconds * 1000
-    qt.QTimer.singleShot(nextUpdateTimerMilliseconds ,self.onUpdateEvent)
-    
-  def updateSafeOrUnsafeState(self):
+  def updateModelInSafeZone(self):
     if (self.state == self.stateADJUST or
         self.state == self.stateREST):
       return
-      
-    pointsRas = self.getPointsOnModelBoundingBox()
-    
+    pointsRas = self.getModelBoundingBoxPointsRas()    
     # Assume we are safe, until shown otherwise
-    foundUnsafe = False
+    foundSafe = True
     for pointRas in pointsRas:
       coordsNormalizedViewport = self.convertRasToViewport(pointRas)
       XNormalizedViewport = coordsNormalizedViewport[0]
@@ -449,16 +462,58 @@ class FollowLogic:
            YNormalizedViewport < self.safeYMinimumNormalizedViewport or
            ZNormalizedViewport > self.safeZMaximumNormalizedViewport or 
            ZNormalizedViewport < self.safeZMinimumNormalizedViewport ):
-        foundUnsafe = True
-        
-    if (foundUnsafe == True and self.state == self.stateSAFE):
-      self.state = self.stateUNSAFE
-      self.timeInStateSeconds = 0
-    if (foundUnsafe == False and self.state == self.stateUNSAFE):
-      self.state = self.stateSAFE
-      self.timeInStateSeconds = 0
+        foundSafe = False
+        break
+    self.modelInSafeZone = foundSafe
+
+  def setModelTargetPositionViewport(self):
+    modelPosRas = self.getModelCenterRas()
+    self.modelTargetPositionViewport = self.convertRasToViewport(modelPosRas)
     
-  def getPointsOnModelBoundingBox(self):
+  def setCameraTranslationParameters(self):
+    viewName = self.viewNode.GetName()
+    cameraNode = self.getCamera(viewName)
+    cameraPosRas = [0,0,0]
+    cameraNode.GetPosition(cameraPosRas)
+    self.baseCameraPositionRas = cameraPosRas
+    cameraFocRas = [0,0,0]
+    cameraNode.GetFocalPoint(cameraFocRas)
+    self.baseCameraFocalPointRas = cameraFocRas
+    
+    # find the translation in RAS
+    modelCurrentPositionRas = self.getModelCenterRas()    
+    modelTargetPositionRas = self.convertViewportToRas(self.modelTargetPositionViewport)
+    for i in xrange(0,3):
+      self.baseCameraTranslationRas[i] = modelCurrentPositionRas[i] - modelTargetPositionRas[i]
+  
+  def translateCamera(self):
+    # linear interpolation between base and target positions, based on the timer
+    weightTarget = 1 # default value
+    if (self.timeAdjustToRestMaximumSeconds != 0):
+      weightTarget = self.timeInStateSeconds / self.timeAdjustToRestMaximumSeconds
+    if (weightTarget > 1):
+      weightTarget = 1
+    cameraNewPositionRas = [0,0,0]
+    cameraNewFocalPointRas = [0,0,0]
+    for i in xrange(0,3):
+      translation = weightTarget * self.baseCameraTranslationRas[i]
+      cameraNewPositionRas[i] = translation + self.baseCameraPositionRas[i]
+      cameraNewFocalPointRas[i] = translation + self.baseCameraFocalPointRas[i]
+    viewName = self.viewNode.GetName()
+    cameraNode = self.getCamera(viewName)
+    cameraNode.SetPosition(cameraNewPositionRas)
+    cameraNode.SetFocalPoint(cameraNewFocalPointRas)
+    
+  def getModelCenterRas(self):
+    modelBoundsRas = [0,0,0,0,0,0]
+    self.modelNode.GetRASBounds(modelBoundsRas)
+    modelCenterX = (modelBoundsRas[0] + modelBoundsRas[1]) / 2
+    modelCenterY = (modelBoundsRas[2] + modelBoundsRas[3]) / 2
+    modelCenterZ = (modelBoundsRas[4] + modelBoundsRas[5]) / 2
+    modelPosRas = [modelCenterX, modelCenterY, modelCenterZ]
+    return modelPosRas
+    
+  def getModelBoundingBoxPointsRas(self):
     pointsRas = []
     boundsRas = [0,0,0,0,0,0]
     self.modelNode.GetRASBounds(boundsRas)
@@ -472,6 +527,14 @@ class FollowLogic:
           pointRas.append(boundsRas[4+z])
           pointsRas.append(pointRas)
     return pointsRas
+    
+  def getCamera(self, viewName):
+    """
+    Get camera for the selected 3D view
+    """
+    camerasLogic = slicer.modules.cameras.logic()
+    camera = camerasLogic.GetViewActiveCameraNode(slicer.util.getNode(viewName))
+    return camera
       
   def convertRasToViewport(self, positionRas):
     """Computes normalized view coordinates from RAS coordinates
@@ -496,59 +559,3 @@ class FollowLogic:
     renderer = view.renderWindow().GetRenderers().GetItemAsObject(0)
     renderer.ViewToWorld(x,y,z)
     return [x.get(), y.get(), z.get()]
-
-  def updateModelTargetPositionViewport(self):
-    modelPosRas = self.getModelCenterRas()
-    self.modelTargetPositionViewport = self.convertRasToViewport(modelPosRas)
-    
-  def getModelCenterRas(self):
-    modelBoundsRas = [0,0,0,0,0,0]
-    self.modelNode.GetRASBounds(modelBoundsRas)
-    modelCenterX = (modelBoundsRas[0] + modelBoundsRas[1]) / 2
-    modelCenterY = (modelBoundsRas[2] + modelBoundsRas[3]) / 2
-    modelCenterZ = (modelBoundsRas[4] + modelBoundsRas[5]) / 2
-    modelPosRas = [modelCenterX, modelCenterY, modelCenterZ]
-    return modelPosRas
-    
-  def updateCameraBasePositionAndTranslationRas(self):
-    viewName = self.viewNode.GetName()
-    cameraNode = self.getCamera(viewName)
-    cameraPosRas = [0,0,0]
-    cameraNode.GetPosition(cameraPosRas)
-    self.baseCameraPositionRas = cameraPosRas
-    cameraFocRas = [0,0,0]
-    cameraNode.GetFocalPoint(cameraFocRas)
-    self.baseCameraFocalPointRas = cameraFocRas
-    
-    # find the translation in RAS
-    modelCurrentPositionRas = self.getModelCenterRas()    
-    modelTargetPositionRas = self.convertViewportToRas(self.modelTargetPositionViewport)
-    for i in xrange(0,3):
-      self.baseCameraTranslationRas[i] = modelCurrentPositionRas[i] - modelTargetPositionRas[i]
-  
-  def updateCameraCurrentPositionRas(self):
-    # linear interpolation between base and target positions, based on the timer
-    weightTarget = 1 # default value
-    if (self.timeAdjustToRestMaximumSeconds != 0):
-      weightTarget = self.timeInStateSeconds / self.timeAdjustToRestMaximumSeconds
-    if (weightTarget > 1):
-      weightTarget = 1
-    cameraNewPositionRas = [0,0,0]
-    cameraNewFocalPointRas = [0,0,0]
-    for i in xrange(0,3):
-      translation = weightTarget * self.baseCameraTranslationRas[i]
-      cameraNewPositionRas[i] = translation + self.baseCameraPositionRas[i]
-      cameraNewFocalPointRas[i] = translation + self.baseCameraFocalPointRas[i]
-    viewName = self.viewNode.GetName()
-    cameraNode = self.getCamera(viewName)
-    cameraNode.SetPosition(cameraNewPositionRas)
-    cameraNode.SetFocalPoint(cameraNewFocalPointRas)
-    
-  def getCamera(self, viewName):
-    """
-    Get camera for the selected 3D view
-    """
-    camerasLogic = slicer.modules.cameras.logic()
-    camera = camerasLogic.GetViewActiveCameraNode(slicer.util.getNode(viewName))
-    return camera
- 
