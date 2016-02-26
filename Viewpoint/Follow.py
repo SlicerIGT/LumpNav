@@ -308,6 +308,9 @@ class FollowLogic:
     self.baseCameraTranslationRas = [0,0,0]
     self.baseCameraPositionRas = [0,0,0]
     self.baseCameraFocalPointRas = [0,0,0]
+    
+    self.threeDWidgetIndex = 0 #TODO: Determine this
+    self.modelTargetPositionViewport = [0,0,0]
   
   
   # FINITE STATE MACHINE:
@@ -391,7 +394,7 @@ class FollowLogic:
       return
       
     self.addObservers()
-    self.updateCameraPositionRelativeToModelRas()
+    self.updateModelTargetPositionViewport()
     
     self.systemTimeAtLastUpdateSeconds = time.time()
     nextUpdateTimerMilliseconds = self.updateRateSeconds * 1000
@@ -429,8 +432,7 @@ class FollowLogic:
     # Assume we are safe, until shown otherwise
     foundUnsafe = False
     for pointRas in pointsRas:
-      threeDWidgetIndex = 0 #TODO: Determine this
-      coordsNormalizedViewPort = self.getPositionView(pointRas, threeDWidgetIndex)
+      coordsNormalizedViewPort = self.convertRasToViewport(pointRas)
       XNormalizedViewport = coordsNormalizedViewPort[0]
       YNormalizedViewport = coordsNormalizedViewPort[1]
       ZNormalizedViewport = coordsNormalizedViewPort[2]
@@ -493,27 +495,34 @@ class FollowLogic:
           pointsRas.append(pointRas)
     return pointsRas
       
-  def getPositionView(self, positionRas, threeDWidgetIndex):
+  def convertRasToViewport(self, positionRas):
     """Computes normalized view coordinates from RAS coordinates
     Normalized view coordinates origin is in bottom-left corner, range is [-1,+1]
     """
     x = vtk.mutable(positionRas[0])
     y = vtk.mutable(positionRas[1])
     z = vtk.mutable(positionRas[2])
-    view = slicer.app.layoutManager().threeDWidget(threeDWidgetIndex).threeDView()
+    view = slicer.app.layoutManager().threeDWidget(self.threeDWidgetIndex).threeDView()
     renderer = view.renderWindow().GetRenderers().GetItemAsObject(0)
     renderer.WorldToView(x,y,z)
     return [x.get(), y.get(), z.get()]
+    
+  def convertViewportToRas(self, positionViewport):
+    """Computes normalized view coordinates from RAS coordinates
+    Normalized view coordinates origin is in bottom-left corner, range is [-1,+1]
+    """
+    x = vtk.mutable(positionViewport[0])
+    y = vtk.mutable(positionViewport[1])
+    z = vtk.mutable(positionViewport[2])
+    view = slicer.app.layoutManager().threeDWidget(self.threeDWidgetIndex).threeDView()
+    renderer = view.renderWindow().GetRenderers().GetItemAsObject(0)
+    renderer.ViewToWorld(x,y,z)
+    return [x.get(), y.get(), z.get()]
 
-  def updateCameraPositionRelativeToModelRas(self):
-    viewName = self.viewNode.GetName()
-    cameraNode = self.getCamera(viewName)
-    cameraPosRas = [0,0,0]
-    cameraNode.GetPosition(cameraPosRas)
+  def updateModelTargetPositionViewport(self):
     modelPosRas = self.getModelCenterRas()
-    for i in xrange(0,3):
-      self.cameraPositionRelativeToModel[i] = cameraPosRas[i] - modelPosRas[i]
- 
+    self.modelTargetPositionViewport = self.convertRasToViewport(modelPosRas)
+    
   def getModelCenterRas(self):
     modelBoundsRas = [0,0,0,0,0,0]
     self.modelNode.GetRASBounds(modelBoundsRas)
@@ -532,13 +541,12 @@ class FollowLogic:
     cameraFocRas = [0,0,0]
     cameraNode.GetFocalPoint(cameraFocRas)
     self.baseCameraFocalPointRas = cameraFocRas
-    modelPosRas = self.getModelCenterRas()
-    targetCameraPositionRas = [0,0,0]
+    
+    # find the translation in RAS
+    modelCurrentPositionRas = self.getModelCenterRas()    
+    modelTargetPositionRas = self.convertViewportToRas(self.modelTargetPositionViewport)
     for i in xrange(0,3):
-      targetCameraPositionRas[i] = modelPosRas[i] + self.cameraPositionRelativeToModel[i]
-    self.baseCameraTranslationRas = [0,0,0]
-    for i in xrange(0,3):
-      self.baseCameraTranslationRas[i] = targetCameraPositionRas[i] - self.baseCameraPositionRas[i]
+      self.baseCameraTranslationRas[i] = modelCurrentPositionRas[i] - modelTargetPositionRas[i]
   
   def updateCameraCurrentPositionRas(self):
     # linear interpolation between base and target positions, based on the timer
