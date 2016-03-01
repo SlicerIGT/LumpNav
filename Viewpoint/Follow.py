@@ -611,4 +611,4 @@ class FollowLogic:
   def resetCameraClippingRange(self):
     view = slicer.app.layoutManager().threeDWidget(self.threeDWidgetIndex).threeDView()
     renderer = view.renderWindow().GetRenderers().GetItemAsObject(0)
-    renderer.ResetCameraClippingRange
+    renderer.ResetCameraClippingRange()
