@@ -141,21 +141,21 @@ class FollowWidget:
     self.adjustXLabel = qt.QLabel(qt.Qt.Horizontal,None)
     self.adjustXLabel.setText("Adjust X")
     self.adjustXCheckbox = qt.QCheckBox()
-    self.adjustXCheckbox.setCheckState(0)
+    self.adjustXCheckbox.setCheckState(1)
     self.adjustXCheckbox.setToolTip("If checked, render with parallel projection (box-shaped view). Otherwise render with perspective projection (cone-shaped view).")
     self.parametersFormLayout.addRow(self.adjustXLabel,self.adjustXCheckbox)
     
     self.adjustYLabel = qt.QLabel(qt.Qt.Horizontal,None)
     self.adjustYLabel.setText("Adjust Y")
     self.adjustYCheckbox = qt.QCheckBox()
-    self.adjustYCheckbox.setCheckState(0)
+    self.adjustYCheckbox.setCheckState(1)
     self.adjustYCheckbox.setToolTip("If checked, render with parallel projection (box-shaped view). Otherwise render with perspective projection (cone-shaped view).")
     self.parametersFormLayout.addRow(self.adjustYLabel,self.adjustYCheckbox)
     
     self.adjustZLabel = qt.QLabel(qt.Qt.Horizontal,None)
     self.adjustZLabel.setText("Adjust Z")
     self.adjustZCheckbox = qt.QCheckBox()
-    self.adjustZCheckbox.setCheckState(0)
+    self.adjustZCheckbox.setCheckState(1)
     self.adjustZCheckbox.setToolTip("If checked, render with parallel projection (box-shaped view). Otherwise render with perspective projection (cone-shaped view).")
     self.parametersFormLayout.addRow(self.adjustZLabel,self.adjustZCheckbox)
     
@@ -388,7 +388,7 @@ class FollowLogic:
   def setModelNode(self, node):
     self.modelNode = node
     
-  def getActive():
+  def getActive(self):
     return self.active
     
   def startFollow(self):
@@ -406,7 +406,7 @@ class FollowLogic:
     self.active = True
     
   def stopFollow(self):
-    logging.debug("update")
+    logging.debug("stopFollow")
     self.active = False
     
   def update(self):
@@ -425,10 +425,10 @@ class FollowLogic:
     qt.QTimer.singleShot(nextUpdateTimerMilliseconds ,self.update)
 
   def applyStateMachine(self):
-    if (self.state == self.stateUNSAFE and modelInSafeZone):
+    if (self.state == self.stateUNSAFE and self.modelInSafeZone):
       self.state = self.stateSAFE
       self.timeInStateSeconds = 0
-    if (self.state == self.stateSAFE and not modelInSafeZone):
+    if (self.state == self.stateSAFE and not self.modelInSafeZone):
       self.state = self.stateUNSAFE
       self.timeInStateSeconds = 0
     if (self.state == self.stateUNSAFE and self.timeInStateSeconds >= self.timeUnsafeToAdjustMaximumSeconds):
@@ -448,7 +448,7 @@ class FollowLogic:
     if (self.state == self.stateADJUST or
         self.state == self.stateREST):
       return
-    pointsRas = self.getModelBoundingBoxPointsRas()    
+    pointsRas = self.getModelCurrentBoundingBoxPointsRas()
     # Assume we are safe, until shown otherwise
     foundSafe = True
     for pointRas in pointsRas:
@@ -467,7 +467,7 @@ class FollowLogic:
     self.modelInSafeZone = foundSafe
 
   def setModelTargetPositionViewport(self):
-    modelPosRas = self.getModelCenterRas()
+    modelPosRas = self.getModelCurrentCenterRas()
     self.modelTargetPositionViewport = self.convertRasToViewport(modelPosRas)
     
   def setCameraTranslationParameters(self):
@@ -481,10 +481,16 @@ class FollowLogic:
     self.baseCameraFocalPointRas = cameraFocRas
     
     # find the translation in RAS
-    modelCurrentPositionRas = self.getModelCenterRas()    
-    modelTargetPositionRas = self.convertViewportToRas(self.modelTargetPositionViewport)
-    for i in xrange(0,3):
-      self.baseCameraTranslationRas[i] = modelCurrentPositionRas[i] - modelTargetPositionRas[i]
+    modelCurrentPositionCamera = self.getModelCurrentCenterCamera()
+    modelTargetPositionCamera = self.getModelTargetPositionCamera()
+    cameraTranslationCamera = [0,0,0]
+    if self.adjustX:
+      cameraTranslationCamera[0] = modelCurrentPositionCamera[0] - modelTargetPositionCamera[0]
+    if self.adjustY:
+      cameraTranslationCamera[1] = modelCurrentPositionCamera[1] - modelTargetPositionCamera[1]
+    if self.adjustZ:
+      cameraTranslationCamera[2] = modelCurrentPositionCamera[2] - modelTargetPositionCamera[2]
+    self.baseCameraTranslationRas = self.convertVectorCameraToRas(cameraTranslationCamera)
   
   def translateCamera(self):
     # linear interpolation between base and target positions, based on the timer
@@ -503,8 +509,9 @@ class FollowLogic:
     cameraNode = self.getCamera(viewName)
     cameraNode.SetPosition(cameraNewPositionRas)
     cameraNode.SetFocalPoint(cameraNewFocalPointRas)
+    self.resetCameraClippingRange()
     
-  def getModelCenterRas(self):
+  def getModelCurrentCenterRas(self):
     modelBoundsRas = [0,0,0,0,0,0]
     self.modelNode.GetRASBounds(modelBoundsRas)
     modelCenterX = (modelBoundsRas[0] + modelBoundsRas[1]) / 2
@@ -513,7 +520,12 @@ class FollowLogic:
     modelPosRas = [modelCenterX, modelCenterY, modelCenterZ]
     return modelPosRas
     
-  def getModelBoundingBoxPointsRas(self):
+  def getModelCurrentCenterCamera(self):
+    modelCenterRas = self.getModelCurrentCenterRas()
+    modelCenterCamera = self.convertPointRasToCamera(modelCenterRas)
+    return modelCenterCamera
+    
+  def getModelCurrentBoundingBoxPointsRas(self):
     pointsRas = []
     boundsRas = [0,0,0,0,0,0]
     self.modelNode.GetRASBounds(boundsRas)
@@ -527,6 +539,14 @@ class FollowLogic:
           pointRas.append(boundsRas[4+z])
           pointsRas.append(pointRas)
     return pointsRas
+    
+  def getModelTargetPositionRas(self):
+    return self.convertViewportToRas(self.modelTargetPositionViewport)
+    
+  def getModelTargetPositionCamera(self):
+    modelTargetPositionRas = self.getModelTargetPositionRas()
+    modelTargetPositionCamera = self.convertPointRasToCamera(modelTargetPositionRas)
+    return modelTargetPositionCamera
     
   def getCamera(self, viewName):
     """
@@ -559,3 +579,36 @@ class FollowLogic:
     renderer = view.renderWindow().GetRenderers().GetItemAsObject(0)
     renderer.ViewToWorld(x,y,z)
     return [x.get(), y.get(), z.get()]
+    
+  def convertPointRasToCamera(self, positionRas):
+    viewName = self.viewNode.GetName()
+    cameraNode = self.getCamera(viewName)
+    cameraObj = cameraNode.GetCamera()
+    modelViewTransform = cameraObj.GetModelViewTransformObject()
+    positionRasHomog = [positionRas[0], positionRas[1], positionRas[2], 1] # convert to homogeneous
+    positionCamHomog = [0,0,0,1] # to be filled in
+    modelViewTransform.MultiplyPoint(positionRasHomog, positionCamHomog)
+    positionCam = [positionCamHomog[0], positionCamHomog[1], positionCamHomog[2]] # convert from homogeneous
+    return positionCam
+
+  def convertVectorCameraToRas(self, positionCam):
+    viewName = self.viewNode.GetName()
+    cameraNode = self.getCamera(viewName)
+    cameraObj = cameraNode.GetCamera()
+    modelViewTransform = cameraObj.GetModelViewTransformObject()
+    modelViewMatrix = modelViewTransform.GetMatrix()
+    modelViewInverseMatrix = vtk.vtkMatrix4x4()
+    vtk.vtkMatrix4x4.Invert(modelViewMatrix, modelViewInverseMatrix)
+    modelViewInverseTransform = vtk.vtkTransform()
+    modelViewInverseTransform.DeepCopy(modelViewTransform)
+    modelViewInverseTransform.SetMatrix(modelViewInverseMatrix)
+    positionCamHomog = [positionCam[0], positionCam[1], positionCam[2], 0] # convert to homogeneous
+    positionRasHomog = [0,0,0,0] # to be filled in
+    modelViewInverseTransform.MultiplyPoint(positionCamHomog, positionRasHomog)
+    positionRas = [positionRasHomog[0], positionRasHomog[1], positionRasHomog[2]] # convert from homogeneous
+    return positionRas
+    
+  def resetCameraClippingRange(self):
+    view = slicer.app.layoutManager().threeDWidget(self.threeDWidgetIndex).threeDView()
+    renderer = view.renderWindow().GetRenderers().GetItemAsObject(0)
+    renderer.ResetCameraClippingRange
