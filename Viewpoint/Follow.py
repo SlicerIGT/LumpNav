@@ -75,12 +75,12 @@ class FollowWidget:
     slicer.fwwidget = self
     
     # Collapsible buttons
-    self.parametersCollapsibleButton = ctk.ctkCollapsibleButton()
-    self.parametersCollapsibleButton.text = "Parameters"
-    self.layout.addWidget(self.parametersCollapsibleButton)
+    self.centerViewParametersCollapsibleButton = ctk.ctkCollapsibleButton()
+    self.centerViewParametersCollapsibleButton.text = "Parameters"
+    self.layout.addWidget(self.centerViewParametersCollapsibleButton)
 
     # Layout within the collapsible button
-    self.parametersFormLayout = qt.QFormLayout(self.parametersCollapsibleButton)
+    self.centerViewParametersFormLayout = qt.QFormLayout(self.centerViewParametersCollapsibleButton)
     
     # Transform combobox
     self.modelLabel = qt.QLabel()
@@ -92,7 +92,7 @@ class FollowWidget:
     self.modelSelector.removeEnabled = False
     self.modelSelector.setMRMLScene( slicer.mrmlScene )
     self.modelSelector.setToolTip("Pick the model that the camera should follow, e.g. 'tumorModel'")
-    self.parametersFormLayout.addRow(self.modelLabel, self.modelSelector)
+    self.centerViewParametersFormLayout.addRow(self.modelLabel, self.modelSelector)
     
     self.viewLabel = qt.QLabel()
     self.viewLabel.setText("Scene Camera: ")
@@ -103,7 +103,7 @@ class FollowWidget:
     self.viewSelector.removeEnabled = False
     self.viewSelector.setMRMLScene( slicer.mrmlScene )
     self.viewSelector.setToolTip("Pick the view which should be adjusted, e.g. 'View1'")
-    self.parametersFormLayout.addRow(self.viewLabel, self.viewSelector)
+    self.centerViewParametersFormLayout.addRow(self.viewLabel, self.viewSelector)
     
     self.safeZoneXRangeLabel = qt.QLabel(qt.Qt.Horizontal,None)
     self.safeZoneXRangeLabel.text = "Safe Zone (Viewport X percentage): "
@@ -112,7 +112,7 @@ class FollowWidget:
     self.safeZoneXRangeSlider.minimum = self.rangeSliderMinimum
     self.safeZoneXRangeSlider.maximumValue = self.rangeSliderMaximumValueDefault
     self.safeZoneXRangeSlider.minimumValue = self.rangeSliderMinimumValueDefault
-    self.parametersFormLayout.addRow(self.safeZoneXRangeLabel,self.safeZoneXRangeSlider)
+    self.centerViewParametersFormLayout.addRow(self.safeZoneXRangeLabel,self.safeZoneXRangeSlider)
     
     self.safeZoneYRangeLabel = qt.QLabel(qt.Qt.Horizontal,None)
     self.safeZoneYRangeLabel.setText("Safe Zone (Viewport Y percentage): ")
@@ -121,7 +121,7 @@ class FollowWidget:
     self.safeZoneYRangeSlider.minimum = self.rangeSliderMinimum
     self.safeZoneYRangeSlider.maximumValue = self.rangeSliderMaximumValueDefault
     self.safeZoneYRangeSlider.minimumValue = self.rangeSliderMinimumValueDefault
-    self.parametersFormLayout.addRow(self.safeZoneYRangeLabel,self.safeZoneYRangeSlider)
+    self.centerViewParametersFormLayout.addRow(self.safeZoneYRangeLabel,self.safeZoneYRangeSlider)
     
     self.safeZoneZRangeLabel = qt.QLabel(qt.Qt.Horizontal,None)
     self.safeZoneZRangeLabel.setText("Safe Zone (Viewport Z percentage): ")
@@ -130,28 +130,28 @@ class FollowWidget:
     self.safeZoneZRangeSlider.minimum = self.rangeSliderMinimum
     self.safeZoneZRangeSlider.maximumValue = self.rangeSliderMaximumValueDefault
     self.safeZoneZRangeSlider.minimumValue = self.rangeSliderMinimumValueDefault
-    self.parametersFormLayout.addRow(self.safeZoneZRangeLabel,self.safeZoneZRangeSlider)
+    self.centerViewParametersFormLayout.addRow(self.safeZoneZRangeLabel,self.safeZoneZRangeSlider)
     
     self.adjustXLabel = qt.QLabel(qt.Qt.Horizontal,None)
     self.adjustXLabel.setText("Adjust Along Camera X")
     self.adjustXCheckbox = qt.QCheckBox()
     self.adjustXCheckbox.setCheckState(2)
     self.adjustXCheckbox.setToolTip("If checked, adjust the camera so that it aligns with the target model along the x axis.")
-    self.parametersFormLayout.addRow(self.adjustXLabel,self.adjustXCheckbox)
+    self.centerViewParametersFormLayout.addRow(self.adjustXLabel,self.adjustXCheckbox)
     
     self.adjustYLabel = qt.QLabel(qt.Qt.Horizontal,None)
     self.adjustYLabel.setText("Adjust Along Camera Y")
     self.adjustYCheckbox = qt.QCheckBox()
     self.adjustYCheckbox.setCheckState(2)
     self.adjustXCheckbox.setToolTip("If checked, adjust the camera so that it aligns with the target model along the y axis.")
-    self.parametersFormLayout.addRow(self.adjustYLabel,self.adjustYCheckbox)
+    self.centerViewParametersFormLayout.addRow(self.adjustYLabel,self.adjustYCheckbox)
     
     self.adjustZLabel = qt.QLabel(qt.Qt.Horizontal,None)
     self.adjustZLabel.setText("Adjust Along Camera Z")
     self.adjustZCheckbox = qt.QCheckBox()
     self.adjustZCheckbox.setCheckState(2)
     self.adjustXCheckbox.setToolTip("If checked, adjust the camera so that it aligns with the target model along the z axis.")
-    self.parametersFormLayout.addRow(self.adjustZLabel,self.adjustZCheckbox)
+    self.centerViewParametersFormLayout.addRow(self.adjustZLabel,self.adjustZCheckbox)
     
     self.updateRateLabel = qt.QLabel(qt.Qt.Horizontal,None)
     self.updateRateLabel.setText("Update rate (seconds): ")
@@ -162,7 +162,7 @@ class FollowWidget:
     self.updateRateSlider.singleStep = self.sliderSingleStepValue
     self.updateRateSlider.pageStep = self.sliderPageStepValue
     self.updateRateSlider.setToolTip("The rate at which the view will be checked and updated.")
-    self.parametersFormLayout.addRow(self.updateRateLabel,self.updateRateSlider)
+    self.centerViewParametersFormLayout.addRow(self.updateRateLabel,self.updateRateSlider)
     
     self.timeUnsafeToAdjustLabel = qt.QLabel(qt.Qt.Horizontal,None)
     self.timeUnsafeToAdjustLabel.setText("Time Unsafe to Adjust (seconds): ")
@@ -173,7 +173,7 @@ class FollowWidget:
     self.timeUnsafeToAdjustSlider.singleStep = self.sliderSingleStepValue
     self.timeUnsafeToAdjustSlider.pageStep = self.sliderPageStepValue
     self.timeUnsafeToAdjustSlider.setToolTip("The length of time in which the model must be in the unsafe zone before the camera is adjusted.")
-    self.parametersFormLayout.addRow(self.timeUnsafeToAdjustLabel,self.timeUnsafeToAdjustSlider)
+    self.centerViewParametersFormLayout.addRow(self.timeUnsafeToAdjustLabel,self.timeUnsafeToAdjustSlider)
     
     self.timeAdjustToRestLabel = qt.QLabel(qt.Qt.Horizontal,None)
     self.timeAdjustToRestLabel.setText("Time Adjust to Rest (seconds): ")
@@ -184,7 +184,7 @@ class FollowWidget:
     self.timeAdjustToRestSlider.singleStep = self.sliderSingleStepValue
     self.timeAdjustToRestSlider.pageStep = self.sliderPageStepValue
     self.timeAdjustToRestSlider.setToolTip("The length of time an adjustment takes.")
-    self.parametersFormLayout.addRow(self.timeAdjustToRestLabel,self.timeAdjustToRestSlider)
+    self.centerViewParametersFormLayout.addRow(self.timeAdjustToRestLabel,self.timeAdjustToRestSlider)
     
     self.timeRestToSafeLabel = qt.QLabel(qt.Qt.Horizontal,None)
     self.timeRestToSafeLabel.setText("Time Rest to Safe (seconds): ")
@@ -195,13 +195,13 @@ class FollowWidget:
     self.timeRestToSafeSlider.singleStep = self.sliderSingleStepValue
     self.timeRestToSafeSlider.pageStep = self.sliderPageStepValue
     self.timeRestToSafeSlider.setToolTip("The length of time after an adjustment that the camera remains motionless.")
-    self.parametersFormLayout.addRow(self.timeRestToSafeLabel,self.timeRestToSafeSlider)
+    self.centerViewParametersFormLayout.addRow(self.timeRestToSafeLabel,self.timeRestToSafeSlider)
     
     self.enableFollowButton = qt.QPushButton()
     self.enableFollowButton.setToolTip("The camera will continuously update its position so that it follows the model.")
     self.enableFollowButton.setText(self.enableFollowButtonTextState0)
     self.enableFollowButton.connect('clicked()', self.enableFollowButtonPressed)
-    self.parametersFormLayout.addRow(self.enableFollowButton)
+    self.centerViewParametersFormLayout.addRow(self.enableFollowButton)
     
   def enableFollowButtonPressed(self):
     if self.enableFollowButtonState == 0:
