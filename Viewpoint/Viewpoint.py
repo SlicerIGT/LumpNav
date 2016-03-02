@@ -498,30 +498,32 @@ class ViewpointWidget:
       self.logic.setModelPOVOnNode(self.modelOnlyViewpointOnSelector.currentNode())
       self.logic.setModelPOVOffNode(self.modelOnlyViewpointOffSelector.currentNode())
       self.logic.setTargetModelNode(self.targetModelSelector.currentNode())
-      self.logic.startViewpoint()
-      self.disableTrackViewSelectors()
-      self.disableFollowAllWidgets()
-      self.toggleTrackViewButtonState = 1
-      self.toggleTrackViewButton.setText(self.toggleTrackViewButtonTextState1)
+      self.logic.startTrackView()
+      if (self.logic.isCurrentModeTRACKVIEW()):
+        self.disableTrackViewSelectors()
+        self.disableFollowAllWidgets()
+        self.toggleTrackViewButtonState = 1
+        self.toggleTrackViewButton.setText(self.toggleTrackViewButtonTextState1)
     else: # elif self.toggleTrackViewButtonState == 1
-      self.logic.stopViewpoint()
-      self.enableTrackViewSelectors()
-      self.enableFollowAllWidgets()
-      self.toggleTrackViewButtonState = 0
-      self.toggleTrackViewButton.setText(self.toggleTrackViewButtonTextState0)
+      self.logic.stopTrackView()
+      if (self.logic.isCurrentModeOFF()):
+        self.enableTrackViewSelectors()
+        self.enableFollowAllWidgets()
+        self.toggleTrackViewButtonState = 0
+        self.toggleTrackViewButton.setText(self.toggleTrackViewButtonTextState0)
     
   def toggleFollowButtonPressed(self):
     if self.toggleFollowButtonState == 0:
       self.updateFollowLogicParameters()
       self.logic.startFollow()
-      if (self.logic.getActive()):
+      if (self.logic.isCurrentModeFOLLOW()):
         self.disableFollowParameterWidgets()
         self.disableTrackViewAllWidgets()
         self.toggleFollowButtonState = 1
         self.toggleFollowButton.setText(self.toggleFollowButtonTextState1)
     else:
       self.logic.stopFollow()
-      if (not self.logic.getActive()):
+      if (self.logic.isCurrentModeOFF()):
         self.enableFollowParameterWidgets()
         self.enableTrackViewAllWidgets()
         self.toggleFollowButtonState = 0
@@ -695,13 +697,18 @@ class ViewpointWidget:
 
 class ViewpointLogic:
   def __init__(self):
+    # global
+    self.currentMode = 0
+    self.currentModeOFF = 0
+    self.currentModeTRACKVIEW = 1
+    self.currentModeFOLLOW = 2
+    
     # TRACK VIEW
     self.transformNode = None
     self.cameraNode = None
     self.modelPOVOnNode = None
     self.modelPOVOffNode = None
     
-    self.currentlyInViewpoint = False
     self.transformNodeObserverTags = []
     
     self.cameraXPosMm =  0.0
@@ -747,7 +754,6 @@ class ViewpointLogic:
     
     # current state
     self.transformNodeObserverTags = []
-    self.active = False
     self.systemTimeAtLastUpdateSeconds = 0
     self.timeInStateSeconds = 0
     self.state = 0 # 0 = in safe zone (initial state), 1 = in unsafe zone, 2 = adjusting, 3 = resting
@@ -763,7 +769,19 @@ class ViewpointLogic:
     
     self.threeDWidgetIndex = 0 #TODO: Determine this
     self.modelTargetPositionViewport = [0,0,0]
-
+    
+  def getCurrentMode(self):
+    return self.currentMode
+    
+  def isCurrentModeOFF(self):
+    return (self.currentMode == self.currentModeOFF)
+    
+  def isCurrentModeTRACKVIEW(self):
+    return (self.currentMode == self.currentModeTRACKVIEW)
+    
+  def isCurrentModeFOLLOW(self):
+    return (self.currentMode == self.currentModeFOLLOW)
+    
   # TRACK VIEW
   def addObservers(self): # mostly copied from PositionErrorMapping.py in PLUS
     logging.debug("Adding observers...")
@@ -821,24 +839,36 @@ class ViewpointLogic:
     self.forcedUpDirection = False
     self.forcedTarget = False
 
-  def startViewpoint(self):
+  def startTrackView(self):
     logging.debug("Start Viewpoint Mode")
-    if (self.transformNode and self.cameraNode):
-      self.currentlyInViewpoint = True
-      self.addObservers()
-      self.updateViewpointCamera()
-    else:
+    if (self.currentMode != self.currentModeOFF):
+      logging.error("Cannot activate viewpoint until the current mode is set to off!")
+      return
+      
+    if (not self.cameraNode):
       logging.warning("A node is missing. Nothing will happen until the comboboxes have items selected.")
+      return
+      
+    if (not self.transformNode):
+      logging.warning("A node is missing. Nothing will happen until the comboboxes have items selected.")
+      return
   
-  def stopViewpoint(self):
+    self.currentMode = self.currentModeTRACKVIEW
+    self.addObservers()
+    self.updateViewpointCamera()
+  
+  def stopTrackView(self):
     logging.debug("Stop Viewpoint Mode")
+    if (self.currentMode != self.currentModeTRACKVIEW):
+      logging.error("StopTrackView was called, but viewpoint mode is not TRACKVIEW. No action performed.")
+      return
     if (self.modelPOVOnNode):
       modelPOVOnDisplayNode = self.modelPOVOnNode.GetDisplayNode()
       modelPOVOnDisplayNode.SetVisibility(False)
     if (self.modelPOVOffNode):
       modelPOVOffDisplayNode = self.modelPOVOffNode.GetDisplayNode()
       modelPOVOffDisplayNode.SetVisibility(True)
-    self.currentlyInViewpoint = False
+    self.currentMode = self.currentModeOFF
     self.removeObservers();
 
   def onTransformModified(self, observer, eventid):
@@ -852,37 +882,37 @@ class ViewpointLogic:
   def SetCameraViewAngleDeg(self,valueDeg):
     logging.debug("SetCameraViewAngleDeg")
     self.cameraViewAngleDeg = valueDeg
-    if (self.currentlyInViewpoint == True):
+    if (self.currentMode == self.currentModeTRACKVIEW):
       self.updateViewpointCamera()
     
   def SetCameraParallelScale(self,newScale):
     logging.debug("SetCameraParallelScale")
     self.cameraParallelScale = newScale
-    if (self.currentlyInViewpoint == True):
+    if (self.currentMode == self.currentModeTRACKVIEW):
       self.updateViewpointCamera()
     
   def SetCameraXPosMm(self,valueMm):
     logging.debug("SetCameraXPosMm")
     self.cameraXPosMm = valueMm
-    if (self.currentlyInViewpoint == True):
+    if (self.currentMode == self.currentModeTRACKVIEW):
       self.updateViewpointCamera()
 
   def SetCameraYPosMm(self,valueMm):
     logging.debug("SetCameraYPosMm")
     self.cameraYPosMm = valueMm
-    if (self.currentlyInViewpoint == True):
+    if (self.currentMode == self.currentModeTRACKVIEW):
       self.updateViewpointCamera()
 
   def SetCameraZPosMm(self,valueMm):
     logging.debug("SetCameraZPosMm")
     self.cameraZPosMm = valueMm
-    if (self.currentlyInViewpoint == True):
+    if (self.currentMode == self.currentModeTRACKVIEW):
       self.updateViewpointCamera()
       
   def SetUpInRAS(self,vectorInRAS):
     logging.debug("SetUpInRAS")
     self.upInRAS = vectorInRAS
-    if (self.currentlyInViewpoint == True):
+    if (self.currentMode == self.currentModeTRACKVIEW):
       self.updateViewpointCamera()
 
   def updateViewpointCamera(self):
@@ -1054,10 +1084,10 @@ class ViewpointLogic:
   def setModelNode(self, node):
     self.modelNode = node
     
-  def getActive(self):
-    return self.active
-    
   def startFollow(self):
+    if (self.currentMode != self.currentModeOFF):
+      logging.error("Viewpoints is already active! Can't activate follow mode until the current mode is off!")
+      return
     if not self.viewNode:
       logging.warning("View node not set. Will not proceed until view node is selected.")
       return
@@ -1069,14 +1099,17 @@ class ViewpointLogic:
     nextUpdateTimerMilliseconds = self.updateRateSeconds * 1000
     qt.QTimer.singleShot(nextUpdateTimerMilliseconds ,self.update)
     
-    self.active = True
+    self.currentMode = self.currentModeFOLLOW
     
   def stopFollow(self):
     logging.debug("stopFollow")
-    self.active = False
+    if (self.currentMode != self.currentModeFOLLOW):
+      logging.error("StopFollow was called, but viewpoint mode is not FOLLOW. No action performed.")
+      return
+    self.currentMode = self.currentModeOFF
     
   def update(self):
-    if (not self.active):
+    if (self.currentMode != self.currentModeFOLLOW):
       return
       
     deltaTimeSeconds = time.time() - self.systemTimeAtLastUpdateSeconds
