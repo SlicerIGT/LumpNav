@@ -56,9 +56,9 @@ class ViewpointWidget:
     self.sliderSingleStepValue = 1
     self.sliderPageStepValue   = 10
     
-    self.enableTrackViewButtonState = 0
-    self.enableTrackViewButtonTextState0 = "Enable Track View Mode"
-    self.enableTrackViewButtonTextState1 = "Disable Track View Mode"
+    self.toggleTrackViewButtonState = 0
+    self.toggleTrackViewButtonTextState0 = "Enable Track View Mode"
+    self.toggleTrackViewButtonTextState1 = "Disable Track View Mode"
     
     # FOLLOW
     self.rangeSliderMaximum = 100
@@ -85,9 +85,9 @@ class ViewpointWidget:
     self.timeRestToSafeMaxSeconds = 5
     self.timeRestToSafeDefaultSeconds = 1
     
-    self.enableFollowButtonState = 0
-    self.enableFollowButtonTextState0 = "Enable Follow Mode"
-    self.enableFollowButtonTextState1 = "Disable Follow Mode"
+    self.toggleFollowButtonState = 0
+    self.toggleFollowButtonTextState0 = "Enable Follow Mode"
+    self.toggleFollowButtonTextState1 = "Disable Follow Mode"
 
   def setup(self):
     # TODO: The following line is strictly for debug purposes, should be removed when this module is done
@@ -334,10 +334,10 @@ class ViewpointWidget:
     self.cameraControlFormLayout.addRow(self.cameraParallelProjectionLabel,self.cameraParallelProjectionCheckbox)
     
     # "Toggle Tool Point of View" button
-    self.enableTrackViewButton = qt.QPushButton()
-    self.enableTrackViewButton.setToolTip("The camera will continuously update its position so that it follows the tool.")
-    self.enableTrackViewButton.setText(self.enableTrackViewButtonTextState0)
-    self.layout.addWidget(self.enableTrackViewButton)
+    self.toggleTrackViewButton = qt.QPushButton()
+    self.toggleTrackViewButton.setToolTip("The camera will continuously update its position so that it follows the tool.")
+    self.toggleTrackViewButton.setText(self.toggleTrackViewButtonTextState0)
+    self.layout.addWidget(self.toggleTrackViewButton)
     
     # FOLLOW
     
@@ -464,13 +464,13 @@ class ViewpointWidget:
     self.timeRestToSafeSlider.setToolTip("The length of time after an adjustment that the camera remains motionless.")
     self.followParametersFormLayout.addRow(self.timeRestToSafeLabel,self.timeRestToSafeSlider)
     
-    self.enableFollowButton = qt.QPushButton()
-    self.enableFollowButton.setToolTip("The camera will continuously update its position so that it follows the model.")
-    self.enableFollowButton.setText(self.enableFollowButtonTextState0)
-    self.layout.addWidget(self.enableFollowButton)
+    self.toggleFollowButton = qt.QPushButton()
+    self.toggleFollowButton.setToolTip("The camera will continuously update its position so that it follows the model.")
+    self.toggleFollowButton.setText(self.toggleFollowButtonTextState0)
+    self.layout.addWidget(self.toggleFollowButton)
     
     #Connections
-    self.enableTrackViewButton.connect('clicked()', self.enableTrackViewButtonPressed)
+    self.toggleTrackViewButton.connect('clicked()', self.toggleTrackViewButtonPressed)
     self.cameraParallelProjectionCheckbox.connect('stateChanged(int)', self.toggleCameraParallelProjectionCheckboxPressed)
     self.cameraViewAngleSlider.connect('valueChanged(double)', self.logic.SetCameraViewAngleDeg)
     self.cameraParallelScaleSlider.connect('valueChanged(double)', self.logic.SetCameraParallelScale)
@@ -486,13 +486,13 @@ class ViewpointWidget:
     self.degreesOfFreedom3RadioButton.connect('clicked()', self.changeInterfaceTo3DOFMode)
     self.degreesOfFreedom5RadioButton.connect('clicked()', self.changeInterfaceTo5DOFMode)
     self.degreesOfFreedom6RadioButton.connect('clicked()', self.changeInterfaceTo6DOFMode)
-    self.enableFollowButton.connect('clicked()', self.enableFollowButtonPressed)
+    self.toggleFollowButton.connect('clicked()', self.toggleFollowButtonPressed)
     
     # Add vertical spacer
     self.layout.addStretch(1)
 
-  def enableTrackViewButtonPressed(self):
-    if self.enableTrackViewButtonState == 0:
+  def toggleTrackViewButtonPressed(self):
+    if self.toggleTrackViewButtonState == 0:
       self.logic.setCameraNode(self.cameraSelector.currentNode())
       self.logic.setTransformNode(self.transformSelector.currentNode())
       self.logic.setModelPOVOnNode(self.modelOnlyViewpointOnSelector.currentNode())
@@ -500,44 +500,92 @@ class ViewpointWidget:
       self.logic.setTargetModelNode(self.targetModelSelector.currentNode())
       self.logic.startViewpoint()
       self.disableTrackViewSelectors()
-      self.enableTrackViewButtonState = 1
-      self.enableTrackViewButton.setText(self.enableTrackViewButtonTextState1)
-    else: # elif self.enableTrackViewButtonState == 1
+      self.disableFollowAllWidgets()
+      self.toggleTrackViewButtonState = 1
+      self.toggleTrackViewButton.setText(self.toggleTrackViewButtonTextState1)
+    else: # elif self.toggleTrackViewButtonState == 1
       self.logic.stopViewpoint()
       self.enableTrackViewSelectors()
-      self.enableTrackViewButtonState = 0
-      self.enableTrackViewButton.setText(self.enableTrackViewButtonTextState0)
+      self.enableFollowAllWidgets()
+      self.toggleTrackViewButtonState = 0
+      self.toggleTrackViewButton.setText(self.toggleTrackViewButtonTextState0)
     
-  def enableFollowButtonPressed(self):
-    if self.enableFollowButtonState == 0:
+  def toggleFollowButtonPressed(self):
+    if self.toggleFollowButtonState == 0:
       self.updateFollowLogicParameters()
       self.logic.startFollow()
       if (self.logic.getActive()):
-        self.disableFollowWidgets()
-        self.enableFollowButtonState = 1
-        self.enableFollowButton.setText(self.enableFollowButtonTextState1)
+        self.disableFollowParameterWidgets()
+        self.disableTrackViewAllWidgets()
+        self.toggleFollowButtonState = 1
+        self.toggleFollowButton.setText(self.toggleFollowButtonTextState1)
     else:
       self.logic.stopFollow()
       if (not self.logic.getActive()):
-        self.enableFollowWidgets()
-        self.enableFollowButtonState = 0
-        self.enableFollowButton.setText(self.enableFollowButtonTextState0)
+        self.enableFollowParameterWidgets()
+        self.enableTrackViewAllWidgets()
+        self.toggleFollowButtonState = 0
+        self.toggleFollowButton.setText(self.toggleFollowButtonTextState0)
       
   # SPECIFIC TO TRACK-VIEW
   
   def enableTrackViewSelectors(self):
-      self.cameraSelector.enabled = True
-      self.transformSelector.enabled = True
-      self.modelOnlyViewpointOnSelector.enabled = True
-      self.modelOnlyViewpointOffSelector.enabled = True
-      self.targetModelSelector.enabled = True
+    self.cameraSelector.enabled = True
+    self.transformSelector.enabled = True
+    self.modelOnlyViewpointOnSelector.enabled = True
+    self.modelOnlyViewpointOffSelector.enabled = True
+    self.targetModelSelector.enabled = True
   
   def disableTrackViewSelectors(self):
-      self.cameraSelector.enabled = False
-      self.transformSelector.enabled = False
-      self.modelOnlyViewpointOnSelector.enabled = False
-      self.modelOnlyViewpointOffSelector.enabled = False
-      self.targetModelSelector.enabled = False
+    self.cameraSelector.enabled = False
+    self.transformSelector.enabled = False
+    self.modelOnlyViewpointOnSelector.enabled = False
+    self.modelOnlyViewpointOffSelector.enabled = False
+    self.targetModelSelector.enabled = False
+  
+  def enableTrackViewParameterWidgets(self):
+    self.enableTrackViewSelectors()
+    self.degreesOfFreedom3RadioButton.enabled = True
+    self.degreesOfFreedom5RadioButton.enabled = True
+    self.degreesOfFreedom6RadioButton.enabled = True
+    self.upDirectionAnteriorRadioButton.enabled = True
+    self.upDirectionAnteriorRadioButton.enabled = True
+    self.upDirectionAnteriorRadioButton.enabled = True
+    self.upDirectionAnteriorRadioButton.enabled = True
+    self.upDirectionAnteriorRadioButton.enabled = True
+    self.upDirectionAnteriorRadioButton.enabled = True
+    self.cameraViewAngleSlider.enabled = True
+    self.cameraParallelScaleSlider.enabled = True
+    self.cameraXPosSlider.enabled = True
+    self.cameraYPosSlider.enabled = True
+    self.cameraZPosSlider.enabled = True
+    self.cameraParallelProjectionCheckbox.enabled = True
+  
+  def disableTrackViewParameterWidgets(self):
+    self.disableTrackViewSelectors()
+    self.degreesOfFreedom3RadioButton.enabled = False
+    self.degreesOfFreedom5RadioButton.enabled = False
+    self.degreesOfFreedom6RadioButton.enabled = False
+    self.upDirectionAnteriorRadioButton.enabled = False
+    self.upDirectionAnteriorRadioButton.enabled = False
+    self.upDirectionAnteriorRadioButton.enabled = False
+    self.upDirectionAnteriorRadioButton.enabled = False
+    self.upDirectionAnteriorRadioButton.enabled = False
+    self.upDirectionAnteriorRadioButton.enabled = False
+    self.cameraViewAngleSlider.enabled = False
+    self.cameraParallelScaleSlider.enabled = False
+    self.cameraXPosSlider.enabled = False
+    self.cameraYPosSlider.enabled = False
+    self.cameraZPosSlider.enabled = False
+    self.cameraParallelProjectionCheckbox.enabled = False
+    
+  def enableTrackViewAllWidgets(self):
+    self.enableTrackViewParameterWidgets()
+    self.toggleTrackViewButton.enabled = True
+  
+  def disableTrackViewAllWidgets(self):
+    self.disableTrackViewParameterWidgets()
+    self.toggleTrackViewButton.enabled = False
       
   def toggleCameraParallelProjectionCheckboxPressed(self, dummyState): # dummyState is a tristate variable, we just want True/False
     state = self.cameraParallelProjectionCheckbox.isChecked()
@@ -605,7 +653,7 @@ class ViewpointWidget:
     self.logic.setTimeAdjustToRestMaximumSeconds(self.timeAdjustToRestSlider.value)
     self.logic.setTimeRestToSafeMaximumSeconds(self.timeRestToSafeSlider.value)
       
-  def enableFollowWidgets(self):
+  def enableFollowParameterWidgets(self):
     self.modelSelector.enabled = True
     self.viewSelector.enabled = True
     self.safeZoneXRangeSlider.enabled = True
@@ -619,7 +667,7 @@ class ViewpointWidget:
     self.timeAdjustToRestSlider.enabled = True
     self.timeRestToSafeSlider.enabled = True
   
-  def disableFollowWidgets(self):
+  def disableFollowParameterWidgets(self):
     self.modelSelector.enabled = False
     self.viewSelector.enabled = False
     self.safeZoneXRangeSlider.enabled = False
@@ -632,6 +680,14 @@ class ViewpointWidget:
     self.timeUnsafeToAdjustSlider.enabled = False
     self.timeAdjustToRestSlider.enabled = False
     self.timeRestToSafeSlider.enabled = False
+    
+  def enableFollowAllWidgets(self):
+    self.enableFollowParameterWidgets()
+    self.toggleFollowButton.enabled = True
+    
+  def disableFollowAllWidgets(self):
+    self.disableFollowParameterWidgets()
+    self.toggleFollowButton.enabled = False
   
 #
 # ViewpointLogic
