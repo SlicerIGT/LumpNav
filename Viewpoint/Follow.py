@@ -112,8 +112,6 @@ class FollowWidget:
     self.safeZoneXRangeSlider.minimum = self.rangeSliderMinimum
     self.safeZoneXRangeSlider.maximumValue = self.rangeSliderMaximumValueDefault
     self.safeZoneXRangeSlider.minimumValue = self.rangeSliderMinimumValueDefault
-    #self.safeZoneXRangeSlider.singleStep = self.sliderSingleStepValue
-    #self.safeZoneXRangeSlider.pageStep = self.sliderPageStepValue
     self.parametersFormLayout.addRow(self.safeZoneXRangeLabel,self.safeZoneXRangeSlider)
     
     self.safeZoneYRangeLabel = qt.QLabel(qt.Qt.Horizontal,None)
@@ -123,8 +121,6 @@ class FollowWidget:
     self.safeZoneYRangeSlider.minimum = self.rangeSliderMinimum
     self.safeZoneYRangeSlider.maximumValue = self.rangeSliderMaximumValueDefault
     self.safeZoneYRangeSlider.minimumValue = self.rangeSliderMinimumValueDefault
-    #self.safeZoneYRangeSlider.singleStep = self.sliderSingleStepValue
-    #self.safeZoneYRangeSlider.pageStep = self.sliderPageStepValue
     self.parametersFormLayout.addRow(self.safeZoneYRangeLabel,self.safeZoneYRangeSlider)
     
     self.safeZoneZRangeLabel = qt.QLabel(qt.Qt.Horizontal,None)
@@ -134,29 +130,27 @@ class FollowWidget:
     self.safeZoneZRangeSlider.minimum = self.rangeSliderMinimum
     self.safeZoneZRangeSlider.maximumValue = self.rangeSliderMaximumValueDefault
     self.safeZoneZRangeSlider.minimumValue = self.rangeSliderMinimumValueDefault
-    #self.safeZoneZRangeSlider.singleStep = self.sliderSingleStepValue
-    #self.safeZoneZRangeSlider.pageStep = self.sliderPageStepValue
     self.parametersFormLayout.addRow(self.safeZoneZRangeLabel,self.safeZoneZRangeSlider)
     
     self.adjustXLabel = qt.QLabel(qt.Qt.Horizontal,None)
-    self.adjustXLabel.setText("Adjust X")
+    self.adjustXLabel.setText("Adjust Along Camera X")
     self.adjustXCheckbox = qt.QCheckBox()
     self.adjustXCheckbox.setCheckState(2)
-    self.adjustXCheckbox.setToolTip("If checked, render with parallel projection (box-shaped view). Otherwise render with perspective projection (cone-shaped view).")
+    self.adjustXCheckbox.setToolTip("If checked, adjust the camera so that it aligns with the target model along the x axis.")
     self.parametersFormLayout.addRow(self.adjustXLabel,self.adjustXCheckbox)
     
     self.adjustYLabel = qt.QLabel(qt.Qt.Horizontal,None)
-    self.adjustYLabel.setText("Adjust Y")
+    self.adjustYLabel.setText("Adjust Along Camera Y")
     self.adjustYCheckbox = qt.QCheckBox()
     self.adjustYCheckbox.setCheckState(2)
-    self.adjustYCheckbox.setToolTip("If checked, render with parallel projection (box-shaped view). Otherwise render with perspective projection (cone-shaped view).")
+    self.adjustXCheckbox.setToolTip("If checked, adjust the camera so that it aligns with the target model along the y axis.")
     self.parametersFormLayout.addRow(self.adjustYLabel,self.adjustYCheckbox)
     
     self.adjustZLabel = qt.QLabel(qt.Qt.Horizontal,None)
-    self.adjustZLabel.setText("Adjust Z")
+    self.adjustZLabel.setText("Adjust Along Camera Z")
     self.adjustZCheckbox = qt.QCheckBox()
     self.adjustZCheckbox.setCheckState(2)
-    self.adjustZCheckbox.setToolTip("If checked, render with parallel projection (box-shaped view). Otherwise render with perspective projection (cone-shaped view).")
+    self.adjustXCheckbox.setToolTip("If checked, adjust the camera so that it aligns with the target model along the z axis.")
     self.parametersFormLayout.addRow(self.adjustZLabel,self.adjustZCheckbox)
     
     self.updateRateLabel = qt.QLabel(qt.Qt.Horizontal,None)
@@ -317,12 +311,12 @@ class FollowLogic:
   
   
   # FINITE STATE MACHINE:
-  #  Safe <--pos-> Unsafe
+  #  Safe <-pos-> Unsafe
   #    ^             |
   #    |            time
   #   time           |
   #    |             V
-  #  Rest --time-> Adjust
+  #  Rest <-time- Adjust
   
 
   def setSafeXMinimum(self, val):
