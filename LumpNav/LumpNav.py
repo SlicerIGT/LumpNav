@@ -791,41 +791,38 @@ class LumpNavGuidelet(Guidelet):
     pointPolyData.SetPoints(points)
 
     delaunay = vtk.vtkDelaunay3D()
-
-    if numberOfPoints<10:
-      logging.debug("use glyphs")
-      sphere = vtk.vtkCubeSource()
-      glyph = vtk.vtkGlyph3D()
-      glyph.SetInputData(pointPolyData)
-      glyph.SetSourceConnection(sphere.GetOutputPort())
-      #glyph.SetVectorModeToUseNormal()
-      #glyph.SetScaleModeToScaleByVector()
-      #glyph.SetScaleFactor(0.25)
-      delaunay.SetInputConnection(glyph.GetOutputPort())
-    else:
-      delaunay.SetInputData(pointPolyData)
-
+    
+    logging.debug("use glyphs")
+    sphere = vtk.vtkCubeSource()
+    glyph = vtk.vtkGlyph3D()
+    glyph.SetInputData(pointPolyData)
+    glyph.SetSourceConnection(sphere.GetOutputPort())
+    #glyph.SetVectorModeToUseNormal()
+    #glyph.SetScaleModeToScaleByVector()
+    #glyph.SetScaleFactor(0.25)
+    delaunay.SetInputConnection(glyph.GetOutputPort())
+    
     surfaceFilter = vtk.vtkDataSetSurfaceFilter()
     surfaceFilter.SetInputConnection(delaunay.GetOutputPort())
-
+    
     smoother = vtk.vtkButterflySubdivisionFilter()
     smoother.SetInputConnection(surfaceFilter.GetOutputPort())
     smoother.SetNumberOfSubdivisions(3)
     smoother.Update()
+    
+    delaunaySmooth = vtk.vtkDelaunay3D()
+    delaunaySmooth.SetInputData(smoother.GetOutput())
+    delaunaySmooth.Update()
 
-    forceConvexShape = True
-
-    if (forceConvexShape == True):
-        delaunaySmooth = vtk.vtkDelaunay3D()
-        delaunaySmooth.SetInputData(smoother.GetOutput())
-        delaunaySmooth.Update()
-
-        smoothSurfaceFilter = vtk.vtkDataSetSurfaceFilter()
-        smoothSurfaceFilter.SetInputConnection(delaunaySmooth.GetOutputPort())
-        self.tumorModel_Needle.SetPolyDataConnection(smoothSurfaceFilter.GetOutputPort())
-    else:
-        self.tumorModel_Needle.SetPolyDataConnection(smoother.GetOutputPort())
-
+    smoothSurfaceFilter = vtk.vtkDataSetSurfaceFilter()
+    smoothSurfaceFilter.SetInputConnection(delaunaySmooth.GetOutputPort())
+    
+    normals = vtk.vtkPolyDataNormals()
+    normals.SetInputConnection(smoothSurfaceFilter.GetOutputPort())
+    normals.SetFeatureAngle(100.0)
+    
+    self.tumorModel_Needle.SetPolyDataConnection(normals.GetOutputPort())
+    
     self.tumorModel_Needle.Modified()
 
   def getCamera(self, viewName):
