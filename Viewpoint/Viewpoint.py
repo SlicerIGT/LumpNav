@@ -295,36 +295,6 @@ class ViewpointWidget:
     self.cameraZPosSlider.pageStep = self.sliderPageStepValue
     self.translationFormLayout.addRow(self.cameraZPosLabel,self.cameraZPosSlider)
     
-    # "Model Visibility" Collapsible
-    self.modelVisibilityCollapsibleButton = ctk.ctkCollapsibleGroupBox()
-    self.modelVisibilityCollapsibleButton.title = "Model Visibility"
-    self.cameraControlFormLayout.addRow(self.modelVisibilityCollapsibleButton)
-    
-    # Layout within the collapsible button
-    self.modelVisibilityFormLayout = qt.QFormLayout(self.modelVisibilityCollapsibleButton)
-    
-    self.modelOnlyViewpointOnLabel = qt.QLabel(qt.Qt.Horizontal,None)
-    self.modelOnlyViewpointOnLabel.text = "Model visible only for Viewpoint on: "
-    self.modelOnlyViewpointOnSelector = slicer.qMRMLNodeComboBox()
-    self.modelOnlyViewpointOnSelector.nodeTypes = ( ("vtkMRMLModelNode"), "" )
-    self.modelOnlyViewpointOnSelector.noneEnabled = True
-    self.modelOnlyViewpointOnSelector.addEnabled = False
-    self.modelOnlyViewpointOnSelector.removeEnabled = False
-    self.modelOnlyViewpointOnSelector.setMRMLScene( slicer.mrmlScene )
-    self.modelOnlyViewpointOnSelector.setToolTip("This model be visible if Viewpoint mode is enabled, and invisible otherwise")
-    self.modelVisibilityFormLayout.addRow(self.modelOnlyViewpointOnLabel,self.modelOnlyViewpointOnSelector)
-    
-    self.modelOnlyViewpointOffLabel = qt.QLabel(qt.Qt.Horizontal,None)
-    self.modelOnlyViewpointOffLabel.text = "Model visible only for Viewpoint off: "
-    self.modelOnlyViewpointOffSelector = slicer.qMRMLNodeComboBox()
-    self.modelOnlyViewpointOffSelector.nodeTypes = ( ("vtkMRMLModelNode"), "" )
-    self.modelOnlyViewpointOffSelector.noneEnabled = True
-    self.modelOnlyViewpointOffSelector.addEnabled = False
-    self.modelOnlyViewpointOffSelector.removeEnabled = False
-    self.modelOnlyViewpointOffSelector.setMRMLScene( slicer.mrmlScene )
-    self.modelOnlyViewpointOffSelector.setToolTip("This model be visible if Viewpoint Mode is disabled, and invisible otherwise")
-    self.modelVisibilityFormLayout.addRow(self.modelOnlyViewpointOffLabel,self.modelOnlyViewpointOffSelector)
-    
     # Camera parallel projection checkbox
     self.cameraParallelProjectionLabel = qt.QLabel()
     self.cameraParallelProjectionLabel.setText("Parallel Projection")
@@ -495,8 +465,6 @@ class ViewpointWidget:
     if self.toggleTrackViewButtonState == 0:
       self.logic.setCameraNode(self.cameraSelector.currentNode())
       self.logic.setTransformNode(self.transformSelector.currentNode())
-      self.logic.setModelPOVOnNode(self.modelOnlyViewpointOnSelector.currentNode())
-      self.logic.setModelPOVOffNode(self.modelOnlyViewpointOffSelector.currentNode())
       self.logic.setTargetModelNode(self.targetModelSelector.currentNode())
       self.logic.startTrackView()
       if (self.logic.isCurrentModeTRACKVIEW()):
@@ -534,15 +502,11 @@ class ViewpointWidget:
   def enableTrackViewSelectors(self):
     self.cameraSelector.enabled = True
     self.transformSelector.enabled = True
-    self.modelOnlyViewpointOnSelector.enabled = True
-    self.modelOnlyViewpointOffSelector.enabled = True
     self.targetModelSelector.enabled = True
   
   def disableTrackViewSelectors(self):
     self.cameraSelector.enabled = False
     self.transformSelector.enabled = False
-    self.modelOnlyViewpointOnSelector.enabled = False
-    self.modelOnlyViewpointOffSelector.enabled = False
     self.targetModelSelector.enabled = False
   
   def enableTrackViewParameterWidgets(self):
@@ -706,8 +670,6 @@ class ViewpointLogic:
     # TRACK VIEW
     self.transformNode = None
     self.cameraNode = None
-    self.modelPOVOnNode = None
-    self.modelPOVOffNode = None
     
     self.transformNodeObserverTags = []
     
@@ -804,12 +766,6 @@ class ViewpointLogic:
   def setCameraNode(self, cameraNode):
     self.cameraNode = cameraNode
     
-  def setModelPOVOnNode(self, modelPOVOnNode):
-    self.modelPOVOnNode = modelPOVOnNode
-    
-  def setModelPOVOffNode(self, modelPOVOffNode):
-    self.modelPOVOffNode = modelPOVOffNode
-    
   def setTargetModelNode(self, targetModelNode):
     self.targetModelNode = targetModelNode
     targetModel = targetModelNode.GetPolyData()
@@ -861,12 +817,6 @@ class ViewpointLogic:
     if (self.currentMode != self.currentModeTRACKVIEW):
       logging.error("StopTrackView was called, but viewpoint mode is not TRACKVIEW. No action performed.")
       return
-    if (self.modelPOVOnNode):
-      modelPOVOnDisplayNode = self.modelPOVOnNode.GetDisplayNode()
-      modelPOVOnDisplayNode.SetVisibility(False)
-    if (self.modelPOVOffNode):
-      modelPOVOffDisplayNode = self.modelPOVOffNode.GetDisplayNode()
-      modelPOVOffDisplayNode.SetVisibility(True)
     self.currentMode = self.currentModeOFF
     self.removeObservers();
 
@@ -926,14 +876,6 @@ class ViewpointLogic:
     upDirectionInRAS = self.computeCameraUpDirectionInRAS(toolCameraToRASTransform,cameraOriginInRASMm,focalPointInRASMm)
     
     self.setCameraParameters(cameraOriginInRASMm,focalPointInRASMm,upDirectionInRAS)
-    
-    # model visibility
-    if (self.modelPOVOffNode):
-      modelPOVOffDisplayNode = self.modelPOVOffNode.GetDisplayNode()
-      modelPOVOffDisplayNode.SetVisibility(False)
-    if (self.modelPOVOnNode):
-      modelPOVOnDisplayNode = self.modelPOVOnNode.GetDisplayNode()
-      modelPOVOnDisplayNode.SetVisibility(True)
         
   def computeCameraOriginInRASMm(self, toolCameraToRASTransform):
     # Need to get camera origin and axes from camera coordinates into Slicer RAS coordinates
