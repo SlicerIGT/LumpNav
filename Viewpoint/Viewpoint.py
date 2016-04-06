@@ -92,6 +92,25 @@ class ViewpointWidget:
   def setup(self):
     # TODO: The following line is strictly for debug purposes, should be removed when this module is done
     slicer.tvwidget = self
+    
+    # Collapsible buttons
+    self.viewCollapsibleButton = ctk.ctkCollapsibleButton()
+    self.viewCollapsibleButton.text = "View Selection"
+    self.layout.addWidget(self.viewCollapsibleButton)
+
+    # Layout within the collapsible button
+    self.viewFormLayout = qt.QFormLayout(self.viewCollapsibleButton)
+    
+    self.viewLabel = qt.QLabel()
+    self.viewLabel.setText("Scene Camera: ")
+    self.viewSelector = slicer.qMRMLNodeComboBox()
+    self.viewSelector.nodeTypes = ( ("vtkMRMLViewNode"), "" )
+    self.viewSelector.noneEnabled = False
+    self.viewSelector.addEnabled = False
+    self.viewSelector.removeEnabled = False
+    self.viewSelector.setMRMLScene( slicer.mrmlScene )
+    self.viewSelector.setToolTip("Pick the view which should be adjusted, e.g. 'View1'")
+    self.viewFormLayout.addRow(self.viewLabel, self.viewSelector)    
 
     # Collapsible buttons
     self.trackViewParametersCollapsibleButton = ctk.ctkCollapsibleButton()
@@ -112,18 +131,6 @@ class ViewpointWidget:
     self.transformSelector.setMRMLScene( slicer.mrmlScene )
     self.transformSelector.setToolTip("Pick the transform that the camera should follow, e.g. 'cauteryCameraToCauteryTransform'")
     self.trackViewParametersFormLayout.addRow(self.transformLabel, self.transformSelector)
-    
-    # Camera combobox
-    self.cameraLabel = qt.QLabel()
-    self.cameraLabel.setText("Scene Camera (for track view): ")
-    self.cameraSelector = slicer.qMRMLNodeComboBox()
-    self.cameraSelector.nodeTypes = ( ("vtkMRMLCameraNode"), "" )
-    self.cameraSelector.noneEnabled = False
-    self.cameraSelector.addEnabled = False
-    self.cameraSelector.removeEnabled = False
-    self.cameraSelector.setMRMLScene( slicer.mrmlScene )
-    self.cameraSelector.setToolTip("Pick the camera which should be moved, e.g. 'Default Scene Camera'")
-    self.trackViewParametersFormLayout.addRow(self.cameraLabel, self.cameraSelector)
 
     # "Camera Control" Collapsible
     self.cameraControlCollapsibleButton = ctk.ctkCollapsibleButton()
@@ -331,17 +338,6 @@ class ViewpointWidget:
     self.modelSelector.setToolTip("Pick the model that the camera should follow, e.g. 'tumorModel'")
     self.followParametersFormLayout.addRow(self.modelLabel, self.modelSelector)
     
-    self.viewLabel = qt.QLabel()
-    self.viewLabel.setText("Scene Camera: ")
-    self.viewSelector = slicer.qMRMLNodeComboBox()
-    self.viewSelector.nodeTypes = ( ("vtkMRMLViewNode"), "" )
-    self.viewSelector.noneEnabled = False
-    self.viewSelector.addEnabled = False
-    self.viewSelector.removeEnabled = False
-    self.viewSelector.setMRMLScene( slicer.mrmlScene )
-    self.viewSelector.setToolTip("Pick the view which should be adjusted, e.g. 'View1'")
-    self.followParametersFormLayout.addRow(self.viewLabel, self.viewSelector)
-    
     self.safeZoneXRangeLabel = qt.QLabel(qt.Qt.Horizontal,None)
     self.safeZoneXRangeLabel.text = "Safe Zone (Viewport X percentage): "
     self.safeZoneXRangeSlider = slicer.qMRMLRangeWidget()
@@ -463,7 +459,7 @@ class ViewpointWidget:
 
   def toggleTrackViewButtonPressed(self):
     if self.toggleTrackViewButtonState == 0:
-      self.logic.setCameraNode(self.cameraSelector.currentNode())
+      self.logic.setViewNode(self.viewSelector.currentNode())
       self.logic.setTransformNode(self.transformSelector.currentNode())
       self.logic.setTargetModelNode(self.targetModelSelector.currentNode())
       self.logic.startTrackView()
@@ -500,17 +496,16 @@ class ViewpointWidget:
   # SPECIFIC TO TRACK-VIEW
   
   def enableTrackViewSelectors(self):
-    self.cameraSelector.enabled = True
     self.transformSelector.enabled = True
     self.targetModelSelector.enabled = True
   
   def disableTrackViewSelectors(self):
-    self.cameraSelector.enabled = False
     self.transformSelector.enabled = False
     self.targetModelSelector.enabled = False
   
   def enableTrackViewParameterWidgets(self):
     self.enableTrackViewSelectors()
+    self.viewSelector.enabled = True
     self.degreesOfFreedom3RadioButton.enabled = True
     self.degreesOfFreedom5RadioButton.enabled = True
     self.degreesOfFreedom6RadioButton.enabled = True
@@ -529,6 +524,7 @@ class ViewpointWidget:
   
   def disableTrackViewParameterWidgets(self):
     self.disableTrackViewSelectors()
+    self.viewSelector.enabled = False
     self.degreesOfFreedom3RadioButton.enabled = False
     self.degreesOfFreedom5RadioButton.enabled = False
     self.degreesOfFreedom6RadioButton.enabled = False
@@ -662,6 +658,8 @@ class ViewpointWidget:
 class ViewpointLogic:
   def __init__(self):
     # global
+    self.viewNode = None
+    
     self.currentMode = 0
     self.currentModeOFF = 0
     self.currentModeTRACKVIEW = 1
@@ -669,7 +667,6 @@ class ViewpointLogic:
     
     # TRACK VIEW
     self.transformNode = None
-    self.cameraNode = None
     
     self.transformNodeObserverTags = []
     
@@ -706,7 +703,6 @@ class ViewpointLogic:
     self.adjustZ = True
     
     self.modelNode = None
-    self.viewNode = None
     
     self.timeUnsafeToAdjustMaximumSeconds = 1
     self.timeAdjustToRestMaximumSeconds = 0.2
@@ -763,9 +759,6 @@ class ViewpointLogic:
   def setTransformNode(self, transformNode):
     self.transformNode = transformNode
     
-  def setCameraNode(self, cameraNode):
-    self.cameraNode = cameraNode
-    
   def setTargetModelNode(self, targetModelNode):
     self.targetModelNode = targetModelNode
     targetModel = targetModelNode.GetPolyData()
@@ -800,7 +793,7 @@ class ViewpointLogic:
       logging.error("Cannot activate viewpoint until the current mode is set to off!")
       return
       
-    if (not self.cameraNode):
+    if (not self.viewNode):
       logging.warning("A node is missing. Nothing will happen until the comboboxes have items selected.")
       return
       
@@ -938,7 +931,9 @@ class ViewpointLogic:
     return upDirectionInRAS
 
   def setCameraParameters(self,cameraOriginInRASMm,focalPointInRASMm,upDirectionInRAS):
-    camera = self.cameraNode.GetCamera()
+    viewName = self.viewNode.GetName()
+    cameraNode = self.getCamera(viewName)
+    camera = cameraNode.GetCamera()
     if (self.cameraParallelProjection == False):
       camera.SetViewAngle(self.cameraViewAngleDeg)
     elif (self.cameraParallelProjection == True):
@@ -950,7 +945,7 @@ class ViewpointLogic:
     # Change it in the view node instead of directly in the camera VTK object
     # (if we changed the projection mode in the camera VTK object then the next time the camera is updated from the view node
     # the rendering mode is reset to the value stored in the view node).
-    viewNode = slicer.mrmlScene.GetNodeByID(self.cameraNode.GetActiveTag())
+    viewNode = slicer.mrmlScene.GetNodeByID(cameraNode.GetActiveTag())
     viewNodeParallelProjection = (viewNode.GetRenderMode() == slicer.vtkMRMLViewNode.Orthographic)
     if viewNodeParallelProjection != self.cameraParallelProjection:
       viewNode.SetRenderMode(slicer.vtkMRMLViewNode.Orthographic if self.cameraParallelProjection else slicer.vtkMRMLViewNode.Perspective)
@@ -959,7 +954,7 @@ class ViewpointLogic:
     camera.SetPosition(cameraOriginInRASMm)
     camera.SetFocalPoint(focalPointInRASMm)
     camera.SetViewUp(upDirectionInRAS)
-    self.cameraNode.ResetClippingRange() # without this line, some objects do not appear in the 3D view
+    cameraNode.ResetClippingRange() # without this line, some objects do not appear in the 3D view
 
   # FOLLOW
   def setSafeXMinimum(self, val):
