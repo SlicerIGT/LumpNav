@@ -416,7 +416,7 @@ class ViewpointWidget:
     self.adjustZLabel = qt.QLabel(qt.Qt.Horizontal,None)
     self.adjustZLabel.setText("Adjust Along Camera Z")
     self.adjustZCheckbox = qt.QCheckBox()
-    self.adjustZCheckbox.setCheckState(2)
+    self.adjustZCheckbox.setCheckState(0)
     self.adjustXCheckbox.setToolTip("If checked, adjust the camera so that it aligns with the target model along the z axis.")
     self.followParametersFormLayout.addRow(self.adjustZLabel,self.adjustZCheckbox)
     
@@ -767,7 +767,6 @@ class ViewpointLogic:
     self.baseCameraFocalPointRas = [0,0,0]
     self.modelInSafeZone = True 
     
-    self.threeDWidgetIndex = 0 #TODO: Determine this
     self.modelTargetPositionViewport = [0,0,0]
     
   def getCurrentMode(self):
@@ -1262,7 +1261,7 @@ class ViewpointLogic:
     x = vtk.mutable(positionRas[0])
     y = vtk.mutable(positionRas[1])
     z = vtk.mutable(positionRas[2])
-    view = slicer.app.layoutManager().threeDWidget(self.threeDWidgetIndex).threeDView()
+    view = slicer.app.layoutManager().threeDWidget(self.getThreeDWidgetIndex()).threeDView()
     renderer = view.renderWindow().GetRenderers().GetItemAsObject(0)
     renderer.WorldToView(x,y,z)
     return [x.get(), y.get(), z.get()]
@@ -1271,7 +1270,7 @@ class ViewpointLogic:
     x = vtk.mutable(positionViewport[0])
     y = vtk.mutable(positionViewport[1])
     z = vtk.mutable(positionViewport[2])
-    view = slicer.app.layoutManager().threeDWidget(self.threeDWidgetIndex).threeDView()
+    view = slicer.app.layoutManager().threeDWidget(self.getThreeDWidgetIndex()).threeDView()
     renderer = view.renderWindow().GetRenderers().GetItemAsObject(0)
     renderer.ViewToWorld(x,y,z)
     return [x.get(), y.get(), z.get()]
@@ -1305,6 +1304,19 @@ class ViewpointLogic:
     return positionRas
     
   def resetCameraClippingRange(self):
-    view = slicer.app.layoutManager().threeDWidget(self.threeDWidgetIndex).threeDView()
+    view = slicer.app.layoutManager().threeDWidget(self.getThreeDWidgetIndex()).threeDView()
     renderer = view.renderWindow().GetRenderers().GetItemAsObject(0)
     renderer.ResetCameraClippingRange()
+
+  def getThreeDWidgetIndex(self):
+    if (not self.viewNode):
+      logging.error("Error in getThreeDWidgetIndex: No View node selected. Returning 0.");
+      return 0
+    layoutManager = slicer.app.layoutManager()
+    for threeDViewIndex in xrange(layoutManager.threeDViewCount):
+      threeDViewNode = layoutManager.threeDWidget(threeDViewIndex).threeDView().mrmlViewNode()
+      if (threeDViewNode == self.viewNode):
+        return threeDViewIndex
+    logging.error("Error in getThreeDWidgetIndex: Can't find the index. Selected View does not exist? Returning 0.");
+    return 0
+    
