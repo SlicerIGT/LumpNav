@@ -932,7 +932,7 @@ class ViewpointLogic:
 
   def setCameraParameters(self,cameraOriginInRASMm,focalPointInRASMm,upDirectionInRAS):
     viewName = self.viewNode.GetName()
-    cameraNode = self.getCamera(viewName)
+    cameraNode = self.getCameraNode(viewName)
     camera = cameraNode.GetCamera()
     if (self.cameraParallelProjection == False):
       camera.SetViewAngle(self.cameraViewAngleDeg)
@@ -1109,7 +1109,7 @@ class ViewpointLogic:
     
   def setCameraTranslationParameters(self):
     viewName = self.viewNode.GetName()
-    cameraNode = self.getCamera(viewName)
+    cameraNode = self.getCameraNode(viewName)
     cameraPosRas = [0,0,0]
     cameraNode.GetPosition(cameraPosRas)
     self.baseCameraPositionRas = cameraPosRas
@@ -1143,7 +1143,7 @@ class ViewpointLogic:
       cameraNewPositionRas[i] = translation + self.baseCameraPositionRas[i]
       cameraNewFocalPointRas[i] = translation + self.baseCameraFocalPointRas[i]
     viewName = self.viewNode.GetName()
-    cameraNode = self.getCamera(viewName)
+    cameraNode = self.getCameraNode(viewName)
     cameraNode.SetPosition(cameraNewPositionRas)
     cameraNode.SetFocalPoint(cameraNewFocalPointRas)
     self.resetCameraClippingRange()
@@ -1185,7 +1185,7 @@ class ViewpointLogic:
     modelTargetPositionCamera = self.convertPointRasToCamera(modelTargetPositionRas)
     return modelTargetPositionCamera
     
-  def getCamera(self, viewName):
+  def getCameraNode(self, viewName):
     """
     Get camera for the selected 3D view
     """
@@ -1216,7 +1216,7 @@ class ViewpointLogic:
     
   def convertPointRasToCamera(self, positionRas):
     viewName = self.viewNode.GetName()
-    cameraNode = self.getCamera(viewName)
+    cameraNode = self.getCameraNode(viewName)
     cameraObj = cameraNode.GetCamera()
     modelViewTransform = cameraObj.GetModelViewTransformObject()
     positionRasHomog = [positionRas[0], positionRas[1], positionRas[2], 1] # convert to homogeneous
@@ -1227,7 +1227,7 @@ class ViewpointLogic:
 
   def convertVectorCameraToRas(self, positionCam):
     viewName = self.viewNode.GetName()
-    cameraNode = self.getCamera(viewName)
+    cameraNode = self.getCameraNode(viewName)
     cameraObj = cameraNode.GetCamera()
     modelViewTransform = cameraObj.GetModelViewTransformObject()
     modelViewMatrix = modelViewTransform.GetMatrix()
