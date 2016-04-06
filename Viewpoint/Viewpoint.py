@@ -732,12 +732,12 @@ class ViewpointLogic:
     
     # FOLLOW
     #inputs
-    self.safeXMinimumNormalizedViewport = -1
-    self.safeXMaximumNormalizedViewport = 1
-    self.safeYMinimumNormalizedViewport = -1
-    self.safeYMaximumNormalizedViewport = 1
-    self.safeZMinimumNormalizedViewport = -1
-    self.safeZMaximumNormalizedViewport = 1
+    self.safeXMinimumNormalizedViewport = -1.0
+    self.safeXMaximumNormalizedViewport = 1.0
+    self.safeYMinimumNormalizedViewport = -1.0
+    self.safeYMaximumNormalizedViewport = 1.0
+    self.safeZMinimumNormalizedViewport = -1.0
+    self.safeZMaximumNormalizedViewport = 1.0
     
     self.adjustX = True
     self.adjustY = True
@@ -1165,8 +1165,10 @@ class ViewpointLogic:
     self.modelInSafeZone = foundSafe
 
   def setModelTargetPositionViewport(self):
-    modelPosRas = self.getModelCurrentCenterRas()
-    self.modelTargetPositionViewport = self.convertRasToViewport(modelPosRas)
+    self.modelTargetPositionViewport = [(self.safeXMinimumNormalizedViewport + self.safeXMaximumNormalizedViewport)/2.0,
+                                        (self.safeYMinimumNormalizedViewport + self.safeYMaximumNormalizedViewport)/2.0,
+                                        (self.safeZMinimumNormalizedViewport + self.safeZMaximumNormalizedViewport)/2.0]
+    print self.modelTargetPositionViewport
     
   def setCameraTranslationParameters(self):
     viewName = self.viewNode.GetName()
