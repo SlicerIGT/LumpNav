@@ -56,7 +56,6 @@ class ViewpointWidget:
     self.sliderSingleStepValue = 1
     self.sliderPageStepValue   = 10
     
-    self.toggleTrackViewButtonState = 0
     self.toggleTrackViewButtonTextState0 = "Enable Track View Mode"
     self.toggleTrackViewButtonTextState1 = "Disable Track View Mode"
     
@@ -85,7 +84,6 @@ class ViewpointWidget:
     self.timeRestToSafeMaxSeconds = 5
     self.timeRestToSafeDefaultSeconds = 1
     
-    self.toggleFollowButtonState = 0
     self.toggleFollowButtonTextState0 = "Enable Follow Mode"
     self.toggleFollowButtonTextState1 = "Disable Follow Mode"
 
@@ -455,19 +453,25 @@ class ViewpointWidget:
     self.toggleFollowButton.connect('clicked()', self.toggleFollowButtonPressed)
     self.viewSelector.connect('currentNodeChanged(vtkMRMLNode*)', self.changeViewNode)
     
+    # disable all parameter widgets initially, because view selector will be "none"
+    self.disableFollowAllWidgets()
+    self.disableTrackViewAllWidgets()
+    
     # Add vertical spacer
     self.layout.addStretch(1)
     
   def changeViewNode(self):
-    # assume all widgets are to be enabled, disable as necessary
-    self.enableFollowAllWidgets()
-    self.enableTrackViewAllWidgets()
-    
     newViewNode = self.viewSelector.currentNode()
     if (not newViewNode):
       self.disableFollowAllWidgets()
       self.disableTrackViewAllWidgets()
       return;
+      
+    # assume all widgets are to be enabled, disable as necessary
+    self.enableFollowAllWidgets()
+    self.enableTrackViewAllWidgets()
+    self.toggleTrackViewButton.setText(self.toggleTrackViewButtonTextState0)
+    self.toggleFollowButton.setText(self.toggleFollowButtonTextState0)
     
     self.logic.changeCurrentViewNode(newViewNode)
     if (self.logic.currentInstance.currentMode == self.logic.currentInstance.currentModeFOLLOW):
@@ -482,7 +486,7 @@ class ViewpointWidget:
       self.toggleTrackViewButton.setText(self.toggleTrackViewButtonTextState1)
 
   def toggleTrackViewButtonPressed(self):
-    if self.toggleTrackViewButtonState == 0:
+    if self.logic.currentInstance.currentMode == self.logic.currentInstance.currentModeOFF:
       self.updateTrackViewParameters();
       self.logic.currentInstance.startTrackView()
       if (self.logic.currentInstance.isCurrentModeTRACKVIEW()):
@@ -490,16 +494,18 @@ class ViewpointWidget:
         self.disableFollowAllWidgets()
         self.toggleTrackViewButtonState = 1
         self.toggleTrackViewButton.setText(self.toggleTrackViewButtonTextState1)
-    else: # elif self.toggleTrackViewButtonState == 1
+    elif self.logic.currentInstance.currentMode == self.logic.currentInstance.currentModeTRACKVIEW:
       self.logic.currentInstance.stopTrackView()
       if (self.logic.currentInstance.isCurrentModeOFF()):
         self.enableTrackViewSelectors()
         self.enableFollowAllWidgets()
         self.toggleTrackViewButtonState = 0
         self.toggleTrackViewButton.setText(self.toggleTrackViewButtonTextState0)
+    else:
+      logging.error("Error: Unhandled case in toggleTrackViewButtonPressed. Current state is neither off nor track view.")
     
   def toggleFollowButtonPressed(self):
-    if self.toggleFollowButtonState == 0:
+    if self.logic.currentInstance.currentMode == self.logic.currentInstance.currentModeOFF:
       self.updateFollowLogicParameters()
       self.logic.currentInstance.startFollow()
       if (self.logic.currentInstance.isCurrentModeFOLLOW()):
@@ -507,13 +513,15 @@ class ViewpointWidget:
         self.disableTrackViewAllWidgets()
         self.toggleFollowButtonState = 1
         self.toggleFollowButton.setText(self.toggleFollowButtonTextState1)
-    else:
+    elif self.logic.currentInstance.currentMode == self.logic.currentInstance.currentModeFOLLOW:
       self.logic.currentInstance.stopFollow()
       if (self.logic.currentInstance.isCurrentModeOFF()):
         self.enableFollowParameterWidgets()
         self.enableTrackViewAllWidgets()
         self.toggleFollowButtonState = 0
         self.toggleFollowButton.setText(self.toggleFollowButtonTextState0)
+    else:
+      logging.error("Error: Unhandled case in toggleFollowButtonPressed. Current state is neither off nor follow.")
       
   # SPECIFIC TO TRACK-VIEW
   
