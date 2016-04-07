@@ -105,7 +105,7 @@ class ViewpointWidget:
     self.viewLabel.setText("Scene Camera: ")
     self.viewSelector = slicer.qMRMLNodeComboBox()
     self.viewSelector.nodeTypes = ( ("vtkMRMLViewNode"), "" )
-    self.viewSelector.noneEnabled = False
+    self.viewSelector.noneEnabled = True
     self.viewSelector.addEnabled = False
     self.viewSelector.removeEnabled = False
     self.viewSelector.setMRMLScene( slicer.mrmlScene )
@@ -438,11 +438,11 @@ class ViewpointWidget:
     #Connections
     self.toggleTrackViewButton.connect('clicked()', self.toggleTrackViewButtonPressed)
     self.cameraParallelProjectionCheckbox.connect('stateChanged(int)', self.toggleCameraParallelProjectionCheckboxPressed)
-    self.cameraViewAngleSlider.connect('valueChanged(double)', self.logic.SetCameraViewAngleDeg)
-    self.cameraParallelScaleSlider.connect('valueChanged(double)', self.logic.SetCameraParallelScale)
-    self.cameraXPosSlider.connect('valueChanged(double)', self.logic.SetCameraXPosMm)
-    self.cameraYPosSlider.connect('valueChanged(double)', self.logic.SetCameraYPosMm)
-    self.cameraZPosSlider.connect('valueChanged(double)', self.logic.SetCameraZPosMm)
+    self.cameraViewAngleSlider.connect('valueChanged(double)', self.changeCameraViewAngleDeg)
+    self.cameraParallelScaleSlider.connect('valueChanged(double)', self.changeCameraParallelScale)
+    self.cameraXPosSlider.connect('valueChanged(double)', self.changeCameraXPosMm)
+    self.cameraYPosSlider.connect('valueChanged(double)', self.changeCameraYPosMm)
+    self.cameraZPosSlider.connect('valueChanged(double)', self.changeCameraZPosMm)
     self.upDirectionAnteriorRadioButton.connect('clicked()', self.changeUpToAnterior)
     self.upDirectionPosteriorRadioButton.connect('clicked()', self.changeUpToPosterior)
     self.upDirectionLeftRadioButton.connect('clicked()', self.changeUpToLeft)
@@ -453,24 +453,46 @@ class ViewpointWidget:
     self.degreesOfFreedom5RadioButton.connect('clicked()', self.changeInterfaceTo5DOFMode)
     self.degreesOfFreedom6RadioButton.connect('clicked()', self.changeInterfaceTo6DOFMode)
     self.toggleFollowButton.connect('clicked()', self.toggleFollowButtonPressed)
+    self.viewSelector.connect('currentNodeChanged(vtkMRMLNode*)', self.changeViewNode)
     
     # Add vertical spacer
     self.layout.addStretch(1)
+    
+  def changeViewNode(self):
+    # assume all widgets are to be enabled, disable as necessary
+    self.enableFollowAllWidgets()
+    self.enableTrackViewAllWidgets()
+    
+    newViewNode = self.viewSelector.currentNode()
+    if (not newViewNode):
+      self.disableFollowAllWidgets()
+      self.disableTrackViewAllWidgets()
+      return;
+    
+    self.logic.changeCurrentViewNode(newViewNode)
+    if (self.logic.currentInstance.currentMode == self.logic.currentInstance.currentModeFOLLOW):
+      self.disableFollowParameterWidgets()
+      self.disableTrackViewAllWidgets()
+      self.toggleFollowButton.setText(self.toggleFollowButtonTextState1)
+      self.toggleTrackViewButton.setText(self.toggleTrackViewButtonTextState0)
+    elif (self.logic.currentInstance.currentMode == self.logic.currentInstance.currentModeTRACKVIEW):
+      self.disableTrackViewParameterWidgets()
+      self.disableFollowAllWidgets()
+      self.toggleFollowButton.setText(self.toggleFollowButtonTextState0)
+      self.toggleTrackViewButton.setText(self.toggleTrackViewButtonTextState1)
 
   def toggleTrackViewButtonPressed(self):
     if self.toggleTrackViewButtonState == 0:
-      self.logic.setViewNode(self.viewSelector.currentNode())
-      self.logic.setTransformNode(self.transformSelector.currentNode())
-      self.logic.setTargetModelNode(self.targetModelSelector.currentNode())
-      self.logic.startTrackView()
-      if (self.logic.isCurrentModeTRACKVIEW()):
+      self.updateTrackViewParameters();
+      self.logic.currentInstance.startTrackView()
+      if (self.logic.currentInstance.isCurrentModeTRACKVIEW()):
         self.disableTrackViewSelectors()
         self.disableFollowAllWidgets()
         self.toggleTrackViewButtonState = 1
         self.toggleTrackViewButton.setText(self.toggleTrackViewButtonTextState1)
     else: # elif self.toggleTrackViewButtonState == 1
-      self.logic.stopTrackView()
-      if (self.logic.isCurrentModeOFF()):
+      self.logic.currentInstance.stopTrackView()
+      if (self.logic.currentInstance.isCurrentModeOFF()):
         self.enableTrackViewSelectors()
         self.enableFollowAllWidgets()
         self.toggleTrackViewButtonState = 0
@@ -479,21 +501,26 @@ class ViewpointWidget:
   def toggleFollowButtonPressed(self):
     if self.toggleFollowButtonState == 0:
       self.updateFollowLogicParameters()
-      self.logic.startFollow()
-      if (self.logic.isCurrentModeFOLLOW()):
+      self.logic.currentInstance.startFollow()
+      if (self.logic.currentInstance.isCurrentModeFOLLOW()):
         self.disableFollowParameterWidgets()
         self.disableTrackViewAllWidgets()
         self.toggleFollowButtonState = 1
         self.toggleFollowButton.setText(self.toggleFollowButtonTextState1)
     else:
-      self.logic.stopFollow()
-      if (self.logic.isCurrentModeOFF()):
+      self.logic.currentInstance.stopFollow()
+      if (self.logic.currentInstance.isCurrentModeOFF()):
         self.enableFollowParameterWidgets()
         self.enableTrackViewAllWidgets()
         self.toggleFollowButtonState = 0
         self.toggleFollowButton.setText(self.toggleFollowButtonTextState0)
       
   # SPECIFIC TO TRACK-VIEW
+  
+  def updateTrackViewParameters(self):
+    self.logic.currentInstance.setViewNode(self.viewSelector.currentNode())
+    self.logic.currentInstance.setTransformNode(self.transformSelector.currentNode())
+    self.logic.currentInstance.setTargetModelNode(self.targetModelSelector.currentNode())
   
   def enableTrackViewSelectors(self):
     self.transformSelector.enabled = True
@@ -505,7 +532,6 @@ class ViewpointWidget:
   
   def enableTrackViewParameterWidgets(self):
     self.enableTrackViewSelectors()
-    self.viewSelector.enabled = True
     self.degreesOfFreedom3RadioButton.enabled = True
     self.degreesOfFreedom5RadioButton.enabled = True
     self.degreesOfFreedom6RadioButton.enabled = True
@@ -524,7 +550,6 @@ class ViewpointWidget:
   
   def disableTrackViewParameterWidgets(self):
     self.disableTrackViewSelectors()
-    self.viewSelector.enabled = False
     self.degreesOfFreedom3RadioButton.enabled = False
     self.degreesOfFreedom5RadioButton.enabled = False
     self.degreesOfFreedom6RadioButton.enabled = False
@@ -551,7 +576,7 @@ class ViewpointWidget:
       
   def toggleCameraParallelProjectionCheckboxPressed(self, dummyState): # dummyState is a tristate variable, we just want True/False
     state = self.cameraParallelProjectionCheckbox.isChecked()
-    self.logic.SetCameraParallelProjection(state)
+    self.logic.currentInstance.SetCameraParallelProjection(state)
     if (state == False): # unchecked
       self.cameraParallelScaleLabel.setVisible(False)
       self.cameraParallelScaleSlider.setVisible(False)
@@ -563,61 +588,75 @@ class ViewpointWidget:
       self.cameraViewAngleLabel.setVisible(False)
       self.cameraViewAngleSlider.setVisible(False)
 
+  def changeCameraViewAngleDeg(self, val):
+    self.logic.currentInstance.SetCameraViewAngleDeg(val)
+    
+  def changeCameraParallelScale(self, val):
+    self.logic.currentInstance.SetCameraParallelScale(val)
+    
+  def changeCameraXPosMm(self, val):
+    self.logic.currentInstance.SetCameraXPosMm(val)
+    
+  def changeCameraYPosMm(self, val):
+    self.logic.currentInstance.SetCameraYPosMm(val)
+    
+  def changeCameraZPosMm(self, val):
+    self.logic.currentInstance.SetCameraZPosMm(val)
+    
   def changeInterfaceTo3DOFMode(self):
     self.upDirectionCollapsibleButton.setVisible(True)
     self.targetModelCollapsibleButton.setVisible(True)
-    self.logic.changeTo3DOFMode()
+    self.logic.currentInstance.changeTo3DOFMode()
 
   def changeInterfaceTo5DOFMode(self):
     self.upDirectionCollapsibleButton.setVisible(True)
     self.targetModelCollapsibleButton.setVisible(False)
-    self.logic.changeTo5DOFMode()
+    self.logic.currentInstance.changeTo5DOFMode()
 
   def changeInterfaceTo6DOFMode(self):
     self.upDirectionCollapsibleButton.setVisible(False)
     self.targetModelCollapsibleButton.setVisible(False)
-    self.logic.changeTo6DOFMode()
+    self.logic.currentInstance.changeTo6DOFMode()
     
   def changeUpToAnterior(self):
-    self.logic.SetUpInRAS([0,1,0])
+    self.logic.currentInstance.SetUpInRAS([0,1,0])
     
   def changeUpToPosterior(self):
-    self.logic.SetUpInRAS([0,-1,0])
+    self.logic.currentInstance.SetUpInRAS([0,-1,0])
     
   def changeUpToRight(self):
-    self.logic.SetUpInRAS([1,0,0])
+    self.logic.currentInstance.SetUpInRAS([1,0,0])
     
   def changeUpToLeft(self):
-    self.logic.SetUpInRAS([-1,0,0])
+    self.logic.currentInstance.SetUpInRAS([-1,0,0])
     
   def changeUpToSuperior(self):
-    self.logic.SetUpInRAS([0,0,1])
+    self.logic.currentInstance.SetUpInRAS([0,0,1])
     
   def changeUpToInferior(self):
-    self.logic.SetUpInRAS([0,0,-1])
+    self.logic.currentInstance.SetUpInRAS([0,0,-1])
     
   # SPECIFIC TO FOLLOW
   
   def updateFollowLogicParameters(self):
-    self.logic.setModelNode(self.modelSelector.currentNode())
-    self.logic.setViewNode(self.viewSelector.currentNode())
-    self.logic.setSafeXMaximum(self.safeZoneXRangeSlider.maximumValue/100.0)
-    self.logic.setSafeXMinimum(self.safeZoneXRangeSlider.minimumValue/100.0)
-    self.logic.setSafeYMaximum(self.safeZoneYRangeSlider.maximumValue/100.0)
-    self.logic.setSafeYMinimum(self.safeZoneYRangeSlider.minimumValue/100.0)
-    self.logic.setSafeZMaximum(self.safeZoneZRangeSlider.maximumValue/100.0)
-    self.logic.setSafeZMinimum(self.safeZoneZRangeSlider.minimumValue/100.0)
-    self.logic.setAdjustX(self.adjustXCheckbox.isChecked())
-    self.logic.setAdjustY(self.adjustYCheckbox.isChecked())
-    self.logic.setAdjustZ(self.adjustZCheckbox.isChecked())
-    self.logic.setUpdateRateSeconds(self.updateRateSlider.value)
-    self.logic.setTimeUnsafeToAdjustMaximumSeconds(self.timeUnsafeToAdjustSlider.value)
-    self.logic.setTimeAdjustToRestMaximumSeconds(self.timeAdjustToRestSlider.value)
-    self.logic.setTimeRestToSafeMaximumSeconds(self.timeRestToSafeSlider.value)
+    self.logic.currentInstance.setModelNode(self.modelSelector.currentNode())
+    self.logic.currentInstance.setViewNode(self.viewSelector.currentNode())
+    self.logic.currentInstance.setSafeXMaximum(self.safeZoneXRangeSlider.maximumValue/100.0)
+    self.logic.currentInstance.setSafeXMinimum(self.safeZoneXRangeSlider.minimumValue/100.0)
+    self.logic.currentInstance.setSafeYMaximum(self.safeZoneYRangeSlider.maximumValue/100.0)
+    self.logic.currentInstance.setSafeYMinimum(self.safeZoneYRangeSlider.minimumValue/100.0)
+    self.logic.currentInstance.setSafeZMaximum(self.safeZoneZRangeSlider.maximumValue/100.0)
+    self.logic.currentInstance.setSafeZMinimum(self.safeZoneZRangeSlider.minimumValue/100.0)
+    self.logic.currentInstance.setAdjustX(self.adjustXCheckbox.isChecked())
+    self.logic.currentInstance.setAdjustY(self.adjustYCheckbox.isChecked())
+    self.logic.currentInstance.setAdjustZ(self.adjustZCheckbox.isChecked())
+    self.logic.currentInstance.setUpdateRateSeconds(self.updateRateSlider.value)
+    self.logic.currentInstance.setTimeUnsafeToAdjustMaximumSeconds(self.timeUnsafeToAdjustSlider.value)
+    self.logic.currentInstance.setTimeAdjustToRestMaximumSeconds(self.timeAdjustToRestSlider.value)
+    self.logic.currentInstance.setTimeRestToSafeMaximumSeconds(self.timeRestToSafeSlider.value)
       
   def enableFollowParameterWidgets(self):
     self.modelSelector.enabled = True
-    self.viewSelector.enabled = True
     self.safeZoneXRangeSlider.enabled = True
     self.safeZoneYRangeSlider.enabled = True
     self.safeZoneZRangeSlider.enabled = True
@@ -631,7 +670,6 @@ class ViewpointWidget:
   
   def disableFollowParameterWidgets(self):
     self.modelSelector.enabled = False
-    self.viewSelector.enabled = False
     self.safeZoneXRangeSlider.enabled = False
     self.safeZoneYRangeSlider.enabled = False
     self.safeZoneZRangeSlider.enabled = False
@@ -656,6 +694,27 @@ class ViewpointWidget:
 #
 
 class ViewpointLogic:
+
+  def __init__(self):
+    self.nodeInstanceDictionary = {}
+    self.currentInstance = None
+    
+  def changeCurrentViewNode(self, viewNode):
+    if (viewNode == None):
+      logging.error("viewNode given to Viewpoint logic is None. Aborting operation.")
+      return
+    if (not viewNode in self.nodeInstanceDictionary):
+      self.nodeInstanceDictionary[viewNode] = ViewpointInstance()
+    self.currentInstance = self.nodeInstanceDictionary[viewNode]
+
+#
+# Viewpoint Instance
+# Each view is associated with its own viewpoint instance,
+# this allows support of multiple views with their own
+# viewpoint parameters and settings.
+#
+
+class ViewpointInstance:
   def __init__(self):
     # global
     self.viewNode = None
