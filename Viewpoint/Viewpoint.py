@@ -60,10 +60,11 @@ class ViewpointWidget:
     self.toggleTrackViewButtonTextState1 = "Disable Track View Mode"
     
     # FOLLOW
-    self.rangeSliderMaximum = 100
-    self.rangeSliderMinimum = -100
-    self.rangeSliderMaximumValueDefault = 100
-    self.rangeSliderMinimumValueDefault = -100
+    self.sliderMultiplier = 100.0
+    self.rangeSliderMaximum = self.sliderMultiplier
+    self.rangeSliderMinimum = -self.sliderMultiplier
+    self.rangeSliderMaximumValueDefault = self.sliderMultiplier
+    self.rangeSliderMinimumValueDefault = -self.sliderMultiplier
     
     self.sliderSingleStepValue = 0.01
     self.sliderPageStepValue   = 0.1
@@ -462,18 +463,21 @@ class ViewpointWidget:
     
   def changeViewNode(self):
     newViewNode = self.viewSelector.currentNode()
-    if (not newViewNode):
+    if (newViewNode):
+      self.logic.changeCurrentViewNode(newViewNode)
+    self.updateWidgets()
+      
+  def updateWidgets(self):
+    if (not self.logic.currentInstance):
       self.disableFollowAllWidgets()
       self.disableTrackViewAllWidgets()
       return;
-      
     # assume all widgets are to be enabled, disable as necessary
     self.enableFollowAllWidgets()
     self.enableTrackViewAllWidgets()
     self.toggleTrackViewButton.setText(self.toggleTrackViewButtonTextState0)
     self.toggleFollowButton.setText(self.toggleFollowButtonTextState0)
     
-    self.logic.changeCurrentViewNode(newViewNode)
     if (self.logic.currentInstance.currentMode == self.logic.currentInstance.currentModeFOLLOW):
       self.disableFollowParameterWidgets()
       self.disableTrackViewAllWidgets()
@@ -484,51 +488,103 @@ class ViewpointWidget:
       self.disableFollowAllWidgets()
       self.toggleFollowButton.setText(self.toggleFollowButtonTextState0)
       self.toggleTrackViewButton.setText(self.toggleTrackViewButtonTextState1)
+      
+    # Track View parameters
+    self.transformSelector.setCurrentNode(self.logic.currentInstance.transformNode)
+    if (self.logic.currentInstance.forcedUpDirection and self.logic.currentInstance.forcedTarget):
+      self.degreesOfFreedom6RadioButton.setChecked(0)
+      self.degreesOfFreedom5RadioButton.setChecked(0)
+      self.degreesOfFreedom3RadioButton.setChecked(2)
+    elif (self.logic.currentInstance.forcedUpDirection):
+      self.degreesOfFreedom6RadioButton.setChecked(0)
+      self.degreesOfFreedom5RadioButton.setChecked(2)
+      self.degreesOfFreedom3RadioButton.setChecked(0)
+    else:
+      self.degreesOfFreedom6RadioButton.setChecked(2)
+      self.degreesOfFreedom5RadioButton.setChecked(0)
+      self.degreesOfFreedom3RadioButton.setChecked(0)
+    self.upDirectionAnteriorRadioButton.setChecked(0)
+    self.upDirectionPosteriorRadioButton.setChecked(0)
+    self.upDirectionRightRadioButton.setChecked(0)
+    self.upDirectionLeftRadioButton.setChecked(0)
+    self.upDirectionSuperiorRadioButton.setChecked(0)
+    self.upDirectionInferiorRadioButton.setChecked(0)
+    if (self.logic.currentInstance.isUpDirectionEqualTo(self.logic.currentInstance.upInRASRight)):
+      self.upDirectionRightRadioButton.setChecked(2)
+    elif (self.logic.currentInstance.isUpDirectionEqualTo(self.logic.currentInstance.upInRASLeft)):
+      self.upDirectionLeftRadioButton.setChecked(2)
+    elif (self.logic.currentInstance.isUpDirectionEqualTo(self.logic.currentInstance.upInRASAnterior)):
+      self.upDirectionAnteriorRadioButton.setChecked(2)
+    elif (self.logic.currentInstance.isUpDirectionEqualTo(self.logic.currentInstance.upInRASPosterior)):
+      self.upDirectionPosteriorRadioButton.setChecked(2)
+    elif (self.logic.currentInstance.isUpDirectionEqualTo(self.logic.currentInstance.upInRASSuperior)):
+      self.upDirectionSuperiorRadioButton.setChecked(2)
+    elif (self.logic.currentInstance.isUpDirectionEqualTo(self.logic.currentInstance.upInRASInferior)):
+      self.upDirectionInferiorRadioButton.setChecked(2)
+    self.targetModelSelector.setCurrentNode(self.logic.currentInstance.targetModelNode)
+    self.cameraViewAngleSlider.value = self.logic.currentInstance.cameraViewAngleDeg
+    self.cameraParallelScaleSlider.value = self.logic.currentInstance.cameraParallelScale
+    self.cameraXPosSlider.value = self.logic.currentInstance.cameraXPosMm
+    self.cameraYPosSlider.value = self.logic.currentInstance.cameraYPosMm
+    self.cameraZPosSlider.value = self.logic.currentInstance.cameraZPosMm
+    if (self.logic.currentInstance.cameraParallelProjection):
+      self.cameraParallelProjectionCheckbox.setCheckState(2)
+    else:
+      self.cameraParallelProjectionCheckbox.setCheckState(0)
+    # Follow parameters
+    self.modelSelector.setCurrentNode(self.logic.currentInstance.modelNode)
+    self.safeZoneXRangeSlider.maximumValue = self.logic.currentInstance.safeXMaximumNormalizedViewport*self.sliderMultiplier
+    self.safeZoneXRangeSlider.minimumValue = self.logic.currentInstance.safeXMinimumNormalizedViewport*self.sliderMultiplier
+    self.safeZoneYRangeSlider.maximumValue = self.logic.currentInstance.safeYMaximumNormalizedViewport*self.sliderMultiplier
+    self.safeZoneYRangeSlider.minimumValue = self.logic.currentInstance.safeYMinimumNormalizedViewport*self.sliderMultiplier
+    self.safeZoneZRangeSlider.maximumValue = self.logic.currentInstance.safeZMaximumNormalizedViewport*self.sliderMultiplier
+    self.safeZoneZRangeSlider.minimumValue = self.logic.currentInstance.safeZMinimumNormalizedViewport*self.sliderMultiplier
+    self.updateRateSlider.value = self.logic.currentInstance.updateRateSeconds
+    self.timeUnsafeToAdjustSlider.value = self.logic.currentInstance.timeUnsafeToAdjustMaximumSeconds
+    self.timeAdjustToRestSlider.value = self.logic.currentInstance.timeAdjustToRestMaximumSeconds
+    self.timeRestToSafeSlider.value = self.logic.currentInstance.timeRestToSafeMaximumSeconds
+    if (self.logic.currentInstance.adjustX):
+      self.adjustXCheckbox.setCheckState(2)
+    else:
+      self.adjustXCheckbox.setCheckState(0)
+    if (self.logic.currentInstance.adjustY):
+      self.adjustYCheckbox.setCheckState(2)
+    else:
+      self.adjustYCheckbox.setCheckState(0)
+    if (self.logic.currentInstance.adjustZ):
+      self.adjustZCheckbox.setCheckState(2)
+    else:
+      self.adjustZCheckbox.setCheckState(0)
 
   def toggleTrackViewButtonPressed(self):
     if self.logic.currentInstance.currentMode == self.logic.currentInstance.currentModeOFF:
       self.updateTrackViewParameters();
       self.logic.currentInstance.startTrackView()
-      if (self.logic.currentInstance.isCurrentModeTRACKVIEW()):
-        self.disableTrackViewSelectors()
-        self.disableFollowAllWidgets()
-        self.toggleTrackViewButtonState = 1
-        self.toggleTrackViewButton.setText(self.toggleTrackViewButtonTextState1)
     elif self.logic.currentInstance.currentMode == self.logic.currentInstance.currentModeTRACKVIEW:
       self.logic.currentInstance.stopTrackView()
-      if (self.logic.currentInstance.isCurrentModeOFF()):
-        self.enableTrackViewSelectors()
-        self.enableFollowAllWidgets()
-        self.toggleTrackViewButtonState = 0
-        self.toggleTrackViewButton.setText(self.toggleTrackViewButtonTextState0)
     else:
       logging.error("Error: Unhandled case in toggleTrackViewButtonPressed. Current state is neither off nor track view.")
+    self.updateWidgets()
     
   def toggleFollowButtonPressed(self):
     if self.logic.currentInstance.currentMode == self.logic.currentInstance.currentModeOFF:
       self.updateFollowLogicParameters()
       self.logic.currentInstance.startFollow()
-      if (self.logic.currentInstance.isCurrentModeFOLLOW()):
-        self.disableFollowParameterWidgets()
-        self.disableTrackViewAllWidgets()
-        self.toggleFollowButtonState = 1
-        self.toggleFollowButton.setText(self.toggleFollowButtonTextState1)
     elif self.logic.currentInstance.currentMode == self.logic.currentInstance.currentModeFOLLOW:
       self.logic.currentInstance.stopFollow()
-      if (self.logic.currentInstance.isCurrentModeOFF()):
-        self.enableFollowParameterWidgets()
-        self.enableTrackViewAllWidgets()
-        self.toggleFollowButtonState = 0
-        self.toggleFollowButton.setText(self.toggleFollowButtonTextState0)
     else:
       logging.error("Error: Unhandled case in toggleFollowButtonPressed. Current state is neither off nor follow.")
+    self.updateWidgets()
       
   # SPECIFIC TO TRACK-VIEW
   
   def updateTrackViewParameters(self):
-    self.logic.currentInstance.setViewNode(self.viewSelector.currentNode())
-    self.logic.currentInstance.setTransformNode(self.transformSelector.currentNode())
-    self.logic.currentInstance.setTargetModelNode(self.targetModelSelector.currentNode())
+    if (self.viewSelector.currentNode()):
+      self.logic.currentInstance.setViewNode(self.viewSelector.currentNode())
+    if (self.transformSelector.currentNode()):
+      self.logic.currentInstance.setTransformNode(self.transformSelector.currentNode())
+    if (self.targetModelSelector.currentNode()):
+      self.logic.currentInstance.setTargetModelNode(self.targetModelSelector.currentNode())
   
   def enableTrackViewSelectors(self):
     self.transformSelector.enabled = True
@@ -649,12 +705,12 @@ class ViewpointWidget:
   def updateFollowLogicParameters(self):
     self.logic.currentInstance.setModelNode(self.modelSelector.currentNode())
     self.logic.currentInstance.setViewNode(self.viewSelector.currentNode())
-    self.logic.currentInstance.setSafeXMaximum(self.safeZoneXRangeSlider.maximumValue/100.0)
-    self.logic.currentInstance.setSafeXMinimum(self.safeZoneXRangeSlider.minimumValue/100.0)
-    self.logic.currentInstance.setSafeYMaximum(self.safeZoneYRangeSlider.maximumValue/100.0)
-    self.logic.currentInstance.setSafeYMinimum(self.safeZoneYRangeSlider.minimumValue/100.0)
-    self.logic.currentInstance.setSafeZMaximum(self.safeZoneZRangeSlider.maximumValue/100.0)
-    self.logic.currentInstance.setSafeZMinimum(self.safeZoneZRangeSlider.minimumValue/100.0)
+    self.logic.currentInstance.setSafeXMaximum(self.safeZoneXRangeSlider.maximumValue/self.sliderMultiplier)
+    self.logic.currentInstance.setSafeXMinimum(self.safeZoneXRangeSlider.minimumValue/self.sliderMultiplier)
+    self.logic.currentInstance.setSafeYMaximum(self.safeZoneYRangeSlider.maximumValue/self.sliderMultiplier)
+    self.logic.currentInstance.setSafeYMinimum(self.safeZoneYRangeSlider.minimumValue/self.sliderMultiplier)
+    self.logic.currentInstance.setSafeZMaximum(self.safeZoneZRangeSlider.maximumValue/self.sliderMultiplier)
+    self.logic.currentInstance.setSafeZMinimum(self.safeZoneZRangeSlider.minimumValue/self.sliderMultiplier)
     self.logic.currentInstance.setAdjustX(self.adjustXCheckbox.isChecked())
     self.logic.currentInstance.setAdjustY(self.adjustYCheckbox.isChecked())
     self.logic.currentInstance.setAdjustZ(self.adjustZCheckbox.isChecked())
@@ -747,6 +803,12 @@ class ViewpointInstance:
     self.forcedUpDirection = False # False = if the user rotates the tool, then the camera rotates with it
                                    # True = the up direction is fixed according to this next variable:
     self.upInRAS = [0,1,0] # Anterior by default
+    self.upInRASRight = [1,0,0]
+    self.upInRASLeft = [-1,0,0]
+    self.upInRASAnterior = [0,1,0]
+    self.upInRASPosterior = [0,-1,0]
+    self.upInRASSuperior = [0,0,1]
+    self.upInRASInferior = [0,0,-1]
     
     self.forcedTarget = False # False = camera points the direction the user is pointing it
                               # True = camera always points to the target model
@@ -767,7 +829,7 @@ class ViewpointInstance:
     
     self.adjustX = True
     self.adjustY = True
-    self.adjustZ = True
+    self.adjustZ = False
     
     self.modelNode = None
     
@@ -775,7 +837,7 @@ class ViewpointInstance:
     self.timeAdjustToRestMaximumSeconds = 0.2
     self.timeRestToSafeMaximumSeconds = 1
     
-    self.updateRateSeconds = 0.1
+    self.updateRateSeconds = 0.02
     
     # current state
     self.transformNodeObserverTags = []
@@ -827,6 +889,9 @@ class ViewpointInstance:
     self.transformNode = transformNode
     
   def setTargetModelNode(self, targetModelNode):
+    if (self.forcedTarget and not targetModelNode):
+      logging.error("Error in setTargetModelNode: No targetModelNode provided as input. Check input parameters.")
+      return
     self.targetModelNode = targetModelNode
     targetModel = targetModelNode.GetPolyData()
     targetModelBoundingBox = targetModel.GetBounds()
@@ -853,6 +918,13 @@ class ViewpointInstance:
   def changeTo6DOFMode(self):
     self.forcedUpDirection = False
     self.forcedTarget = False
+  
+  def isUpDirectionEqualTo(self, compareDirection):
+    if (compareDirection[0]*self.upInRAS[0]+
+        compareDirection[1]*self.upInRAS[1]+
+        compareDirection[2]*self.upInRAS[2] > 0.9999): # dot product close to 1
+      return True;
+    return False;
 
   def startTrackView(self):
     logging.debug("Start Viewpoint Mode")
@@ -866,6 +938,10 @@ class ViewpointInstance:
       
     if (not self.transformNode):
       logging.warning("A node is missing. Nothing will happen until the comboboxes have items selected.")
+      return
+      
+    if (self.forcedTarget and not self.targetModelNode):
+      logging.error("Error in setTargetModelNode: No targetModelNode provided as input when forced target is set. Check input parameters.")
       return
   
     self.currentMode = self.currentModeTRACKVIEW
@@ -1172,7 +1248,6 @@ class ViewpointInstance:
     self.modelTargetPositionViewport = [(self.safeXMinimumNormalizedViewport + self.safeXMaximumNormalizedViewport)/2.0,
                                         (self.safeYMinimumNormalizedViewport + self.safeYMaximumNormalizedViewport)/2.0,
                                         (self.safeZMinimumNormalizedViewport + self.safeZMaximumNormalizedViewport)/2.0]
-    print self.modelTargetPositionViewport
     
   def setCameraTranslationParameters(self):
     viewName = self.viewNode.GetName()
