@@ -703,21 +703,21 @@ class ViewpointWidget:
   # SPECIFIC TO FOLLOW
   
   def updateFollowLogicParameters(self):
-    self.logic.currentInstance.setFollowModelNode(self.modelSelector.currentNode())
     self.logic.currentInstance.setViewNode(self.viewSelector.currentNode())
-    self.logic.currentInstance.setSafeXMaximum(self.safeZoneXRangeSlider.maximumValue/self.sliderMultiplier)
-    self.logic.currentInstance.setSafeXMinimum(self.safeZoneXRangeSlider.minimumValue/self.sliderMultiplier)
-    self.logic.currentInstance.setSafeYMaximum(self.safeZoneYRangeSlider.maximumValue/self.sliderMultiplier)
-    self.logic.currentInstance.setSafeYMinimum(self.safeZoneYRangeSlider.minimumValue/self.sliderMultiplier)
-    self.logic.currentInstance.setSafeZMaximum(self.safeZoneZRangeSlider.maximumValue/self.sliderMultiplier)
-    self.logic.currentInstance.setSafeZMinimum(self.safeZoneZRangeSlider.minimumValue/self.sliderMultiplier)
-    self.logic.currentInstance.setAdjustX(self.adjustXCheckbox.isChecked())
-    self.logic.currentInstance.setAdjustY(self.adjustYCheckbox.isChecked())
-    self.logic.currentInstance.setAdjustZ(self.adjustZCheckbox.isChecked())
-    self.logic.currentInstance.setUpdateRateSeconds(self.updateRateSlider.value)
-    self.logic.currentInstance.setTimeUnsafeToAdjustMaximumSeconds(self.timeUnsafeToAdjustSlider.value)
-    self.logic.currentInstance.setTimeAdjustToRestMaximumSeconds(self.timeAdjustToRestSlider.value)
-    self.logic.currentInstance.setTimeRestToSafeMaximumSeconds(self.timeRestToSafeSlider.value)
+    self.logic.currentInstance.followSetModelNode(self.modelSelector.currentNode())
+    self.logic.currentInstance.followSetSafeXMaximum(self.safeZoneXRangeSlider.maximumValue/self.sliderMultiplier)
+    self.logic.currentInstance.followSetSafeXMinimum(self.safeZoneXRangeSlider.minimumValue/self.sliderMultiplier)
+    self.logic.currentInstance.followSetSafeYMaximum(self.safeZoneYRangeSlider.maximumValue/self.sliderMultiplier)
+    self.logic.currentInstance.followSetSafeYMinimum(self.safeZoneYRangeSlider.minimumValue/self.sliderMultiplier)
+    self.logic.currentInstance.followSetSafeZMaximum(self.safeZoneZRangeSlider.maximumValue/self.sliderMultiplier)
+    self.logic.currentInstance.followSetSafeZMinimum(self.safeZoneZRangeSlider.minimumValue/self.sliderMultiplier)
+    self.logic.currentInstance.followSetAdjustX(self.adjustXCheckbox.isChecked())
+    self.logic.currentInstance.followSetAdjustY(self.adjustYCheckbox.isChecked())
+    self.logic.currentInstance.followSetAdjustZ(self.adjustZCheckbox.isChecked())
+    self.logic.currentInstance.followSetUpdateRateSeconds(self.updateRateSlider.value)
+    self.logic.currentInstance.followSetTimeUnsafeToAdjustMaximumSeconds(self.timeUnsafeToAdjustSlider.value)
+    self.logic.currentInstance.followSetTimeAdjustToRestMaximumSeconds(self.timeAdjustToRestSlider.value)
+    self.logic.currentInstance.followSetTimeRestToSafeMaximumSeconds(self.timeRestToSafeSlider.value)
       
   def enableFollowParameterWidgets(self):
     self.modelSelector.enabled = True
@@ -866,6 +866,80 @@ class ViewpointInstance:
     
   def isCurrentModeFOLLOW(self):
     return (self.currentMode == self.currentModeFOLLOW)
+    
+  def getCameraNode(self, viewName):
+    """
+    Get camera for the selected 3D view
+    """
+    camerasLogic = slicer.modules.cameras.logic()
+    camera = camerasLogic.GetViewActiveCameraNode(slicer.util.getNode(viewName))
+    return camera
+      
+  def convertRasToViewport(self, positionRas):
+    """Computes normalized view coordinates from RAS coordinates
+    Normalized view coordinates origin is in bottom-left corner, range is [-1,+1]
+    """
+    x = vtk.mutable(positionRas[0])
+    y = vtk.mutable(positionRas[1])
+    z = vtk.mutable(positionRas[2])
+    view = slicer.app.layoutManager().threeDWidget(self.getThreeDWidgetIndex()).threeDView()
+    renderer = view.renderWindow().GetRenderers().GetItemAsObject(0)
+    renderer.WorldToView(x,y,z)
+    return [x.get(), y.get(), z.get()]
+    
+  def convertViewportToRas(self, positionViewport):
+    x = vtk.mutable(positionViewport[0])
+    y = vtk.mutable(positionViewport[1])
+    z = vtk.mutable(positionViewport[2])
+    view = slicer.app.layoutManager().threeDWidget(self.getThreeDWidgetIndex()).threeDView()
+    renderer = view.renderWindow().GetRenderers().GetItemAsObject(0)
+    renderer.ViewToWorld(x,y,z)
+    return [x.get(), y.get(), z.get()]
+    
+  def convertPointRasToCamera(self, positionRas):
+    viewName = self.viewNode.GetName()
+    cameraNode = self.getCameraNode(viewName)
+    cameraObj = cameraNode.GetCamera()
+    modelViewTransform = cameraObj.GetModelViewTransformObject()
+    positionRasHomog = [positionRas[0], positionRas[1], positionRas[2], 1] # convert to homogeneous
+    positionCamHomog = [0,0,0,1] # to be filled in
+    modelViewTransform.MultiplyPoint(positionRasHomog, positionCamHomog)
+    positionCam = [positionCamHomog[0], positionCamHomog[1], positionCamHomog[2]] # convert from homogeneous
+    return positionCam
+
+  def convertVectorCameraToRas(self, positionCam):
+    viewName = self.viewNode.GetName()
+    cameraNode = self.getCameraNode(viewName)
+    cameraObj = cameraNode.GetCamera()
+    modelViewTransform = cameraObj.GetModelViewTransformObject()
+    modelViewMatrix = modelViewTransform.GetMatrix()
+    modelViewInverseMatrix = vtk.vtkMatrix4x4()
+    vtk.vtkMatrix4x4.Invert(modelViewMatrix, modelViewInverseMatrix)
+    modelViewInverseTransform = vtk.vtkTransform()
+    modelViewInverseTransform.DeepCopy(modelViewTransform)
+    modelViewInverseTransform.SetMatrix(modelViewInverseMatrix)
+    positionCamHomog = [positionCam[0], positionCam[1], positionCam[2], 0] # convert to homogeneous
+    positionRasHomog = [0,0,0,0] # to be filled in
+    modelViewInverseTransform.MultiplyPoint(positionCamHomog, positionRasHomog)
+    positionRas = [positionRasHomog[0], positionRasHomog[1], positionRasHomog[2]] # convert from homogeneous
+    return positionRas
+    
+  def resetCameraClippingRange(self):
+    view = slicer.app.layoutManager().threeDWidget(self.getThreeDWidgetIndex()).threeDView()
+    renderer = view.renderWindow().GetRenderers().GetItemAsObject(0)
+    renderer.ResetCameraClippingRange()
+
+  def getThreeDWidgetIndex(self):
+    if (not self.viewNode):
+      logging.error("Error in getThreeDWidgetIndex: No View node selected. Returning 0.");
+      return 0
+    layoutManager = slicer.app.layoutManager()
+    for threeDViewIndex in xrange(layoutManager.threeDViewCount):
+      threeDViewNode = layoutManager.threeDWidget(threeDViewIndex).threeDView().mrmlViewNode()
+      if (threeDViewNode == self.viewNode):
+        return threeDViewIndex
+    logging.error("Error in getThreeDWidgetIndex: Can't find the index. Selected View does not exist? Returning 0.");
+    return 0
     
   # TRACK VIEW
 
@@ -1111,7 +1185,7 @@ class ViewpointInstance:
     if not self.followModelNode:
       logging.warning("Model node not set. Will not proceed until model node is selected.")
       return
-    self.setModelTargetPositionViewport()
+    self.followSetModelTargetPositionViewport()
     self.followSystemTimeAtLastUpdateSeconds = time.time()
     nextUpdateTimerMilliseconds = self.followUpdateRateSeconds * 1000
     qt.QTimer.singleShot(nextUpdateTimerMilliseconds ,self.followUpdate)
@@ -1134,13 +1208,13 @@ class ViewpointInstance:
     
     self.followTimeInStateSeconds = self.followTimeInStateSeconds + deltaTimeSeconds
 
-    self.updateModelInSafeZone()
-    self.applyStateMachine()
+    self.followUpdateModelInSafeZone()
+    self.followApplyStateMachine()
       
     nextUpdateTimerMilliseconds = self.followUpdateRateSeconds * 1000
     qt.QTimer.singleShot(nextUpdateTimerMilliseconds ,self.followUpdate)
 
-  def applyStateMachine(self):
+  def followApplyStateMachine(self):
     if (self.followState == self.followStateUNSAFE and self.followModelInSafeZone):
       self.followState = self.followStateSAFE
       self.followTimeInStateSeconds = 0
@@ -1148,11 +1222,11 @@ class ViewpointInstance:
       self.followState = self.followStateUNSAFE
       self.followTimeInStateSeconds = 0
     if (self.followState == self.followStateUNSAFE and self.followTimeInStateSeconds >= self.followTimeUnsafeToAdjustMaximumSeconds):
-      self.setCameraTranslationParameters()
+      self.followSetCameraTranslationParameters()
       self.followState = self.followStateADJUST
       self.followTimeInStateSeconds = 0
     if (self.followState == self.followStateADJUST):
-      self.translateCamera()
+      self.followTranslateCamera()
       if (self.followTimeInStateSeconds >= self.followTimeAdjustToRestMaximumSeconds):
         self.followState = self.followStateREST
         self.followTimeInStateSeconds = 0
@@ -1160,11 +1234,11 @@ class ViewpointInstance:
       self.followState = self.followStateSAFE
       self.followTimeInStateSeconds = 0
       
-  def updateModelInSafeZone(self):
+  def followUpdateModelInSafeZone(self):
     if (self.followState == self.followStateADJUST or
         self.followState == self.followStateREST):
       return
-    pointsRas = self.getModelCurrentBoundingBoxPointsRas()
+    pointsRas = self.followGetModelCurrentBoundingBoxPointsRas()
     # Assume we are safe, until shown otherwise
     foundSafe = True
     for pointRas in pointsRas:
@@ -1182,12 +1256,12 @@ class ViewpointInstance:
         break
     self.followModelInSafeZone = foundSafe
 
-  def setModelTargetPositionViewport(self):
+  def followSetModelTargetPositionViewport(self):
     self.followModelTargetPositionViewport = [(self.followSafeXMinimumNormalizedViewport + self.followSafeXMaximumNormalizedViewport)/2.0,
                                         (self.followSafeYMinimumNormalizedViewport + self.followSafeYMaximumNormalizedViewport)/2.0,
                                         (self.followSafeZMinimumNormalizedViewport + self.followSafeZMaximumNormalizedViewport)/2.0]
     
-  def setCameraTranslationParameters(self):
+  def followSetCameraTranslationParameters(self):
     viewName = self.viewNode.GetName()
     cameraNode = self.getCameraNode(viewName)
     cameraPosRas = [0,0,0]
@@ -1198,8 +1272,8 @@ class ViewpointInstance:
     self.followBaseCameraFocalPointRas = cameraFocRas
     
     # find the translation in RAS
-    modelCurrentPositionCamera = self.getModelCurrentCenterCamera()
-    modelTargetPositionCamera = self.getModelTargetPositionCamera()
+    modelCurrentPositionCamera = self.followGetModelCurrentCenterCamera()
+    modelTargetPositionCamera = self.followGetModelTargetPositionCamera()
     cameraTranslationCamera = [0,0,0]
     if self.followAdjustX:
       cameraTranslationCamera[0] = modelCurrentPositionCamera[0] - modelTargetPositionCamera[0]
@@ -1209,7 +1283,7 @@ class ViewpointInstance:
       cameraTranslationCamera[2] = modelCurrentPositionCamera[2] - modelTargetPositionCamera[2]
     self.followBaseCameraTranslationRas = self.convertVectorCameraToRas(cameraTranslationCamera)
   
-  def translateCamera(self):
+  def followTranslateCamera(self):
     # linear interpolation between base and target positions, based on the timer
     weightTarget = 1 # default value
     if (self.followTimeAdjustToRestMaximumSeconds != 0):
@@ -1228,7 +1302,7 @@ class ViewpointInstance:
     cameraNode.SetFocalPoint(cameraNewFocalPointRas)
     self.resetCameraClippingRange()
     
-  def getModelCurrentCenterRas(self):
+  def followGetModelCurrentCenterRas(self):
     modelBoundsRas = [0,0,0,0,0,0]
     self.followModelNode.GetRASBounds(modelBoundsRas)
     modelCenterX = (modelBoundsRas[0] + modelBoundsRas[1]) / 2
@@ -1237,12 +1311,12 @@ class ViewpointInstance:
     modelPosRas = [modelCenterX, modelCenterY, modelCenterZ]
     return modelPosRas
     
-  def getModelCurrentCenterCamera(self):
-    modelCenterRas = self.getModelCurrentCenterRas()
+  def followGetModelCurrentCenterCamera(self):
+    modelCenterRas = self.followGetModelCurrentCenterRas()
     modelCenterCamera = self.convertPointRasToCamera(modelCenterRas)
     return modelCenterCamera
     
-  def getModelCurrentBoundingBoxPointsRas(self):
+  def followGetModelCurrentBoundingBoxPointsRas(self):
     pointsRas = []
     boundsRas = [0,0,0,0,0,0]
     self.followModelNode.GetRASBounds(boundsRas)
@@ -1257,144 +1331,70 @@ class ViewpointInstance:
           pointsRas.append(pointRas)
     return pointsRas
     
-  def getModelTargetPositionRas(self):
+  def followGetModelTargetPositionRas(self):
     return self.convertViewportToRas(self.followModelTargetPositionViewport)
     
-  def getModelTargetPositionCamera(self):
-    modelTargetPositionRas = self.getModelTargetPositionRas()
+  def followGetModelTargetPositionCamera(self):
+    modelTargetPositionRas = self.followGetModelTargetPositionRas()
     modelTargetPositionCamera = self.convertPointRasToCamera(modelTargetPositionRas)
     return modelTargetPositionCamera
     
-  def getCameraNode(self, viewName):
-    """
-    Get camera for the selected 3D view
-    """
-    camerasLogic = slicer.modules.cameras.logic()
-    camera = camerasLogic.GetViewActiveCameraNode(slicer.util.getNode(viewName))
-    return camera
-      
-  def convertRasToViewport(self, positionRas):
-    """Computes normalized view coordinates from RAS coordinates
-    Normalized view coordinates origin is in bottom-left corner, range is [-1,+1]
-    """
-    x = vtk.mutable(positionRas[0])
-    y = vtk.mutable(positionRas[1])
-    z = vtk.mutable(positionRas[2])
-    view = slicer.app.layoutManager().threeDWidget(self.getThreeDWidgetIndex()).threeDView()
-    renderer = view.renderWindow().GetRenderers().GetItemAsObject(0)
-    renderer.WorldToView(x,y,z)
-    return [x.get(), y.get(), z.get()]
-    
-  def convertViewportToRas(self, positionViewport):
-    x = vtk.mutable(positionViewport[0])
-    y = vtk.mutable(positionViewport[1])
-    z = vtk.mutable(positionViewport[2])
-    view = slicer.app.layoutManager().threeDWidget(self.getThreeDWidgetIndex()).threeDView()
-    renderer = view.renderWindow().GetRenderers().GetItemAsObject(0)
-    renderer.ViewToWorld(x,y,z)
-    return [x.get(), y.get(), z.get()]
-    
-  def convertPointRasToCamera(self, positionRas):
-    viewName = self.viewNode.GetName()
-    cameraNode = self.getCameraNode(viewName)
-    cameraObj = cameraNode.GetCamera()
-    modelViewTransform = cameraObj.GetModelViewTransformObject()
-    positionRasHomog = [positionRas[0], positionRas[1], positionRas[2], 1] # convert to homogeneous
-    positionCamHomog = [0,0,0,1] # to be filled in
-    modelViewTransform.MultiplyPoint(positionRasHomog, positionCamHomog)
-    positionCam = [positionCamHomog[0], positionCamHomog[1], positionCamHomog[2]] # convert from homogeneous
-    return positionCam
-
-  def convertVectorCameraToRas(self, positionCam):
-    viewName = self.viewNode.GetName()
-    cameraNode = self.getCameraNode(viewName)
-    cameraObj = cameraNode.GetCamera()
-    modelViewTransform = cameraObj.GetModelViewTransformObject()
-    modelViewMatrix = modelViewTransform.GetMatrix()
-    modelViewInverseMatrix = vtk.vtkMatrix4x4()
-    vtk.vtkMatrix4x4.Invert(modelViewMatrix, modelViewInverseMatrix)
-    modelViewInverseTransform = vtk.vtkTransform()
-    modelViewInverseTransform.DeepCopy(modelViewTransform)
-    modelViewInverseTransform.SetMatrix(modelViewInverseMatrix)
-    positionCamHomog = [positionCam[0], positionCam[1], positionCam[2], 0] # convert to homogeneous
-    positionRasHomog = [0,0,0,0] # to be filled in
-    modelViewInverseTransform.MultiplyPoint(positionCamHomog, positionRasHomog)
-    positionRas = [positionRasHomog[0], positionRasHomog[1], positionRasHomog[2]] # convert from homogeneous
-    return positionRas
-    
-  def resetCameraClippingRange(self):
-    view = slicer.app.layoutManager().threeDWidget(self.getThreeDWidgetIndex()).threeDView()
-    renderer = view.renderWindow().GetRenderers().GetItemAsObject(0)
-    renderer.ResetCameraClippingRange()
-
-  def getThreeDWidgetIndex(self):
-    if (not self.viewNode):
-      logging.error("Error in getThreeDWidgetIndex: No View node selected. Returning 0.");
-      return 0
-    layoutManager = slicer.app.layoutManager()
-    for threeDViewIndex in xrange(layoutManager.threeDViewCount):
-      threeDViewNode = layoutManager.threeDWidget(threeDViewIndex).threeDView().mrmlViewNode()
-      if (threeDViewNode == self.viewNode):
-        return threeDViewIndex
-    logging.error("Error in getThreeDWidgetIndex: Can't find the index. Selected View does not exist? Returning 0.");
-    return 0
-    
-  def setSafeXMinimum(self, val):
+  def followSetSafeXMinimum(self, val):
     self.followSafeXMinimumNormalizedViewport = val
     
-  def setSafeXMaximum(self, val):
+  def followSetSafeXMaximum(self, val):
     self.followSafeXMaximumNormalizedViewport = val
     
-  def setSafeYMinimum(self, val):
+  def followSetSafeYMinimum(self, val):
     self.followSafeYMinimumNormalizedViewport = val
     
-  def setSafeYMaximum(self, val):
+  def followSetSafeYMaximum(self, val):
     self.followSafeYMaximumNormalizedViewport = val    
 
-  def setSafeZMinimum(self, val):
+  def followSetSafeZMinimum(self, val):
     self.followSafeZMinimumNormalizedViewport = val
     
-  def setSafeZMaximum(self, val):
+  def followSetSafeZMaximum(self, val):
     self.followSafeZMaximumNormalizedViewport = val
     
-  def setAdjustX(self, val):
+  def followSetAdjustX(self, val):
     self.followAdjustX = val
     
-  def setAdjustY(self, val):
+  def followSetAdjustY(self, val):
     self.followAdjustY = val
     
-  def setAdjustZ(self, val):
+  def followSetAdjustZ(self, val):
     self.followAdjustZ = val
     
-  def setAdjustXTrue(self):
+  def followSetAdjustXTrue(self):
     self.followAdjustX = True
     
-  def setAdjustXFalse(self):
+  def followSetAdjustXFalse(self):
     self.followAdjustX = False
     
-  def setAdjustYTrue(self):
+  def followSetAdjustYTrue(self):
     self.followAdjustY = True
     
-  def setAdjustYFalse(self):
+  def followSetAdjustYFalse(self):
     self.followAdjustY = False
     
-  def setAdjustZTrue(self):
+  def followSetAdjustZTrue(self):
     self.followAdjustZ = True
     
-  def setAdjustZFalse(self):
+  def followSetAdjustZFalse(self):
     self.followAdjustZ = False
     
-  def setTimeUnsafeToAdjustMaximumSeconds(self, val):
+  def followSetTimeUnsafeToAdjustMaximumSeconds(self, val):
     self.followTimeUnsafeToAdjustMaximumSeconds = val
     
-  def setTimeAdjustToRestMaximumSeconds(self, val):
+  def followSetTimeAdjustToRestMaximumSeconds(self, val):
     self.followTimeAdjustToRestMaximumSeconds = val
     
-  def setTimeRestToSafeMaximumSeconds(self, val):
+  def followSetTimeRestToSafeMaximumSeconds(self, val):
     self.followTimeRestToSafeMaximumSeconds = val
     
-  def setUpdateRateSeconds(self, val):
+  def followSetUpdateRateSeconds(self, val):
     self.followUpdateRateSeconds = val
     
-  def setFollowModelNode(self, node):
+  def followSetModelNode(self, node):
     self.followModelNode = node
