@@ -1,5 +1,6 @@
 from __main__ import vtk, qt, ctk, slicer
 import logging
+import time
 
 #
 # Viewpoint
@@ -40,7 +41,8 @@ class ViewpointWidget:
       self.parent.show()
       
     self.logic = ViewpointLogic()
-    
+
+    # TRACK VIEW
     self.sliderTranslationDefaultMm    = 0
     self.sliderTranslationMinMm        = -200
     self.sliderTranslationMaxMm        = 200
@@ -54,21 +56,71 @@ class ViewpointWidget:
     self.sliderSingleStepValue = 1
     self.sliderPageStepValue   = 10
     
-    self.enableViewpointButtonState = 0
-    self.enableViewpointButtonTextState0 = "Enable Viewpoint Mode"
-    self.enableViewpointButtonTextState1 = "Disable Viewpoint Mode"
+    self.checkStateUNCHECKED = 0
+    self.checkStateCHECKED = 2
+    
+    self.toggleTrackViewButtonTextState0 = "Enable Track View Mode"
+    self.toggleTrackViewButtonTextState1 = "Disable Track View Mode"
+    
+    # FOLLOW
+    self.sliderMultiplier = 100.0
+    self.rangeSliderMaximum = self.sliderMultiplier
+    self.rangeSliderMinimum = -self.sliderMultiplier
+    self.rangeSliderMaximumValueDefault = self.sliderMultiplier
+    self.rangeSliderMinimumValueDefault = -self.sliderMultiplier
+    
+    self.sliderSingleStepValue = 0.01
+    self.sliderPageStepValue   = 0.1
+    
+    self.updateRateMinSeconds = 0
+    self.updateRateMaxSeconds = 1
+    self.updateRateDefaultSeconds = 0.1
+    
+    self.timeUnsafeToAdjustMinSeconds = 0
+    self.timeUnsafeToAdjustMaxSeconds = 5
+    self.timeUnsafeToAdjustDefaultSeconds = 1
+    
+    self.timeAdjustToRestMinSeconds = 0
+    self.timeAdjustToRestMaxSeconds = 5
+    self.timeAdjustToRestDefaultSeconds = 1
+    
+    self.timeRestToSafeMinSeconds = 0
+    self.timeRestToSafeMaxSeconds = 5
+    self.timeRestToSafeDefaultSeconds = 1
+    
+    self.toggleFollowButtonTextState0 = "Enable Follow Mode"
+    self.toggleFollowButtonTextState1 = "Disable Follow Mode"
 
   def setup(self):
     # TODO: The following line is strictly for debug purposes, should be removed when this module is done
     slicer.tvwidget = self
-
+    
     # Collapsible buttons
-    self.parametersCollapsibleButton = ctk.ctkCollapsibleButton()
-    self.parametersCollapsibleButton.text = "Parameters"
-    self.layout.addWidget(self.parametersCollapsibleButton)
+    self.viewCollapsibleButton = ctk.ctkCollapsibleButton()
+    self.viewCollapsibleButton.text = "View Selection"
+    self.layout.addWidget(self.viewCollapsibleButton)
 
     # Layout within the collapsible button
-    self.parametersFormLayout = qt.QFormLayout(self.parametersCollapsibleButton)
+    self.viewFormLayout = qt.QFormLayout(self.viewCollapsibleButton)
+    
+    self.viewLabel = qt.QLabel()
+    self.viewLabel.setText("Scene Camera: ")
+    self.viewSelector = slicer.qMRMLNodeComboBox()
+    self.viewSelector.nodeTypes = ( ("vtkMRMLViewNode"), "" )
+    self.viewSelector.noneEnabled = True
+    self.viewSelector.addEnabled = False
+    self.viewSelector.removeEnabled = False
+    self.viewSelector.setMRMLScene( slicer.mrmlScene )
+    self.viewSelector.setToolTip("Pick the view which should be adjusted, e.g. 'View1'")
+    self.viewFormLayout.addRow(self.viewLabel, self.viewSelector)    
+
+    # Collapsible buttons
+    self.trackViewParametersCollapsibleButton = ctk.ctkCollapsibleButton()
+    self.trackViewParametersCollapsibleButton.text = "Parameters for Track View"
+    self.layout.addWidget(self.trackViewParametersCollapsibleButton)
+
+    # Layout within the collapsible button
+    self.trackViewParametersFormLayout = qt.QFormLayout(self.trackViewParametersCollapsibleButton)
     
     # Transform combobox
     self.transformLabel = qt.QLabel()
@@ -80,24 +132,12 @@ class ViewpointWidget:
     self.transformSelector.removeEnabled = False
     self.transformSelector.setMRMLScene( slicer.mrmlScene )
     self.transformSelector.setToolTip("Pick the transform that the camera should follow, e.g. 'cauteryCameraToCauteryTransform'")
-    self.parametersFormLayout.addRow(self.transformLabel, self.transformSelector)
-    
-    # Camera combobox
-    self.cameraLabel = qt.QLabel()
-    self.cameraLabel.setText("Scene Camera: ")
-    self.cameraSelector = slicer.qMRMLNodeComboBox()
-    self.cameraSelector.nodeTypes = ( ("vtkMRMLCameraNode"), "" )
-    self.cameraSelector.noneEnabled = False
-    self.cameraSelector.addEnabled = False
-    self.cameraSelector.removeEnabled = False
-    self.cameraSelector.setMRMLScene( slicer.mrmlScene )
-    self.cameraSelector.setToolTip("Pick the camera which should be moved, e.g. 'Default Scene Camera'")
-    self.parametersFormLayout.addRow(self.cameraLabel, self.cameraSelector)
+    self.trackViewParametersFormLayout.addRow(self.transformLabel, self.transformSelector)
 
     # "Camera Control" Collapsible
     self.cameraControlCollapsibleButton = ctk.ctkCollapsibleButton()
     self.cameraControlCollapsibleButton.text = "Camera Control"
-    self.layout.addWidget(self.cameraControlCollapsibleButton)
+    self.trackViewParametersFormLayout.addWidget(self.cameraControlCollapsibleButton)
 
     # Layout within the collapsible button
     self.cameraControlFormLayout = qt.QFormLayout(self.cameraControlCollapsibleButton)
@@ -127,7 +167,7 @@ class ViewpointWidget:
     self.degreesOfFreedom6Label.setText("6DOF: ")
     self.degreesOfFreedom6RadioButton = qt.QRadioButton()
     self.degreesOfFreedom6RadioButton.setToolTip("The camera will be virtually attached to the tool, and rotate together with it")
-    self.degreesOfFreedom6RadioButton.setChecked(True)
+    self.degreesOfFreedom6RadioButton.setChecked(self.checkStateCHECKED)
     self.degreesOfFreedomFormLayout.addRow(self.degreesOfFreedom6Label,self.degreesOfFreedom6RadioButton)
     
     # "Up Direction" Collapsible button
@@ -143,7 +183,7 @@ class ViewpointWidget:
     self.upDirectionAnteriorLabel = qt.QLabel(qt.Qt.Horizontal,None)
     self.upDirectionAnteriorLabel.setText("Anterior: ")
     self.upDirectionAnteriorRadioButton = qt.QRadioButton()
-    self.upDirectionAnteriorRadioButton.setChecked(True)
+    self.upDirectionAnteriorRadioButton.setChecked(self.checkStateCHECKED)
     self.upDirectionFormLayout.addRow(self.upDirectionAnteriorLabel,self.upDirectionAnteriorRadioButton)
     
     self.upDirectionPosteriorLabel = qt.QLabel(qt.Qt.Horizontal,None)
@@ -264,58 +304,147 @@ class ViewpointWidget:
     self.cameraZPosSlider.pageStep = self.sliderPageStepValue
     self.translationFormLayout.addRow(self.cameraZPosLabel,self.cameraZPosSlider)
     
-    # "Model Visibility" Collapsible
-    self.modelVisibilityCollapsibleButton = ctk.ctkCollapsibleGroupBox()
-    self.modelVisibilityCollapsibleButton.title = "Model Visibility"
-    self.cameraControlFormLayout.addRow(self.modelVisibilityCollapsibleButton)
-    
-    # Layout within the collapsible button
-    self.modelVisibilityFormLayout = qt.QFormLayout(self.modelVisibilityCollapsibleButton)
-    
-    self.modelOnlyViewpointOnLabel = qt.QLabel(qt.Qt.Horizontal,None)
-    self.modelOnlyViewpointOnLabel.text = "Model visible only for Viewpoint on: "
-    self.modelOnlyViewpointOnSelector = slicer.qMRMLNodeComboBox()
-    self.modelOnlyViewpointOnSelector.nodeTypes = ( ("vtkMRMLModelNode"), "" )
-    self.modelOnlyViewpointOnSelector.noneEnabled = True
-    self.modelOnlyViewpointOnSelector.addEnabled = False
-    self.modelOnlyViewpointOnSelector.removeEnabled = False
-    self.modelOnlyViewpointOnSelector.setMRMLScene( slicer.mrmlScene )
-    self.modelOnlyViewpointOnSelector.setToolTip("This model be visible if Viewpoint mode is enabled, and invisible otherwise")
-    self.modelVisibilityFormLayout.addRow(self.modelOnlyViewpointOnLabel,self.modelOnlyViewpointOnSelector)
-    
-    self.modelOnlyViewpointOffLabel = qt.QLabel(qt.Qt.Horizontal,None)
-    self.modelOnlyViewpointOffLabel.text = "Model visible only for Viewpoint off: "
-    self.modelOnlyViewpointOffSelector = slicer.qMRMLNodeComboBox()
-    self.modelOnlyViewpointOffSelector.nodeTypes = ( ("vtkMRMLModelNode"), "" )
-    self.modelOnlyViewpointOffSelector.noneEnabled = True
-    self.modelOnlyViewpointOffSelector.addEnabled = False
-    self.modelOnlyViewpointOffSelector.removeEnabled = False
-    self.modelOnlyViewpointOffSelector.setMRMLScene( slicer.mrmlScene )
-    self.modelOnlyViewpointOffSelector.setToolTip("This model be visible if Viewpoint Mode is disabled, and invisible otherwise")
-    self.modelVisibilityFormLayout.addRow(self.modelOnlyViewpointOffLabel,self.modelOnlyViewpointOffSelector)
-    
     # Camera parallel projection checkbox
     self.cameraParallelProjectionLabel = qt.QLabel()
     self.cameraParallelProjectionLabel.setText("Parallel Projection")
     self.cameraParallelProjectionCheckbox = qt.QCheckBox()
-    self.cameraParallelProjectionCheckbox.setCheckState(0)
+    self.cameraParallelProjectionCheckbox.setCheckState(self.checkStateUNCHECKED)
     self.cameraParallelProjectionCheckbox.setToolTip("If checked, render with parallel projection (box-shaped view). Otherwise render with perspective projection (cone-shaped view).")
     self.cameraControlFormLayout.addRow(self.cameraParallelProjectionLabel,self.cameraParallelProjectionCheckbox)
     
     # "Toggle Tool Point of View" button
-    self.enableViewpointButton = qt.QPushButton()
-    self.enableViewpointButton.setToolTip("The camera will continuously update its position so that it follows the tool.")
-    self.enableViewpointButton.setText(self.enableViewpointButtonTextState0)
-    self.cameraControlFormLayout.addRow(self.enableViewpointButton)
+    self.toggleTrackViewButton = qt.QPushButton()
+    self.toggleTrackViewButton.setToolTip("The camera will continuously update its position so that it follows the tool.")
+    self.toggleTrackViewButton.setText(self.toggleTrackViewButtonTextState0)
+    self.layout.addWidget(self.toggleTrackViewButton)
+    
+    # FOLLOW
+    
+    # Collapsible buttons
+    self.followParametersCollapsibleButton = ctk.ctkCollapsibleButton()
+    self.followParametersCollapsibleButton.text = "Parameters for Follow"
+    self.layout.addWidget(self.followParametersCollapsibleButton)
+
+    # Layout within the collapsible button
+    self.followParametersFormLayout = qt.QFormLayout(self.followParametersCollapsibleButton)
+    
+    # Transform combobox
+    self.modelLabel = qt.QLabel()
+    self.modelLabel.setText("toolCameraToToolTransform: ")
+    self.modelSelector = slicer.qMRMLNodeComboBox()
+    self.modelSelector.nodeTypes = ( ("vtkMRMLModelNode"), "" )
+    self.modelSelector.noneEnabled = False
+    self.modelSelector.addEnabled = False
+    self.modelSelector.removeEnabled = False
+    self.modelSelector.setMRMLScene( slicer.mrmlScene )
+    self.modelSelector.setToolTip("Pick the model that the camera should follow, e.g. 'tumorModel'")
+    self.followParametersFormLayout.addRow(self.modelLabel, self.modelSelector)
+    
+    self.safeZoneXRangeLabel = qt.QLabel(qt.Qt.Horizontal,None)
+    self.safeZoneXRangeLabel.text = "Safe Zone (Viewport X percentage): "
+    self.safeZoneXRangeSlider = slicer.qMRMLRangeWidget()
+    self.safeZoneXRangeSlider.maximum = self.rangeSliderMaximum
+    self.safeZoneXRangeSlider.minimum = self.rangeSliderMinimum
+    self.safeZoneXRangeSlider.maximumValue = self.rangeSliderMaximumValueDefault
+    self.safeZoneXRangeSlider.minimumValue = self.rangeSliderMinimumValueDefault
+    self.followParametersFormLayout.addRow(self.safeZoneXRangeLabel,self.safeZoneXRangeSlider)
+    
+    self.safeZoneYRangeLabel = qt.QLabel(qt.Qt.Horizontal,None)
+    self.safeZoneYRangeLabel.setText("Safe Zone (Viewport Y percentage): ")
+    self.safeZoneYRangeSlider = slicer.qMRMLRangeWidget()
+    self.safeZoneYRangeSlider.maximum = self.rangeSliderMaximum
+    self.safeZoneYRangeSlider.minimum = self.rangeSliderMinimum
+    self.safeZoneYRangeSlider.maximumValue = self.rangeSliderMaximumValueDefault
+    self.safeZoneYRangeSlider.minimumValue = self.rangeSliderMinimumValueDefault
+    self.followParametersFormLayout.addRow(self.safeZoneYRangeLabel,self.safeZoneYRangeSlider)
+    
+    self.safeZoneZRangeLabel = qt.QLabel(qt.Qt.Horizontal,None)
+    self.safeZoneZRangeLabel.setText("Safe Zone (Viewport Z percentage): ")
+    self.safeZoneZRangeSlider = slicer.qMRMLRangeWidget()
+    self.safeZoneZRangeSlider.maximum = self.rangeSliderMaximum
+    self.safeZoneZRangeSlider.minimum = self.rangeSliderMinimum
+    self.safeZoneZRangeSlider.maximumValue = self.rangeSliderMaximumValueDefault
+    self.safeZoneZRangeSlider.minimumValue = self.rangeSliderMinimumValueDefault
+    self.followParametersFormLayout.addRow(self.safeZoneZRangeLabel,self.safeZoneZRangeSlider)
+    
+    self.adjustXLabel = qt.QLabel(qt.Qt.Horizontal,None)
+    self.adjustXLabel.setText("Adjust Along Camera X")
+    self.adjustXCheckbox = qt.QCheckBox()
+    self.adjustXCheckbox.setCheckState(self.checkStateCHECKED)
+    self.adjustXCheckbox.setToolTip("If checked, adjust the camera so that it aligns with the target model along the x axis.")
+    self.followParametersFormLayout.addRow(self.adjustXLabel,self.adjustXCheckbox)
+    
+    self.adjustYLabel = qt.QLabel(qt.Qt.Horizontal,None)
+    self.adjustYLabel.setText("Adjust Along Camera Y")
+    self.adjustYCheckbox = qt.QCheckBox()
+    self.adjustYCheckbox.setCheckState(self.checkStateCHECKED)
+    self.adjustXCheckbox.setToolTip("If checked, adjust the camera so that it aligns with the target model along the y axis.")
+    self.followParametersFormLayout.addRow(self.adjustYLabel,self.adjustYCheckbox)
+    
+    self.adjustZLabel = qt.QLabel(qt.Qt.Horizontal,None)
+    self.adjustZLabel.setText("Adjust Along Camera Z")
+    self.adjustZCheckbox = qt.QCheckBox()
+    self.adjustZCheckbox.setCheckState(self.checkStateUNCHECKED)
+    self.adjustXCheckbox.setToolTip("If checked, adjust the camera so that it aligns with the target model along the z axis.")
+    self.followParametersFormLayout.addRow(self.adjustZLabel,self.adjustZCheckbox)
+    
+    self.updateRateLabel = qt.QLabel(qt.Qt.Horizontal,None)
+    self.updateRateLabel.setText("Update rate (seconds): ")
+    self.updateRateSlider = slicer.qMRMLSliderWidget()
+    self.updateRateSlider.minimum = self.updateRateMinSeconds
+    self.updateRateSlider.maximum = self.updateRateMaxSeconds
+    self.updateRateSlider.value = self.updateRateDefaultSeconds
+    self.updateRateSlider.singleStep = self.sliderSingleStepValue
+    self.updateRateSlider.pageStep = self.sliderPageStepValue
+    self.updateRateSlider.setToolTip("The rate at which the view will be checked and updated.")
+    self.followParametersFormLayout.addRow(self.updateRateLabel,self.updateRateSlider)
+    
+    self.timeUnsafeToAdjustLabel = qt.QLabel(qt.Qt.Horizontal,None)
+    self.timeUnsafeToAdjustLabel.setText("Time Unsafe to Adjust (seconds): ")
+    self.timeUnsafeToAdjustSlider = slicer.qMRMLSliderWidget()
+    self.timeUnsafeToAdjustSlider.minimum = self.timeUnsafeToAdjustMinSeconds
+    self.timeUnsafeToAdjustSlider.maximum = self.timeUnsafeToAdjustMaxSeconds
+    self.timeUnsafeToAdjustSlider.value = self.timeUnsafeToAdjustDefaultSeconds
+    self.timeUnsafeToAdjustSlider.singleStep = self.sliderSingleStepValue
+    self.timeUnsafeToAdjustSlider.pageStep = self.sliderPageStepValue
+    self.timeUnsafeToAdjustSlider.setToolTip("The length of time in which the model must be in the unsafe zone before the camera is adjusted.")
+    self.followParametersFormLayout.addRow(self.timeUnsafeToAdjustLabel,self.timeUnsafeToAdjustSlider)
+    
+    self.timeAdjustToRestLabel = qt.QLabel(qt.Qt.Horizontal,None)
+    self.timeAdjustToRestLabel.setText("Time Adjust to Rest (seconds): ")
+    self.timeAdjustToRestSlider = slicer.qMRMLSliderWidget()
+    self.timeAdjustToRestSlider.minimum = self.timeAdjustToRestMinSeconds
+    self.timeAdjustToRestSlider.maximum = self.timeAdjustToRestMaxSeconds
+    self.timeAdjustToRestSlider.value = self.timeAdjustToRestDefaultSeconds
+    self.timeAdjustToRestSlider.singleStep = self.sliderSingleStepValue
+    self.timeAdjustToRestSlider.pageStep = self.sliderPageStepValue
+    self.timeAdjustToRestSlider.setToolTip("The length of time an adjustment takes.")
+    self.followParametersFormLayout.addRow(self.timeAdjustToRestLabel,self.timeAdjustToRestSlider)
+    
+    self.timeRestToSafeLabel = qt.QLabel(qt.Qt.Horizontal,None)
+    self.timeRestToSafeLabel.setText("Time Rest to Safe (seconds): ")
+    self.timeRestToSafeSlider = slicer.qMRMLSliderWidget()
+    self.timeRestToSafeSlider.minimum = self.timeRestToSafeMinSeconds
+    self.timeRestToSafeSlider.maximum = self.timeRestToSafeMaxSeconds
+    self.timeRestToSafeSlider.value = self.timeRestToSafeDefaultSeconds
+    self.timeRestToSafeSlider.singleStep = self.sliderSingleStepValue
+    self.timeRestToSafeSlider.pageStep = self.sliderPageStepValue
+    self.timeRestToSafeSlider.setToolTip("The length of time after an adjustment that the camera remains motionless.")
+    self.followParametersFormLayout.addRow(self.timeRestToSafeLabel,self.timeRestToSafeSlider)
+    
+    self.toggleFollowButton = qt.QPushButton()
+    self.toggleFollowButton.setToolTip("The camera will continuously update its position so that it follows the model.")
+    self.toggleFollowButton.setText(self.toggleFollowButtonTextState0)
+    self.layout.addWidget(self.toggleFollowButton)
     
     #Connections
-    self.enableViewpointButton.connect('clicked()', self.enableViewpointButtonPressed)
+    self.toggleTrackViewButton.connect('clicked()', self.toggleTrackViewButtonPressed)
     self.cameraParallelProjectionCheckbox.connect('stateChanged(int)', self.toggleCameraParallelProjectionCheckboxPressed)
-    self.cameraViewAngleSlider.connect('valueChanged(double)', self.logic.SetCameraViewAngleDeg)
-    self.cameraParallelScaleSlider.connect('valueChanged(double)', self.logic.SetCameraParallelScale)
-    self.cameraXPosSlider.connect('valueChanged(double)', self.logic.SetCameraXPosMm)
-    self.cameraYPosSlider.connect('valueChanged(double)', self.logic.SetCameraYPosMm)
-    self.cameraZPosSlider.connect('valueChanged(double)', self.logic.SetCameraZPosMm)
+    self.cameraViewAngleSlider.connect('valueChanged(double)', self.changeCameraViewAngleDeg)
+    self.cameraParallelScaleSlider.connect('valueChanged(double)', self.changeCameraParallelScale)
+    self.cameraXPosSlider.connect('valueChanged(double)', self.changeCameraXPosMm)
+    self.cameraYPosSlider.connect('valueChanged(double)', self.changeCameraYPosMm)
+    self.cameraZPosSlider.connect('valueChanged(double)', self.changeCameraZPosMm)
     self.upDirectionAnteriorRadioButton.connect('clicked()', self.changeUpToAnterior)
     self.upDirectionPosteriorRadioButton.connect('clicked()', self.changeUpToPosterior)
     self.upDirectionLeftRadioButton.connect('clicked()', self.changeUpToLeft)
@@ -325,44 +454,193 @@ class ViewpointWidget:
     self.degreesOfFreedom3RadioButton.connect('clicked()', self.changeInterfaceTo3DOFMode)
     self.degreesOfFreedom5RadioButton.connect('clicked()', self.changeInterfaceTo5DOFMode)
     self.degreesOfFreedom6RadioButton.connect('clicked()', self.changeInterfaceTo6DOFMode)
+    self.toggleFollowButton.connect('clicked()', self.toggleFollowButtonPressed)
+    self.viewSelector.connect('currentNodeChanged(vtkMRMLNode*)', self.changeViewNode)
+    
+    # disable all parameter widgets initially, because view selector will be "none"
+    self.disableFollowAllWidgets()
+    self.disableTrackViewAllWidgets()
     
     # Add vertical spacer
     self.layout.addStretch(1)
-
-  def enableViewpointButtonPressed(self):
-    if self.enableViewpointButtonState == 0:
-      self.logic.setCameraNode(self.cameraSelector.currentNode())
-      self.logic.setTransformNode(self.transformSelector.currentNode())
-      self.logic.setModelPOVOnNode(self.modelOnlyViewpointOnSelector.currentNode())
-      self.logic.setModelPOVOffNode(self.modelOnlyViewpointOffSelector.currentNode())
-      self.logic.setTargetModelNode(self.targetModelSelector.currentNode())
-      self.logic.startViewpoint()
-      self.disableSelectors()
-      self.enableViewpointButtonState = 1
-      self.enableViewpointButton.setText(self.enableViewpointButtonTextState1)
-    else: # elif self.enableViewpointButtonState == 1
-      self.logic.stopViewpoint()
-      self.enableSelectors()
-      self.enableViewpointButtonState = 0
-      self.enableViewpointButton.setText(self.enableViewpointButtonTextState0)
+    
+  def changeViewNode(self):
+    newViewNode = self.viewSelector.currentNode()
+    if (newViewNode):
+      self.logic.changeCurrentViewNode(newViewNode)
+    self.updateWidgets()
       
-  def enableSelectors(self):
-      self.cameraSelector.enabled = True
-      self.transformSelector.enabled = True
-      self.modelOnlyViewpointOnSelector.enabled = True
-      self.modelOnlyViewpointOffSelector.enabled = True
-      self.targetModelSelector.enabled = True
+  def updateWidgets(self):
+    if (not self.logic.currentInstance):
+      self.disableFollowAllWidgets()
+      self.disableTrackViewAllWidgets()
+      return;
+    # assume all widgets are to be enabled, disable as necessary
+    self.enableFollowAllWidgets()
+    self.enableTrackViewAllWidgets()
+    self.toggleTrackViewButton.setText(self.toggleTrackViewButtonTextState0)
+    self.toggleFollowButton.setText(self.toggleFollowButtonTextState0)
+    
+    if (self.logic.currentInstance.currentMode == self.logic.currentInstance.currentModeFOLLOW):
+      self.disableFollowParameterWidgets()
+      self.disableTrackViewAllWidgets()
+      self.toggleFollowButton.setText(self.toggleFollowButtonTextState1)
+      self.toggleTrackViewButton.setText(self.toggleTrackViewButtonTextState0)
+    elif (self.logic.currentInstance.currentMode == self.logic.currentInstance.currentModeTRACKVIEW):
+      #self.disableTrackViewParameterWidgets()
+      self.disableFollowAllWidgets()
+      self.toggleFollowButton.setText(self.toggleFollowButtonTextState0)
+      self.toggleTrackViewButton.setText(self.toggleTrackViewButtonTextState1)
+      
+    # Track View parameters
+    self.transformSelector.setCurrentNode(self.logic.currentInstance.trackViewTransformNode)
+    self.degreesOfFreedom6RadioButton.setChecked(self.checkStateUNCHECKED)
+    self.degreesOfFreedom5RadioButton.setChecked(self.checkStateUNCHECKED)
+    self.degreesOfFreedom3RadioButton.setChecked(self.checkStateUNCHECKED)
+    if (self.logic.currentInstance.trackViewForcedUpDirection and self.logic.currentInstance.trackViewForcedTarget):
+      self.degreesOfFreedom3RadioButton.setChecked(self.checkStateCHECKED)
+    elif (self.logic.currentInstance.trackViewForcedUpDirection):
+      self.degreesOfFreedom5RadioButton.setChecked(self.checkStateCHECKED)
+    else:
+      self.degreesOfFreedom6RadioButton.setChecked(self.checkStateCHECKED)
+    self.upDirectionAnteriorRadioButton.setChecked(self.checkStateUNCHECKED)
+    self.upDirectionPosteriorRadioButton.setChecked(self.checkStateUNCHECKED)
+    self.upDirectionRightRadioButton.setChecked(self.checkStateUNCHECKED)
+    self.upDirectionLeftRadioButton.setChecked(self.checkStateUNCHECKED)
+    self.upDirectionSuperiorRadioButton.setChecked(self.checkStateUNCHECKED)
+    self.upDirectionInferiorRadioButton.setChecked(self.checkStateUNCHECKED)
+    if (self.logic.currentInstance.trackViewIsUpDirectionEqualTo(self.logic.currentInstance.trackViewUpDirectionRASAnterior)):
+      self.upDirectionRightRadioButton.setChecked(self.checkStateCHECKED)
+    elif (self.logic.currentInstance.trackViewIsUpDirectionEqualTo(self.logic.currentInstance.trackViewUpDirectionRASLeft)):
+      self.upDirectionLeftRadioButton.setChecked(self.checkStateCHECKED)
+    elif (self.logic.currentInstance.trackViewIsUpDirectionEqualTo(self.logic.currentInstance.trackViewUpDirectionRASAnterior)):
+      self.upDirectionAnteriorRadioButton.setChecked(self.checkStateCHECKED)
+    elif (self.logic.currentInstance.trackViewIsUpDirectionEqualTo(self.logic.currentInstance.trackViewUpDirectionRASPosterior)):
+      self.upDirectionPosteriorRadioButton.setChecked(self.checkStateCHECKED)
+    elif (self.logic.currentInstance.trackViewIsUpDirectionEqualTo(self.logic.currentInstance.trackViewUpDirectionRASSuperior)):
+      self.upDirectionSuperiorRadioButton.setChecked(self.checkStateCHECKED)
+    elif (self.logic.currentInstance.trackViewIsUpDirectionEqualTo(self.logic.currentInstance.trackViewUpDirectionRASInferior)):
+      self.upDirectionInferiorRadioButton.setChecked(self.checkStateCHECKED)
+    self.targetModelSelector.setCurrentNode(self.logic.currentInstance.trackViewTargetModelNode)
+    self.cameraViewAngleSlider.value = self.logic.currentInstance.trackViewCameraViewAngleDeg
+    self.cameraParallelScaleSlider.value = self.logic.currentInstance.trackViewCameraParallelScale
+    self.cameraXPosSlider.value = self.logic.currentInstance.trackViewCameraXPosMm
+    self.cameraYPosSlider.value = self.logic.currentInstance.trackViewCameraYPosMm
+    self.cameraZPosSlider.value = self.logic.currentInstance.trackViewCameraZPosMm
+    if (self.logic.currentInstance.trackViewCameraParallelProjection):
+      self.cameraParallelProjectionCheckbox.setCheckState(self.checkStateCHECKED)
+    else:
+      self.cameraParallelProjectionCheckbox.setCheckState(self.checkStateUNCHECKED)
+    # Follow parameters
+    self.modelSelector.setCurrentNode(self.logic.currentInstance.followModelNode)
+    self.safeZoneXRangeSlider.maximumValue = self.logic.currentInstance.followSafeXMaximumNormalizedViewport*self.sliderMultiplier
+    self.safeZoneXRangeSlider.minimumValue = self.logic.currentInstance.followSafeXMinimumNormalizedViewport*self.sliderMultiplier
+    self.safeZoneYRangeSlider.maximumValue = self.logic.currentInstance.followSafeYMaximumNormalizedViewport*self.sliderMultiplier
+    self.safeZoneYRangeSlider.minimumValue = self.logic.currentInstance.followSafeYMinimumNormalizedViewport*self.sliderMultiplier
+    self.safeZoneZRangeSlider.maximumValue = self.logic.currentInstance.followSafeZMaximumNormalizedViewport*self.sliderMultiplier
+    self.safeZoneZRangeSlider.minimumValue = self.logic.currentInstance.followSafeZMinimumNormalizedViewport*self.sliderMultiplier
+    self.updateRateSlider.value = self.logic.currentInstance.followUpdateRateSeconds
+    self.timeUnsafeToAdjustSlider.value = self.logic.currentInstance.followTimeUnsafeToAdjustMaximumSeconds
+    self.timeAdjustToRestSlider.value = self.logic.currentInstance.followTimeAdjustToRestMaximumSeconds
+    self.timeRestToSafeSlider.value = self.logic.currentInstance.followTimeRestToSafeMaximumSeconds
+    if (self.logic.currentInstance.followAdjustX):
+      self.adjustXCheckbox.setCheckState(self.checkStateCHECKED)
+    else:
+      self.adjustXCheckbox.setCheckState(self.checkStateUNCHECKED)
+    if (self.logic.currentInstance.followAdjustY):
+      self.adjustYCheckbox.setCheckState(self.checkStateCHECKED)
+    else:
+      self.adjustYCheckbox.setCheckState(self.checkStateUNCHECKED)
+    if (self.logic.currentInstance.followAdjustZ):
+      self.adjustZCheckbox.setCheckState(self.checkStateCHECKED)
+    else:
+      self.adjustZCheckbox.setCheckState(self.checkStateUNCHECKED)
+
+  def toggleTrackViewButtonPressed(self):
+    if self.logic.currentInstance.currentMode == self.logic.currentInstance.currentModeOFF:
+      self.updateTrackViewParameters();
+      self.logic.currentInstance.trackViewStart()
+    elif self.logic.currentInstance.currentMode == self.logic.currentInstance.currentModeTRACKVIEW:
+      self.logic.currentInstance.trackViewStop()
+    else:
+      logging.error("Error: Unhandled case in toggleTrackViewButtonPressed. Current state is neither off nor track view.")
+    self.updateWidgets()
+    
+  def toggleFollowButtonPressed(self):
+    if self.logic.currentInstance.currentMode == self.logic.currentInstance.currentModeOFF:
+      self.updateFollowLogicParameters()
+      self.logic.currentInstance.followStart()
+    elif self.logic.currentInstance.currentMode == self.logic.currentInstance.currentModeFOLLOW:
+      self.logic.currentInstance.followStop()
+    else:
+      logging.error("Error: Unhandled case in toggleFollowButtonPressed. Current state is neither off nor follow.")
+    self.updateWidgets()
+      
+  # SPECIFIC TO TRACK-VIEW
   
-  def disableSelectors(self):
-      self.cameraSelector.enabled = False
-      self.transformSelector.enabled = False
-      self.modelOnlyViewpointOnSelector.enabled = False
-      self.modelOnlyViewpointOffSelector.enabled = False
-      self.targetModelSelector.enabled = False
+  def updateTrackViewParameters(self):
+    if (self.viewSelector.currentNode()):
+      self.logic.currentInstance.setViewNode(self.viewSelector.currentNode())
+    if (self.transformSelector.currentNode()):
+      self.logic.currentInstance.trackViewSetTransformNode(self.transformSelector.currentNode())
+    if (self.targetModelSelector.currentNode()):
+      self.logic.currentInstance.trackViewSetTargetModelNode(self.targetModelSelector.currentNode())
+  
+  def enableTrackViewSelectors(self):
+    self.transformSelector.enabled = True
+    self.targetModelSelector.enabled = True
+  
+  def disableTrackViewSelectors(self):
+    self.transformSelector.enabled = False
+    self.targetModelSelector.enabled = False
+  
+  def enableTrackViewParameterWidgets(self):
+    self.enableTrackViewSelectors()
+    self.degreesOfFreedom3RadioButton.enabled = True
+    self.degreesOfFreedom5RadioButton.enabled = True
+    self.degreesOfFreedom6RadioButton.enabled = True
+    self.upDirectionAnteriorRadioButton.enabled = True
+    self.upDirectionAnteriorRadioButton.enabled = True
+    self.upDirectionAnteriorRadioButton.enabled = True
+    self.upDirectionAnteriorRadioButton.enabled = True
+    self.upDirectionAnteriorRadioButton.enabled = True
+    self.upDirectionAnteriorRadioButton.enabled = True
+    self.cameraViewAngleSlider.enabled = True
+    self.cameraParallelScaleSlider.enabled = True
+    self.cameraXPosSlider.enabled = True
+    self.cameraYPosSlider.enabled = True
+    self.cameraZPosSlider.enabled = True
+    self.cameraParallelProjectionCheckbox.enabled = True
+  
+  def disableTrackViewParameterWidgets(self):
+    self.disableTrackViewSelectors()
+    self.degreesOfFreedom3RadioButton.enabled = False
+    self.degreesOfFreedom5RadioButton.enabled = False
+    self.degreesOfFreedom6RadioButton.enabled = False
+    self.upDirectionAnteriorRadioButton.enabled = False
+    self.upDirectionAnteriorRadioButton.enabled = False
+    self.upDirectionAnteriorRadioButton.enabled = False
+    self.upDirectionAnteriorRadioButton.enabled = False
+    self.upDirectionAnteriorRadioButton.enabled = False
+    self.upDirectionAnteriorRadioButton.enabled = False
+    self.cameraViewAngleSlider.enabled = False
+    self.cameraParallelScaleSlider.enabled = False
+    self.cameraXPosSlider.enabled = False
+    self.cameraYPosSlider.enabled = False
+    self.cameraZPosSlider.enabled = False
+    self.cameraParallelProjectionCheckbox.enabled = False
+    
+  def enableTrackViewAllWidgets(self):
+    self.enableTrackViewParameterWidgets()
+    self.toggleTrackViewButton.enabled = True
+  
+  def disableTrackViewAllWidgets(self):
+    self.disableTrackViewParameterWidgets()
+    self.toggleTrackViewButton.enabled = False
       
   def toggleCameraParallelProjectionCheckboxPressed(self, dummyState): # dummyState is a tristate variable, we just want True/False
     state = self.cameraParallelProjectionCheckbox.isChecked()
-    self.logic.SetCameraParallelProjection(state)
+    self.logic.currentInstance.trackViewSetCameraParallelProjection(state)
     if (state == False): # unchecked
       self.cameraParallelScaleLabel.setVisible(False)
       self.cameraParallelScaleSlider.setVisible(False)
@@ -374,102 +652,368 @@ class ViewpointWidget:
       self.cameraViewAngleLabel.setVisible(False)
       self.cameraViewAngleSlider.setVisible(False)
 
+  def changeCameraViewAngleDeg(self, val):
+    self.logic.currentInstance.trackViewSetCameraViewAngleDeg(val)
+    
+  def changeCameraParallelScale(self, val):
+    self.logic.currentInstance.trackViewSetCameraParallelScale(val)
+    
+  def changeCameraXPosMm(self, val):
+    self.logic.currentInstance.trackViewSetCameraXPosMm(val)
+    
+  def changeCameraYPosMm(self, val):
+    self.logic.currentInstance.trackViewSetCameraYPosMm(val)
+    
+  def changeCameraZPosMm(self, val):
+    self.logic.currentInstance.trackViewSetCameraZPosMm(val)
+    
   def changeInterfaceTo3DOFMode(self):
     self.upDirectionCollapsibleButton.setVisible(True)
     self.targetModelCollapsibleButton.setVisible(True)
-    self.logic.changeTo3DOFMode()
+    self.logic.currentInstance.trackViewChangeTo3DOFMode()
 
   def changeInterfaceTo5DOFMode(self):
     self.upDirectionCollapsibleButton.setVisible(True)
     self.targetModelCollapsibleButton.setVisible(False)
-    self.logic.changeTo5DOFMode()
+    self.logic.currentInstance.trackViewChangeTo5DOFMode()
 
   def changeInterfaceTo6DOFMode(self):
     self.upDirectionCollapsibleButton.setVisible(False)
     self.targetModelCollapsibleButton.setVisible(False)
-    self.logic.changeTo6DOFMode()
+    self.logic.currentInstance.trackViewChangeTo6DOFMode()
     
   def changeUpToAnterior(self):
-    self.logic.SetUpInRAS([0,1,0])
+    self.logic.currentInstance.trackViewSetTrackViewUpDirectionRAS(self.logic.currentInstance.trackViewUpDirectionRASAnterior)
     
   def changeUpToPosterior(self):
-    self.logic.SetUpInRAS([0,-1,0])
+    self.logic.currentInstance.trackViewSetTrackViewUpDirectionRAS(self.logic.currentInstance.trackViewUpDirectionRASPosterior)
     
   def changeUpToRight(self):
-    self.logic.SetUpInRAS([1,0,0])
+    self.logic.currentInstance.trackViewSetTrackViewUpDirectionRAS(self.logic.currentInstance.trackViewUpDirectionRASRight)
     
   def changeUpToLeft(self):
-    self.logic.SetUpInRAS([-1,0,0])
+    self.logic.currentInstance.trackViewSetTrackViewUpDirectionRAS(self.logic.currentInstance.trackViewUpDirectionRASLeft)
     
   def changeUpToSuperior(self):
-    self.logic.SetUpInRAS([0,0,1])
+    self.logic.currentInstance.trackViewSetTrackViewUpDirectionRAS(self.logic.currentInstance.trackViewUpDirectionRASSuperior)
     
   def changeUpToInferior(self):
-    self.logic.SetUpInRAS([0,0,-1])
+    self.logic.currentInstance.trackViewSetTrackViewUpDirectionRAS(self.logic.currentInstance.trackViewUpDirectionRASInferior)
     
+  # SPECIFIC TO FOLLOW
+  
+  def updateFollowLogicParameters(self):
+    self.logic.currentInstance.setViewNode(self.viewSelector.currentNode())
+    self.logic.currentInstance.followSetModelNode(self.modelSelector.currentNode())
+    self.logic.currentInstance.followSetSafeXMaximum(self.safeZoneXRangeSlider.maximumValue/self.sliderMultiplier)
+    self.logic.currentInstance.followSetSafeXMinimum(self.safeZoneXRangeSlider.minimumValue/self.sliderMultiplier)
+    self.logic.currentInstance.followSetSafeYMaximum(self.safeZoneYRangeSlider.maximumValue/self.sliderMultiplier)
+    self.logic.currentInstance.followSetSafeYMinimum(self.safeZoneYRangeSlider.minimumValue/self.sliderMultiplier)
+    self.logic.currentInstance.followSetSafeZMaximum(self.safeZoneZRangeSlider.maximumValue/self.sliderMultiplier)
+    self.logic.currentInstance.followSetSafeZMinimum(self.safeZoneZRangeSlider.minimumValue/self.sliderMultiplier)
+    self.logic.currentInstance.followSetAdjustX(self.adjustXCheckbox.isChecked())
+    self.logic.currentInstance.followSetAdjustY(self.adjustYCheckbox.isChecked())
+    self.logic.currentInstance.followSetAdjustZ(self.adjustZCheckbox.isChecked())
+    self.logic.currentInstance.followSetUpdateRateSeconds(self.updateRateSlider.value)
+    self.logic.currentInstance.followSetTimeUnsafeToAdjustMaximumSeconds(self.timeUnsafeToAdjustSlider.value)
+    self.logic.currentInstance.followSetTimeAdjustToRestMaximumSeconds(self.timeAdjustToRestSlider.value)
+    self.logic.currentInstance.followSetTimeRestToSafeMaximumSeconds(self.timeRestToSafeSlider.value)
+      
+  def enableFollowParameterWidgets(self):
+    self.modelSelector.enabled = True
+    self.safeZoneXRangeSlider.enabled = True
+    self.safeZoneYRangeSlider.enabled = True
+    self.safeZoneZRangeSlider.enabled = True
+    self.adjustXCheckbox.enabled = True
+    self.adjustYCheckbox.enabled = True
+    self.adjustZCheckbox.enabled = True
+    self.updateRateSlider.enabled = True
+    self.timeUnsafeToAdjustSlider.enabled = True
+    self.timeAdjustToRestSlider.enabled = True
+    self.timeRestToSafeSlider.enabled = True
+  
+  def disableFollowParameterWidgets(self):
+    self.modelSelector.enabled = False
+    self.safeZoneXRangeSlider.enabled = False
+    self.safeZoneYRangeSlider.enabled = False
+    self.safeZoneZRangeSlider.enabled = False
+    self.adjustXCheckbox.enabled = False
+    self.adjustYCheckbox.enabled = False
+    self.adjustZCheckbox.enabled = False
+    self.updateRateSlider.enabled = False
+    self.timeUnsafeToAdjustSlider.enabled = False
+    self.timeAdjustToRestSlider.enabled = False
+    self.timeRestToSafeSlider.enabled = False
+    
+  def enableFollowAllWidgets(self):
+    self.enableFollowParameterWidgets()
+    self.toggleFollowButton.enabled = True
+    
+  def disableFollowAllWidgets(self):
+    self.disableFollowParameterWidgets()
+    self.toggleFollowButton.enabled = False
+  
 #
 # ViewpointLogic
 #
 
 class ViewpointLogic:
+
   def __init__(self):
-    self.transformNode = None
-    self.cameraNode = None
-    self.modelPOVOnNode = None
-    self.modelPOVOffNode = None
+    self.nodeInstanceDictionary = {}
+    self.currentInstance = None
     
-    self.currentlyInViewpoint = False
-    self.transformNodeObserverTags = []
+  def changeCurrentViewNode(self, viewNode):
+    if (viewNode == None):
+      logging.error("viewNode given to Viewpoint logic is None. Aborting operation.")
+      return
+    if (not viewNode in self.nodeInstanceDictionary):
+      self.nodeInstanceDictionary[viewNode] = ViewpointInstance()
+    self.currentInstance = self.nodeInstanceDictionary[viewNode]
+
+#
+# Viewpoint Instance
+# Each view is associated with its own viewpoint instance,
+# this allows support of multiple views with their own
+# viewpoint parameters and settings.
+#
+
+class ViewpointInstance:
+  def __init__(self):
+    # global
+    self.viewNode = None
     
-    self.cameraXPosMm =  0.0
-    self.cameraYPosMm =  0.0
-    self.cameraZPosMm =  0.0
+    self.currentMode = 0
+    self.currentModeOFF = 0
+    self.currentModeTRACKVIEW = 1
+    self.currentModeFOLLOW = 2
     
-    self.cameraParallelProjection = False # False = perspective, True = parallel. This is consistent with the
+    # TRACK VIEW
+    self.trackViewTransformNode = None
+    self.trackViewTransformNodeObserverTags = []
+    self.trackViewCameraXPosMm =  0.0
+    self.trackViewCameraYPosMm =  0.0
+    self.trackViewCameraZPosMm =  0.0
+    
+    self.trackViewCameraParallelProjection = False # False = perspective, True = parallel. This is consistent with the
                                           # representation in the vtkCamera class and documentation
                                 
-    self.forcedUpDirection = False # False = if the user rotates the tool, then the camera rotates with it
+    self.trackViewForcedUpDirection = False # False = if the user rotates the tool, then the camera rotates with it
                                    # True = the up direction is fixed according to this next variable:
-    self.upInRAS = [0,1,0] # Anterior by default
+    self.trackViewUpDirectionRAS = [0,1,0] # Anterior by default
+    self.trackViewUpDirectionRASRight = [1,0,0]
+    self.trackViewUpDirectionRASLeft = [-1,0,0]
+    self.trackViewUpDirectionRASAnterior = [0,1,0]
+    self.trackViewUpDirectionRASPosterior = [0,-1,0]
+    self.trackViewUpDirectionRASSuperior = [0,0,1]
+    self.trackViewUpDirectionRASInferior = [0,0,-1]
     
-    self.forcedTarget = False # False = camera points the direction the user is pointing it
+    self.trackViewForcedTarget = False # False = camera points the direction the user is pointing it
                               # True = camera always points to the target model
-    self.targetModelNode = None
-    self.targetModelMiddleInRASMm = [0,0,0]
+    self.trackViewTargetModelNode = None
+    self.trackViewTargetModelMiddleInRASMm = [0,0,0]
     
-    self.cameraViewAngleDeg  =  30.0
-    self.cameraParallelScale = 1.0
+    self.trackViewCameraViewAngleDeg  =  30.0
+    self.trackViewCameraParallelScale = 1.0
+    
+    # FOLLOW
+    #inputs
+    self.followSafeXMinimumNormalizedViewport = -1.0
+    self.followSafeXMaximumNormalizedViewport = 1.0
+    self.followSafeYMinimumNormalizedViewport = -1.0
+    self.followSafeYMaximumNormalizedViewport = 1.0
+    self.followSafeZMinimumNormalizedViewport = -1.0
+    self.followSafeZMaximumNormalizedViewport = 1.0
+    
+    self.followAdjustX = True
+    self.followAdjustY = True
+    self.followAdjustZ = False
+    
+    self.followModelNode = None
+    
+    self.followTimeUnsafeToAdjustMaximumSeconds = 1
+    self.followTimeAdjustToRestMaximumSeconds = 0.2
+    self.followTimeRestToSafeMaximumSeconds = 1
+    
+    self.followUpdateRateSeconds = 0.02
+    
+    # current state
+    self.followSystemTimeAtLastUpdateSeconds = 0
+    self.followTimeInStateSeconds = 0
+    self.followState = 0 # 0 = in safe zone (initial state), 1 = in unsafe zone, 2 = adjusting, 3 = resting
+    self.followStateSAFE = 0
+    self.followStateUNSAFE = 1
+    self.followStateADJUST = 2
+    self.followStateREST = 3
+    self.followBaseCameraTranslationRas = [0,0,0]
+    self.followBaseCameraPositionRas = [0,0,0]
+    self.followBaseCameraFocalPointRas = [0,0,0]
+    self.followModelInSafeZone = True 
+    
+    self.followModelTargetPositionViewport = [0,0,0]
+    
+  def setViewNode(self, node):
+    self.viewNode = node
+    
+  def getCurrentMode(self):
+    return self.currentMode
+    
+  def isCurrentModeOFF(self):
+    return (self.currentMode == self.currentModeOFF)
+    
+  def isCurrentModeTRACKVIEW(self):
+    return (self.currentMode == self.currentModeTRACKVIEW)
+    
+  def isCurrentModeFOLLOW(self):
+    return (self.currentMode == self.currentModeFOLLOW)
+    
+  def getCameraNode(self, viewName):
+    """
+    Get camera for the selected 3D view
+    """
+    camerasLogic = slicer.modules.cameras.logic()
+    camera = camerasLogic.GetViewActiveCameraNode(slicer.util.getNode(viewName))
+    return camera
+      
+  def convertRasToViewport(self, positionRas):
+    """Computes normalized view coordinates from RAS coordinates
+    Normalized view coordinates origin is in bottom-left corner, range is [-1,+1]
+    """
+    x = vtk.mutable(positionRas[0])
+    y = vtk.mutable(positionRas[1])
+    z = vtk.mutable(positionRas[2])
+    view = slicer.app.layoutManager().threeDWidget(self.getThreeDWidgetIndex()).threeDView()
+    renderer = view.renderWindow().GetRenderers().GetItemAsObject(0)
+    renderer.WorldToView(x,y,z)
+    return [x.get(), y.get(), z.get()]
+    
+  def convertViewportToRas(self, positionViewport):
+    x = vtk.mutable(positionViewport[0])
+    y = vtk.mutable(positionViewport[1])
+    z = vtk.mutable(positionViewport[2])
+    view = slicer.app.layoutManager().threeDWidget(self.getThreeDWidgetIndex()).threeDView()
+    renderer = view.renderWindow().GetRenderers().GetItemAsObject(0)
+    renderer.ViewToWorld(x,y,z)
+    return [x.get(), y.get(), z.get()]
+    
+  def convertPointRasToCamera(self, positionRas):
+    viewName = self.viewNode.GetName()
+    cameraNode = self.getCameraNode(viewName)
+    cameraObj = cameraNode.GetCamera()
+    modelViewTransform = cameraObj.GetModelViewTransformObject()
+    positionRasHomog = [positionRas[0], positionRas[1], positionRas[2], 1] # convert to homogeneous
+    positionCamHomog = [0,0,0,1] # to be filled in
+    modelViewTransform.MultiplyPoint(positionRasHomog, positionCamHomog)
+    positionCam = [positionCamHomog[0], positionCamHomog[1], positionCamHomog[2]] # convert from homogeneous
+    return positionCam
 
-  def addObservers(self): # mostly copied from PositionErrorMapping.py in PLUS
+  def convertVectorCameraToRas(self, positionCam):
+    viewName = self.viewNode.GetName()
+    cameraNode = self.getCameraNode(viewName)
+    cameraObj = cameraNode.GetCamera()
+    modelViewTransform = cameraObj.GetModelViewTransformObject()
+    modelViewMatrix = modelViewTransform.GetMatrix()
+    modelViewInverseMatrix = vtk.vtkMatrix4x4()
+    vtk.vtkMatrix4x4.Invert(modelViewMatrix, modelViewInverseMatrix)
+    modelViewInverseTransform = vtk.vtkTransform()
+    modelViewInverseTransform.DeepCopy(modelViewTransform)
+    modelViewInverseTransform.SetMatrix(modelViewInverseMatrix)
+    positionCamHomog = [positionCam[0], positionCam[1], positionCam[2], 0] # convert to homogeneous
+    positionRasHomog = [0,0,0,0] # to be filled in
+    modelViewInverseTransform.MultiplyPoint(positionCamHomog, positionRasHomog)
+    positionRas = [positionRasHomog[0], positionRasHomog[1], positionRasHomog[2]] # convert from homogeneous
+    return positionRas
+    
+  def resetCameraClippingRange(self):
+    view = slicer.app.layoutManager().threeDWidget(self.getThreeDWidgetIndex()).threeDView()
+    renderer = view.renderWindow().GetRenderers().GetItemAsObject(0)
+    renderer.ResetCameraClippingRange()
+
+  def getThreeDWidgetIndex(self):
+    if (not self.viewNode):
+      logging.error("Error in getThreeDWidgetIndex: No View node selected. Returning 0.");
+      return 0
+    layoutManager = slicer.app.layoutManager()
+    for threeDViewIndex in xrange(layoutManager.threeDViewCount):
+      threeDViewNode = layoutManager.threeDWidget(threeDViewIndex).threeDView().mrmlViewNode()
+      if (threeDViewNode == self.viewNode):
+        return threeDViewIndex
+    logging.error("Error in getThreeDWidgetIndex: Can't find the index. Selected View does not exist? Returning 0.");
+    return 0
+    
+  # TRACK VIEW
+
+  def trackViewStart(self):
+    logging.debug("Start Viewpoint Mode")
+    if (self.currentMode != self.currentModeOFF):
+      logging.error("Cannot activate viewpoint until the current mode is set to off!")
+      return
+      
+    if (not self.viewNode):
+      logging.warning("A node is missing. Nothing will happen until the comboboxes have items selected.")
+      return
+      
+    if (not self.trackViewTransformNode):
+      logging.warning("Transform node is missing. Nothing will happen until a transform node is provided as input.")
+      return
+      
+    if (self.trackViewForcedTarget and not self.trackViewTargetModelNode):
+      logging.error("Error in trackViewSetTargetModelNode: No targetModelNode provided as input when forced target is set. Check input parameters.")
+      return
+  
+    self.currentMode = self.currentModeTRACKVIEW
+    self.trackViewAddObservers()
+    self.trackViewUpdate()
+  
+  def trackViewStop(self):
+    logging.debug("Stop Viewpoint Mode")
+    if (self.currentMode != self.currentModeTRACKVIEW):
+      logging.error("trackViewStop was called, but viewpoint mode is not TRACKVIEW. No action performed.")
+      return
+    self.currentMode = self.currentModeOFF
+    self.trackViewRemoveObservers();
+
+  def trackViewUpdate(self):
+    # no logging - it slows Slicer down a *lot*
+    
+    # Need to set camera attributes according to the concatenated transform
+    toolCameraToRASTransform = vtk.vtkGeneralTransform()
+    self.trackViewTransformNode.GetTransformToWorld(toolCameraToRASTransform)
+    
+    cameraOriginInRASMm = self.trackViewComputeCameraOriginInRASMm(toolCameraToRASTransform)
+    focalPointInRASMm = self.trackViewComputeCameraFocalPointInRASMm(toolCameraToRASTransform)
+    upDirectionInRAS = self.trackViewComputeCameraUpDirectionInRAS(toolCameraToRASTransform,cameraOriginInRASMm,focalPointInRASMm)
+    
+    self.trackViewSetCameraParameters(cameraOriginInRASMm,focalPointInRASMm,upDirectionInRAS)
+    
+  def trackViewAddObservers(self): # mostly copied from PositionErrorMapping.py in PLUS
     logging.debug("Adding observers...")
     transformModifiedEvent = 15000
-    transformNode = self.transformNode
+    transformNode = self.trackViewTransformNode
     while transformNode:
       logging.debug("Add observer to {0}".format(transformNode.GetName()))
-      self.transformNodeObserverTags.append([transformNode, transformNode.AddObserver(transformModifiedEvent, self.onTransformModified)])
+      self.trackViewTransformNodeObserverTags.append([transformNode, transformNode.AddObserver(transformModifiedEvent, self.trackViewOnTransformModified)])
       transformNode = transformNode.GetParentTransformNode()
     logging.debug("Done adding observers")
 
-  def removeObservers(self):
+  def trackViewRemoveObservers(self):
     logging.debug("Removing observers...")
-    for nodeTagPair in self.transformNodeObserverTags:
+    for nodeTagPair in self.trackViewTransformNodeObserverTags:
       nodeTagPair[0].RemoveObserver(nodeTagPair[1])
     logging.debug("Done removing observers")
+
+  def trackViewOnTransformModified(self, observer, eventid):
+    # no logging - it slows Slicer down a *lot*
+    self.trackViewUpdate()
     
-  def setTransformNode(self, transformNode):
-    self.transformNode = transformNode
+  def trackViewSetTransformNode(self, transformNode):
+    self.trackViewTransformNode = transformNode
     
-  def setCameraNode(self, cameraNode):
-    self.cameraNode = cameraNode
-    
-  def setModelPOVOnNode(self, modelPOVOnNode):
-    self.modelPOVOnNode = modelPOVOnNode
-    
-  def setModelPOVOffNode(self, modelPOVOffNode):
-    self.modelPOVOffNode = modelPOVOffNode
-    
-  def setTargetModelNode(self, targetModelNode):
-    self.targetModelNode = targetModelNode
+  def trackViewSetTargetModelNode(self, targetModelNode):
+    if (self.trackViewForcedTarget and not targetModelNode):
+      logging.error("Error in trackViewSetTargetModelNode: No targetModelNode provided as input. Check input parameters.")
+      return
+    self.trackViewTargetModelNode = targetModelNode
     targetModel = targetModelNode.GetPolyData()
     targetModelBoundingBox = targetModel.GetBounds()
     # find the middle of the target model
@@ -482,124 +1026,86 @@ class ViewpointLogic:
     targetModelNode.TransformPointToWorld(middlePointInTumorMm4,middlePointInRASMm4)
     # reduce dimensionality back to 3
     middlePointInRASMm3 = [middlePointInRASMm4[0], middlePointInRASMm4[1], middlePointInRASMm4[2]]
-    self.targetModelMiddleInRASMm = middlePointInRASMm3
+    self.trackViewTargetModelMiddleInRASMm = middlePointInRASMm3
     
-  def changeTo3DOFMode(self):
-    self.forcedUpDirection = True
-    self.forcedTarget = True
+  def trackViewChangeTo3DOFMode(self):
+    self.trackViewForcedUpDirection = True
+    self.trackViewForcedTarget = True
     
-  def changeTo5DOFMode(self):
-    self.forcedUpDirection = True
-    self.forcedTarget = False
+  def trackViewChangeTo5DOFMode(self):
+    self.trackViewForcedUpDirection = True
+    self.trackViewForcedTarget = False
     
-  def changeTo6DOFMode(self):
-    self.forcedUpDirection = False
-    self.forcedTarget = False
-
-  def startViewpoint(self):
-    logging.debug("Start Viewpoint Mode")
-    if (self.transformNode and self.cameraNode):
-      self.currentlyInViewpoint = True
-      self.addObservers()
-      self.updateViewpointCamera()
-    else:
-      logging.warning("A node is missing. Nothing will happen until the comboboxes have items selected.")
+  def trackViewChangeTo6DOFMode(self):
+    self.trackViewForcedUpDirection = False
+    self.trackViewForcedTarget = False
   
-  def stopViewpoint(self):
-    logging.debug("Stop Viewpoint Mode")
-    if (self.modelPOVOnNode):
-      modelPOVOnDisplayNode = self.modelPOVOnNode.GetDisplayNode()
-      modelPOVOnDisplayNode.SetVisibility(False)
-    if (self.modelPOVOffNode):
-      modelPOVOffDisplayNode = self.modelPOVOffNode.GetDisplayNode()
-      modelPOVOffDisplayNode.SetVisibility(True)
-    self.currentlyInViewpoint = False
-    self.removeObservers();
+  def trackViewIsUpDirectionEqualTo(self, compareDirection):
+    if (compareDirection[0]*self.trackViewUpDirectionRAS[0]+
+        compareDirection[1]*self.trackViewUpDirectionRAS[1]+
+        compareDirection[2]*self.trackViewUpDirectionRAS[2] > 0.9999): # dot product close to 1
+      return True;
+    return False;
+    
+  def trackViewSetCameraParallelProjection(self,newParallelProjectionState):
+    logging.debug("trackViewSetCameraParallelProjection")
+    self.trackViewCameraParallelProjection = newParallelProjectionState
+    
+  def trackViewSetCameraViewAngleDeg(self,valueDeg):
+    logging.debug("trackViewSetCameraViewAngleDeg")
+    self.trackViewCameraViewAngleDeg = valueDeg
+    if (self.currentMode == self.currentModeTRACKVIEW):
+      self.trackViewUpdate()
+    
+  def trackViewSetCameraParallelScale(self,newScale):
+    logging.debug("trackViewSetCameraParallelScale")
+    self.trackViewCameraParallelScale = newScale
+    if (self.currentMode == self.currentModeTRACKVIEW):
+      self.trackViewUpdate()
+    
+  def trackViewSetCameraXPosMm(self,valueMm):
+    logging.debug("trackViewSetCameraXPosMm")
+    self.trackViewCameraXPosMm = valueMm
+    if (self.currentMode == self.currentModeTRACKVIEW):
+      self.trackViewUpdate()
 
-  def onTransformModified(self, observer, eventid):
-    # no logging - it slows Slicer down a *lot*
-    self.updateViewpointCamera()
-    
-  def SetCameraParallelProjection(self,newParallelProjectionState):
-    logging.debug("SetCameraParallelProjection")
-    self.cameraParallelProjection = newParallelProjectionState
-    
-  def SetCameraViewAngleDeg(self,valueDeg):
-    logging.debug("SetCameraViewAngleDeg")
-    self.cameraViewAngleDeg = valueDeg
-    if (self.currentlyInViewpoint == True):
-      self.updateViewpointCamera()
-    
-  def SetCameraParallelScale(self,newScale):
-    logging.debug("SetCameraParallelScale")
-    self.cameraParallelScale = newScale
-    if (self.currentlyInViewpoint == True):
-      self.updateViewpointCamera()
-    
-  def SetCameraXPosMm(self,valueMm):
-    logging.debug("SetCameraXPosMm")
-    self.cameraXPosMm = valueMm
-    if (self.currentlyInViewpoint == True):
-      self.updateViewpointCamera()
+  def trackViewSetCameraYPosMm(self,valueMm):
+    logging.debug("trackViewSetCameraYPosMm")
+    self.trackViewCameraYPosMm = valueMm
+    if (self.currentMode == self.currentModeTRACKVIEW):
+      self.trackViewUpdate()
 
-  def SetCameraYPosMm(self,valueMm):
-    logging.debug("SetCameraYPosMm")
-    self.cameraYPosMm = valueMm
-    if (self.currentlyInViewpoint == True):
-      self.updateViewpointCamera()
-
-  def SetCameraZPosMm(self,valueMm):
-    logging.debug("SetCameraZPosMm")
-    self.cameraZPosMm = valueMm
-    if (self.currentlyInViewpoint == True):
-      self.updateViewpointCamera()
+  def trackViewSetCameraZPosMm(self,valueMm):
+    logging.debug("trackViewSetCameraZPosMm")
+    self.trackViewCameraZPosMm = valueMm
+    if (self.currentMode == self.currentModeTRACKVIEW):
+      self.trackViewUpdate()
       
-  def SetUpInRAS(self,vectorInRAS):
-    logging.debug("SetUpInRAS")
-    self.upInRAS = vectorInRAS
-    if (self.currentlyInViewpoint == True):
-      self.updateViewpointCamera()
-
-  def updateViewpointCamera(self):
-    # no logging - it slows Slicer down a *lot*
-    
-    # Need to set camera attributes according to the concatenated transform
-    toolCameraToRASTransform = vtk.vtkGeneralTransform()
-    self.transformNode.GetTransformToWorld(toolCameraToRASTransform)
-    
-    cameraOriginInRASMm = self.computeCameraOriginInRASMm(toolCameraToRASTransform)
-    focalPointInRASMm = self.computeCameraFocalPointInRASMm(toolCameraToRASTransform)
-    upDirectionInRAS = self.computeCameraUpDirectionInRAS(toolCameraToRASTransform,cameraOriginInRASMm,focalPointInRASMm)
-    
-    self.setCameraParameters(cameraOriginInRASMm,focalPointInRASMm,upDirectionInRAS)
-    
-    # model visibility
-    if (self.modelPOVOffNode):
-      modelPOVOffDisplayNode = self.modelPOVOffNode.GetDisplayNode()
-      modelPOVOffDisplayNode.SetVisibility(False)
-    if (self.modelPOVOnNode):
-      modelPOVOnDisplayNode = self.modelPOVOnNode.GetDisplayNode()
-      modelPOVOnDisplayNode.SetVisibility(True)
+  def trackViewSetTrackViewUpDirectionRAS(self,vectorInRAS):
+    logging.debug("trackViewSetTrackViewUpDirectionRAS")
+    self.trackViewUpDirectionRAS = vectorInRAS
+    if (self.currentMode == self.currentModeTRACKVIEW):
+      self.trackViewUpdate()
         
-  def computeCameraOriginInRASMm(self, toolCameraToRASTransform):
+  def trackViewComputeCameraOriginInRASMm(self, toolCameraToRASTransform):
     # Need to get camera origin and axes from camera coordinates into Slicer RAS coordinates
-    cameraOriginInToolCameraMm = [self.cameraXPosMm,self.cameraYPosMm,self.cameraZPosMm]
+    cameraOriginInToolCameraMm = [self.trackViewCameraXPosMm,self.trackViewCameraYPosMm,self.trackViewCameraZPosMm]
     cameraOriginInRASMm = [0,0,0] # placeholder values
     toolCameraToRASTransform.TransformPoint(cameraOriginInToolCameraMm,cameraOriginInRASMm)
     return cameraOriginInRASMm
 
-  def computeCameraFocalPointInRASMm(self, toolCameraToRASTransform):
+  def trackViewComputeCameraFocalPointInRASMm(self, toolCameraToRASTransform):
     focalPointInRASMm = [0,0,0]; # placeholder values
-    if (self.forcedTarget == True):
-      focalPointInRASMm = self.targetModelMiddleInRASMm
+    if (self.trackViewForcedTarget == True):
+      focalPointInRASMm = self.trackViewTargetModelMiddleInRASMm
     else:
       # camera distance depends on slider, but lies in -z (which is the direction that the camera is facing)
-      focalPointInToolCameraMm = [self.cameraXPosMm,self.cameraYPosMm,self.cameraZPosMm-200] # The number 200 mm is arbitrary. TODO: Change so that this is the camera-tumor distance
+      focalPointInToolCameraMm = [self.trackViewCameraXPosMm,self.trackViewCameraYPosMm,self.trackViewCameraZPosMm-200] # The number 200 mm is arbitrary. TODO: Change so that this is the camera-tumor distance
       focalPointInRASMm = [0,0,0] # placeholder values    
       toolCameraToRASTransform.TransformPoint(focalPointInToolCameraMm,focalPointInRASMm)
     return focalPointInRASMm
     
-  def computeCameraProjectionDirectionInRAS(self, cameraOriginInRASMm, focalPointInRASMm):
+  def trackViewComputeCameraProjectionDirectionInRAS(self, cameraOriginInRASMm, focalPointInRASMm):
     math = vtk.vtkMath()
     directionFromOriginToFocalPointRAS = [0,0,0] # placeholder values
     math.Subtract(focalPointInRASMm,cameraOriginInRASMm,directionFromOriginToFocalPointRAS)
@@ -608,24 +1114,24 @@ class ViewpointLogic:
     lengthMm = math.Norm(directionFromOriginToFocalPointRAS,numberDimensions)
     epsilon = 0.0001
     if (lengthMm < epsilon):
-      logging.warning("Warning: computeCameraProjectionDirectionInRAS() is computing a zero vector. Check target model? Using [0,0,-1] as target direction.")
+      logging.warning("Warning: trackViewComputeCameraProjectionDirectionInRAS() is computing a zero vector. Check target model? Using [0,0,-1] as target direction.")
       directionFromOriginToFocalPointRAS = [0,0,-1];
     return directionFromOriginToFocalPointRAS
     
-  def computeCameraUpDirectionInRAS(self, toolCameraToRASTransform, cameraOriginInRASMm, focalPointInRASMm):
+  def trackViewComputeCameraUpDirectionInRAS(self, toolCameraToRASTransform, cameraOriginInRASMm, focalPointInRASMm):
     upDirectionInRAS = [0,0,0] # placeholder values
-    if (self.forcedUpDirection == True):
+    if (self.trackViewForcedUpDirection == True):
       math = vtk.vtkMath()
       # cross product of forwardDirectionInRAS vector with upInRAS vector is the rightDirectionInRAS vector
-      upInRAS = self.upInRAS
-      forwardDirectionInRAS = self.computeCameraProjectionDirectionInRAS(cameraOriginInRASMm, focalPointInRASMm)
+      upInRAS = self.trackViewUpDirectionRAS
+      forwardDirectionInRAS = self.trackViewComputeCameraProjectionDirectionInRAS(cameraOriginInRASMm, focalPointInRASMm)
       rightDirectionInRAS = [0,0,0] # placeholder values
       math.Cross(forwardDirectionInRAS,upInRAS,rightDirectionInRAS)
       numberDimensions = 3;
       lengthMm = math.Norm(rightDirectionInRAS,numberDimensions)
       epsilon = 0.0001
       if (lengthMm < epsilon): # must check for this case
-        logging.warning("Warning: length of cross product in computeCameraUpDirectionInRAS is zero. Workaround used")
+        logging.warning("Warning: length of cross product in trackViewComputeCameraUpDirectionInRAS is zero. Workaround used")
         backupUpDirectionInRAS = [1,1,1] # if the previous cross product was zero, then this shouldn't be
         math.Normalize(backupUpDirectionInRAS)
         upInRAS = backupUpDirectionInRAS
@@ -641,12 +1147,14 @@ class ViewpointLogic:
       toolCameraToRASTransform.TransformVectorAtPoint(dummyPoint,upDirectionInToolCamera,upDirectionInRAS)
     return upDirectionInRAS
 
-  def setCameraParameters(self,cameraOriginInRASMm,focalPointInRASMm,upDirectionInRAS):
-    camera = self.cameraNode.GetCamera()
-    if (self.cameraParallelProjection == False):
-      camera.SetViewAngle(self.cameraViewAngleDeg)
-    elif (self.cameraParallelProjection == True):
-      camera.SetParallelScale(self.cameraParallelScale)
+  def trackViewSetCameraParameters(self,cameraOriginInRASMm,focalPointInRASMm,upDirectionInRAS):
+    viewName = self.viewNode.GetName()
+    cameraNode = self.getCameraNode(viewName)
+    camera = cameraNode.GetCamera()
+    if (self.trackViewCameraParallelProjection == False):
+      camera.SetViewAngle(self.trackViewCameraViewAngleDeg)
+    elif (self.trackViewCameraParallelProjection == True):
+      camera.SetParallelScale(self.trackViewCameraParallelScale)
     else:
       logging.error("Error in Viewpoint: cameraParallelProjection is not 0 or 1. No projection mode has been set! No updates are being performed.")
       return
@@ -654,13 +1162,239 @@ class ViewpointLogic:
     # Change it in the view node instead of directly in the camera VTK object
     # (if we changed the projection mode in the camera VTK object then the next time the camera is updated from the view node
     # the rendering mode is reset to the value stored in the view node).
-    viewNode = slicer.mrmlScene.GetNodeByID(self.cameraNode.GetActiveTag())
+    viewNode = slicer.mrmlScene.GetNodeByID(cameraNode.GetActiveTag())
     viewNodeParallelProjection = (viewNode.GetRenderMode() == slicer.vtkMRMLViewNode.Orthographic)
-    if viewNodeParallelProjection != self.cameraParallelProjection:
-      viewNode.SetRenderMode(slicer.vtkMRMLViewNode.Orthographic if self.cameraParallelProjection else slicer.vtkMRMLViewNode.Perspective)
+    if viewNodeParallelProjection != self.trackViewCameraParallelProjection:
+      viewNode.SetRenderMode(slicer.vtkMRMLViewNode.Orthographic if self.trackViewCameraParallelProjection else slicer.vtkMRMLViewNode.Perspective)
 
     camera.SetRoll(180) # appears to be the default value for a camera in Slicer
     camera.SetPosition(cameraOriginInRASMm)
     camera.SetFocalPoint(focalPointInRASMm)
     camera.SetViewUp(upDirectionInRAS)
-    self.cameraNode.ResetClippingRange() # without this line, some objects do not appear in the 3D view
+    cameraNode.ResetClippingRange() # without this line, some objects do not appear in the 3D view
+
+  # FOLLOW
+    
+  def followStart(self):
+    if (self.currentMode != self.currentModeOFF):
+      logging.error("Viewpoints is already active! Can't activate follow mode until the current mode is off!")
+      return
+    if not self.viewNode:
+      logging.warning("View node not set. Will not proceed until view node is selected.")
+      return
+    if not self.followModelNode:
+      logging.warning("Model node not set. Will not proceed until model node is selected.")
+      return
+    self.followSetModelTargetPositionViewport()
+    self.followSystemTimeAtLastUpdateSeconds = time.time()
+    nextUpdateTimerMilliseconds = self.followUpdateRateSeconds * 1000
+    qt.QTimer.singleShot(nextUpdateTimerMilliseconds ,self.followUpdate)
+    
+    self.currentMode = self.currentModeFOLLOW
+    
+  def followStop(self):
+    logging.debug("followStop")
+    if (self.currentMode != self.currentModeFOLLOW):
+      logging.error("followStop was called, but viewpoint mode is not FOLLOW. No action performed.")
+      return
+    self.currentMode = self.currentModeOFF
+    
+  def followUpdate(self):
+    if (self.currentMode != self.currentModeFOLLOW):
+      return
+      
+    deltaTimeSeconds = time.time() - self.followSystemTimeAtLastUpdateSeconds
+    self.followSystemTimeAtLastUpdateSeconds = time.time()
+    
+    self.followTimeInStateSeconds = self.followTimeInStateSeconds + deltaTimeSeconds
+
+    self.followUpdateModelInSafeZone()
+    self.followApplyStateMachine()
+      
+    nextUpdateTimerMilliseconds = self.followUpdateRateSeconds * 1000
+    qt.QTimer.singleShot(nextUpdateTimerMilliseconds ,self.followUpdate)
+
+  def followApplyStateMachine(self):
+    if (self.followState == self.followStateUNSAFE and self.followModelInSafeZone):
+      self.followState = self.followStateSAFE
+      self.followTimeInStateSeconds = 0
+    if (self.followState == self.followStateSAFE and not self.followModelInSafeZone):
+      self.followState = self.followStateUNSAFE
+      self.followTimeInStateSeconds = 0
+    if (self.followState == self.followStateUNSAFE and self.followTimeInStateSeconds >= self.followTimeUnsafeToAdjustMaximumSeconds):
+      self.followSetCameraTranslationParameters()
+      self.followState = self.followStateADJUST
+      self.followTimeInStateSeconds = 0
+    if (self.followState == self.followStateADJUST):
+      self.followTranslateCamera()
+      if (self.followTimeInStateSeconds >= self.followTimeAdjustToRestMaximumSeconds):
+        self.followState = self.followStateREST
+        self.followTimeInStateSeconds = 0
+    if (self.followState == self.followStateREST and self.followTimeInStateSeconds >= self.followTimeRestToSafeMaximumSeconds):
+      self.followState = self.followStateSAFE
+      self.followTimeInStateSeconds = 0
+      
+  def followUpdateModelInSafeZone(self):
+    if (self.followState == self.followStateADJUST or
+        self.followState == self.followStateREST):
+      return
+    pointsRas = self.followGetModelCurrentBoundingBoxPointsRas()
+    # Assume we are safe, until shown otherwise
+    foundSafe = True
+    for pointRas in pointsRas:
+      coordsNormalizedViewport = self.convertRasToViewport(pointRas)
+      XNormalizedViewport = coordsNormalizedViewport[0]
+      YNormalizedViewport = coordsNormalizedViewport[1]
+      ZNormalizedViewport = coordsNormalizedViewport[2]
+      if ( XNormalizedViewport > self.followSafeXMaximumNormalizedViewport or 
+           XNormalizedViewport < self.followSafeXMinimumNormalizedViewport or
+           YNormalizedViewport > self.followSafeYMaximumNormalizedViewport or 
+           YNormalizedViewport < self.followSafeYMinimumNormalizedViewport or
+           ZNormalizedViewport > self.followSafeZMaximumNormalizedViewport or 
+           ZNormalizedViewport < self.followSafeZMinimumNormalizedViewport ):
+        foundSafe = False
+        break
+    self.followModelInSafeZone = foundSafe
+
+  def followSetModelTargetPositionViewport(self):
+    self.followModelTargetPositionViewport = [(self.followSafeXMinimumNormalizedViewport + self.followSafeXMaximumNormalizedViewport)/2.0,
+                                        (self.followSafeYMinimumNormalizedViewport + self.followSafeYMaximumNormalizedViewport)/2.0,
+                                        (self.followSafeZMinimumNormalizedViewport + self.followSafeZMaximumNormalizedViewport)/2.0]
+    
+  def followSetCameraTranslationParameters(self):
+    viewName = self.viewNode.GetName()
+    cameraNode = self.getCameraNode(viewName)
+    cameraPosRas = [0,0,0]
+    cameraNode.GetPosition(cameraPosRas)
+    self.followBaseCameraPositionRas = cameraPosRas
+    cameraFocRas = [0,0,0]
+    cameraNode.GetFocalPoint(cameraFocRas)
+    self.followBaseCameraFocalPointRas = cameraFocRas
+    
+    # find the translation in RAS
+    modelCurrentPositionCamera = self.followGetModelCurrentCenterCamera()
+    modelTargetPositionCamera = self.followGetModelTargetPositionCamera()
+    cameraTranslationCamera = [0,0,0]
+    if self.followAdjustX:
+      cameraTranslationCamera[0] = modelCurrentPositionCamera[0] - modelTargetPositionCamera[0]
+    if self.followAdjustY:
+      cameraTranslationCamera[1] = modelCurrentPositionCamera[1] - modelTargetPositionCamera[1]
+    if self.followAdjustZ:
+      cameraTranslationCamera[2] = modelCurrentPositionCamera[2] - modelTargetPositionCamera[2]
+    self.followBaseCameraTranslationRas = self.convertVectorCameraToRas(cameraTranslationCamera)
+  
+  def followTranslateCamera(self):
+    # linear interpolation between base and target positions, based on the timer
+    weightTarget = 1 # default value
+    if (self.followTimeAdjustToRestMaximumSeconds != 0):
+      weightTarget = self.followTimeInStateSeconds / self.followTimeAdjustToRestMaximumSeconds
+    if (weightTarget > 1):
+      weightTarget = 1
+    cameraNewPositionRas = [0,0,0]
+    cameraNewFocalPointRas = [0,0,0]
+    for i in xrange(0,3):
+      translation = weightTarget * self.followBaseCameraTranslationRas[i]
+      cameraNewPositionRas[i] = translation + self.followBaseCameraPositionRas[i]
+      cameraNewFocalPointRas[i] = translation + self.followBaseCameraFocalPointRas[i]
+    viewName = self.viewNode.GetName()
+    cameraNode = self.getCameraNode(viewName)
+    cameraNode.SetPosition(cameraNewPositionRas)
+    cameraNode.SetFocalPoint(cameraNewFocalPointRas)
+    self.resetCameraClippingRange()
+    
+  def followGetModelCurrentCenterRas(self):
+    modelBoundsRas = [0,0,0,0,0,0]
+    self.followModelNode.GetRASBounds(modelBoundsRas)
+    modelCenterX = (modelBoundsRas[0] + modelBoundsRas[1]) / 2
+    modelCenterY = (modelBoundsRas[2] + modelBoundsRas[3]) / 2
+    modelCenterZ = (modelBoundsRas[4] + modelBoundsRas[5]) / 2
+    modelPosRas = [modelCenterX, modelCenterY, modelCenterZ]
+    return modelPosRas
+    
+  def followGetModelCurrentCenterCamera(self):
+    modelCenterRas = self.followGetModelCurrentCenterRas()
+    modelCenterCamera = self.convertPointRasToCamera(modelCenterRas)
+    return modelCenterCamera
+    
+  def followGetModelCurrentBoundingBoxPointsRas(self):
+    pointsRas = []
+    boundsRas = [0,0,0,0,0,0]
+    self.followModelNode.GetRASBounds(boundsRas)
+    # permute through the different combinations of x,y,z; min,max
+    for x in [0,1]:
+      for y in [0,1]:
+        for z in [0,1]:
+          pointRas = []
+          pointRas.append(boundsRas[0+x])
+          pointRas.append(boundsRas[2+y])
+          pointRas.append(boundsRas[4+z])
+          pointsRas.append(pointRas)
+    return pointsRas
+    
+  def followGetModelTargetPositionRas(self):
+    return self.convertViewportToRas(self.followModelTargetPositionViewport)
+    
+  def followGetModelTargetPositionCamera(self):
+    modelTargetPositionRas = self.followGetModelTargetPositionRas()
+    modelTargetPositionCamera = self.convertPointRasToCamera(modelTargetPositionRas)
+    return modelTargetPositionCamera
+    
+  def followSetSafeXMinimum(self, val):
+    self.followSafeXMinimumNormalizedViewport = val
+    
+  def followSetSafeXMaximum(self, val):
+    self.followSafeXMaximumNormalizedViewport = val
+    
+  def followSetSafeYMinimum(self, val):
+    self.followSafeYMinimumNormalizedViewport = val
+    
+  def followSetSafeYMaximum(self, val):
+    self.followSafeYMaximumNormalizedViewport = val    
+
+  def followSetSafeZMinimum(self, val):
+    self.followSafeZMinimumNormalizedViewport = val
+    
+  def followSetSafeZMaximum(self, val):
+    self.followSafeZMaximumNormalizedViewport = val
+    
+  def followSetAdjustX(self, val):
+    self.followAdjustX = val
+    
+  def followSetAdjustY(self, val):
+    self.followAdjustY = val
+    
+  def followSetAdjustZ(self, val):
+    self.followAdjustZ = val
+    
+  def followSetAdjustXTrue(self):
+    self.followAdjustX = True
+    
+  def followSetAdjustXFalse(self):
+    self.followAdjustX = False
+    
+  def followSetAdjustYTrue(self):
+    self.followAdjustY = True
+    
+  def followSetAdjustYFalse(self):
+    self.followAdjustY = False
+    
+  def followSetAdjustZTrue(self):
+    self.followAdjustZ = True
+    
+  def followSetAdjustZFalse(self):
+    self.followAdjustZ = False
+    
+  def followSetTimeUnsafeToAdjustMaximumSeconds(self, val):
+    self.followTimeUnsafeToAdjustMaximumSeconds = val
+    
+  def followSetTimeAdjustToRestMaximumSeconds(self, val):
+    self.followTimeAdjustToRestMaximumSeconds = val
+    
+  def followSetTimeRestToSafeMaximumSeconds(self, val):
+    self.followTimeRestToSafeMaximumSeconds = val
+    
+  def followSetUpdateRateSeconds(self, val):
+    self.followUpdateRateSeconds = val
+    
+  def followSetModelNode(self, node):
+    self.followModelNode = node
