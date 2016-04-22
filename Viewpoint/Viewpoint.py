@@ -1171,7 +1171,8 @@ class ViewpointInstance:
     camera.SetPosition(cameraOriginInRASMm)
     camera.SetFocalPoint(focalPointInRASMm)
     camera.SetViewUp(upDirectionInRAS)
-    cameraNode.ResetClippingRange() # without this line, some objects do not appear in the 3D view
+    
+    self.resetCameraClippingRange() # without this line, some objects do not appear in the 3D view
 
   # FOLLOW
     
