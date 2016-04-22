@@ -896,10 +896,12 @@ class LumpNavGuidelet(Guidelet):
     self.viewpointLogic.changeCurrentViewNode(viewNode)
     if (self.rightFollowCameraButton.isChecked() == True):
       self.viewpointLogic.nodeInstanceDictionary[viewNode].setViewNode(viewNode)
-      self.viewpointLogic.nodeInstanceDictionary[viewNode].followSetSafeXMinimum(-0.6)
-      self.viewpointLogic.nodeInstanceDictionary[viewNode].followSetSafeXMaximum(0.6)
-      self.viewpointLogic.nodeInstanceDictionary[viewNode].followSetSafeYMinimum(-0.6)
-      self.viewpointLogic.nodeInstanceDictionary[viewNode].followSetSafeYMaximum(0.6)
+      heightViewCoordLimits = 0.6;
+      widthViewCoordLimits = 0.9;
+      self.viewpointLogic.nodeInstanceDictionary[viewNode].followSetSafeXMinimum(-widthViewCoordLimits)
+      self.viewpointLogic.nodeInstanceDictionary[viewNode].followSetSafeXMaximum(widthViewCoordLimits)
+      self.viewpointLogic.nodeInstanceDictionary[viewNode].followSetSafeYMinimum(-heightViewCoordLimits)
+      self.viewpointLogic.nodeInstanceDictionary[viewNode].followSetSafeYMaximum(heightViewCoordLimits)
       self.viewpointLogic.nodeInstanceDictionary[viewNode].followSetModelNode(self.tumorModel_Needle)
       self.viewpointLogic.nodeInstanceDictionary[viewNode].followStart()
     else:
@@ -912,10 +914,12 @@ class LumpNavGuidelet(Guidelet):
     self.viewpointLogic.changeCurrentViewNode(viewNode)
     if (self.leftFollowCameraButton.isChecked() == True):
       self.viewpointLogic.nodeInstanceDictionary[viewNode].setViewNode(viewNode)
-      self.viewpointLogic.nodeInstanceDictionary[viewNode].followSetSafeXMinimum(-0.6)
-      self.viewpointLogic.nodeInstanceDictionary[viewNode].followSetSafeXMaximum(0.6)
-      self.viewpointLogic.nodeInstanceDictionary[viewNode].followSetSafeYMinimum(-0.6)
-      self.viewpointLogic.nodeInstanceDictionary[viewNode].followSetSafeYMaximum(0.6)
+      heightViewCoordLimits = 0.6;
+      widthViewCoordLimits = 0.9;
+      self.viewpointLogic.nodeInstanceDictionary[viewNode].followSetSafeXMinimum(-widthViewCoordLimits)
+      self.viewpointLogic.nodeInstanceDictionary[viewNode].followSetSafeXMaximum(widthViewCoordLimits)
+      self.viewpointLogic.nodeInstanceDictionary[viewNode].followSetSafeYMinimum(-heightViewCoordLimits)
+      self.viewpointLogic.nodeInstanceDictionary[viewNode].followSetSafeYMaximum(heightViewCoordLimits)
       self.viewpointLogic.nodeInstanceDictionary[viewNode].followSetModelNode(self.tumorModel_Needle)
       self.viewpointLogic.nodeInstanceDictionary[viewNode].followStart()
     else:
