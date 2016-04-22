@@ -653,11 +653,6 @@ class LumpNavGuidelet(Guidelet):
     
     self.rightFollowCameraButton = qt.QPushButton("Right follow")
     self.rightFollowCameraButton.setCheckable(True)
-    
-    followHbox = qt.QHBoxLayout()
-    followHbox.addWidget(self.leftFollowCameraButton)
-    followHbox.addWidget(self.rightFollowCameraButton)
-    self.navigationCollapsibleLayout.addRow(followHbox)
 
     # "View" Collapsible
     self.viewCollapsibleButton = ctk.ctkCollapsibleGroupBox()
@@ -720,6 +715,11 @@ class LumpNavGuidelet(Guidelet):
     hbox.addWidget(self.dual3dButton)
     hbox.addWidget(self.triple3dButton)
     self.viewFormLayout.addRow(hbox)
+    
+    followHbox = qt.QHBoxLayout()
+    followHbox.addWidget(self.leftFollowCameraButton)
+    followHbox.addWidget(self.rightFollowCameraButton)
+    self.viewFormLayout.addRow(followHbox)
 
     # "Contour adjustment" Collapsible
     self.contourAdjustmentCollapsibleButton = ctk.ctkCollapsibleGroupBox()
