@@ -640,13 +640,13 @@ class LumpNavGuidelet(Guidelet):
     self.navigationCollapsibleLayout.setContentsMargins(12, 4, 4, 4)
     self.navigationCollapsibleLayout.setSpacing(4)
 
-    self.leftBullseyeCameraButton = qt.QPushButton("Left bullseye")
+    self.leftBullseyeCameraButton = qt.QPushButton("Left camera")
     self.leftBullseyeCameraButton.setCheckable(True)
 
-    self.rightBullseyeCameraButton = qt.QPushButton("Right bullseye")
+    self.rightBullseyeCameraButton = qt.QPushButton("Right camera")
     self.rightBullseyeCameraButton.setCheckable(True)
 
-    self.bottomBullseyeCameraButton = qt.QPushButton("Bottom bullseye")
+    self.bottomBullseyeCameraButton = qt.QPushButton("Bottom camera")
     self.bottomBullseyeCameraButton.setCheckable(True)
 
     bullseyeHBox = qt.QHBoxLayout()
@@ -716,18 +716,21 @@ class LumpNavGuidelet(Guidelet):
     bullseyeHBox.addWidget(self.triple3dButton)
     self.viewFormLayout.addRow(bullseyeHBox)
 
-    self.leftAutoCenterCameraButton = qt.QPushButton("Left auto-center")
+    autoCenterLabel = qt.QLabel("Auto-center: ")
+    
+    self.leftAutoCenterCameraButton = qt.QPushButton("Left")
     self.leftAutoCenterCameraButton.setCheckable(True)
 
-    self.rightAutoCenterCameraButton = qt.QPushButton("Right auto-center")
+    self.rightAutoCenterCameraButton = qt.QPushButton("Right")
     self.rightAutoCenterCameraButton.setCheckable(True)
     
-    self.bottomAutoCenterCameraButton = qt.QPushButton("Bottom auto-center")
+    self.bottomAutoCenterCameraButton = qt.QPushButton("Bottom")
     self.bottomAutoCenterCameraButton.setCheckable(True)
     
     self.viewFormLayout.addRow(self.bottomBullseyeCameraButton)
     
     autoCenterHBox = qt.QHBoxLayout()
+    autoCenterHBox.addWidget(autoCenterLabel)
     autoCenterHBox.addWidget(self.leftAutoCenterCameraButton)
     autoCenterHBox.addWidget(self.bottomAutoCenterCameraButton)
     autoCenterHBox.addWidget(self.rightAutoCenterCameraButton)
