@@ -454,9 +454,12 @@ class LumpNavGuidelet(Guidelet):
     self.deleteAllFiducialsButton.disconnect('clicked()', self.onDeleteAllFiducialsClicked)
     self.placeButton.disconnect('clicked(bool)', self.onPlaceClicked)
 
-    self.rightBullseyeCameraButton.disconnect('clicked()', self.onRightCameraButtonClicked)
-    self.bottomBullseyeCameraButton.disconnect('clicked()', self.onCenterCameraButtonClicked)
-    self.leftBullseyeCameraButton.disconnect('clicked()', self.onLeftCameraButtonClicked)
+    self.leftBullseyeCameraButton.disconnect('clicked()', lambda: self.onCameraButtonClicked('View1') )
+    self.rightBullseyeCameraButton.disconnect('clicked()', lambda: self.onCameraButtonClicked('View2') )
+    self.bottomBullseyeCameraButton.disconnect('clicked()', lambda: self.onCameraButtonClicked('View3') )
+    self.leftAutoCenterCameraButton.disconnect('clicked()', lambda: self.onAutoCenterButtonClicked('View1') )
+    self.rightAutoCenterCameraButton.disconnect('clicked()', lambda: self.onAutoCenterButtonClicked('View2') )
+    self.bottomAutoCenterCameraButton.disconnect('clicked()', lambda: self.onAutoCenterButtonClicked('View3') )
 
     self.pivotSamplingTimer.disconnect('timeout()',self.onPivotSamplingTimeout)
 
@@ -955,39 +958,51 @@ class LumpNavGuidelet(Guidelet):
     
     leftViewNode = self.getViewNode('View1')
     
+    blockSignalState = self.leftAutoCenterCameraButton.blockSignals(True)
     if (self.viewpointLogic.getViewpointForViewNode(leftViewNode).isCurrentModeAutoCenter()):
       self.leftAutoCenterCameraButton.setChecked(True)
     else:
       self.leftAutoCenterCameraButton.setChecked(False)
+    self.leftAutoCenterCameraButton.blockSignals(blockSignalState)
       
+    blockSignalState = self.leftBullseyeCameraButton.blockSignals(True)
     if (self.viewpointLogic.getViewpointForViewNode(leftViewNode).isCurrentModeBullseye()):
       self.leftBullseyeCameraButton.setChecked(True)
     else:
       self.leftBullseyeCameraButton.setChecked(False)
+    self.leftBullseyeCameraButton.blockSignals(blockSignalState)
       
     rightViewNode = self.getViewNode('View2')
     
+    blockSignalState = self.rightAutoCenterCameraButton.blockSignals(True)
     if (self.viewpointLogic.getViewpointForViewNode(rightViewNode).isCurrentModeAutoCenter()):
       self.rightAutoCenterCameraButton.setChecked(True)
     else:
       self.rightAutoCenterCameraButton.setChecked(False)
+    self.rightAutoCenterCameraButton.blockSignals(blockSignalState)
       
+    blockSignalState = self.rightBullseyeCameraButton.blockSignals(True)
     if (self.viewpointLogic.getViewpointForViewNode(rightViewNode).isCurrentModeBullseye()):
       self.rightBullseyeCameraButton.setChecked(True)
     else:
       self.rightBullseyeCameraButton.setChecked(False)
+    self.rightBullseyeCameraButton.blockSignals(blockSignalState)
       
     centerViewNode = self.getViewNode('View3')
     
+    blockSignalState = self.bottomAutoCenterCameraButton.blockSignals(True)
     if (self.viewpointLogic.getViewpointForViewNode(centerViewNode).isCurrentModeAutoCenter()):
       self.bottomAutoCenterCameraButton.setChecked(True)
     else:
       self.bottomAutoCenterCameraButton.setChecked(False)
+    self.bottomAutoCenterCameraButton.blockSignals(blockSignalState)
       
+    blockSignalState = self.bottomBullseyeCameraButton.blockSignals(True)
     if (self.viewpointLogic.getViewpointForViewNode(centerViewNode).isCurrentModeBullseye()):
       self.bottomBullseyeCameraButton.setChecked(True)
     else:
       self.bottomBullseyeCameraButton.setChecked(False)
+    self.bottomBullseyeCameraButton.blockSignals(blockSignalState)
     
   def onDual3dButtonClicked(self):
     logging.debug("onDual3dButtonClicked")
