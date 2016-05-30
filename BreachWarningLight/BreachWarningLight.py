@@ -142,7 +142,7 @@ class BreachWarningLightLogic(ScriptedLoadableModuleLogic):
     self.connectorNode = None
     self.marginSizeMm = 2
     
-    self.lightSetCommand = slicer.modulelogic.vtkSlicerOpenIGTLinkCommand()
+    self.lightSetCommand = slicer.vtkSlicerOpenIGTLinkCommand()
     self.lightSetCommand.SetCommandName('SendText')
     self.lightSetCommand.SetCommandAttribute('DeviceId','BreachWarningLight')
     self.lightSetCommand.SetCommandTimeoutSec(1.0)
