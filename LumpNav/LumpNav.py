@@ -144,6 +144,7 @@ class LumpNavGuidelet(Guidelet):
   def __init__(self, parent, logic, configurationName='Default'):
     Guidelet.__init__(self, parent, logic, configurationName)
     logging.debug('LumpNavGuidelet.__init__')
+    self.logic.addValuesToDefaultConfiguration()
 
     moduleDirectoryPath = slicer.modules.lumpnav.path.replace('LumpNav.py', '')
 
@@ -392,7 +393,8 @@ class LumpNavGuidelet(Guidelet):
       breachWarningLogic = slicer.modules.breachwarning.logic()
       # Line properties can only be set after the line is creaed (made visible at least once)
       breachWarningLogic.SetLineToClosestPointVisibility(True, self.breachWarningNode)
-      breachWarningLogic.SetLineToClosestPointTextScale(float(self.parameterNode.GetParameter('TipToSurfaceDistanceTextScale')), self.breachWarningNode)
+      distanceTextScale = self.parameterNode.GetParameter('TipToSurfaceDistanceTextScale')
+      breachWarningLogic.SetLineToClosestPointTextScale( float(distanceTextScale), self.breachWarningNode)
       breachWarningLogic.SetLineToClosestPointColor(0,0,1, self.breachWarningNode)
       breachWarningLogic.SetLineToClosestPointVisibility(False, self.breachWarningNode)
 
