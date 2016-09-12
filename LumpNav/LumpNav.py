@@ -113,8 +113,8 @@ class LumpNavLogic(GuideletLogic):
                    'BreachWarningLightMarginSizeMm' : '2.0',
                    'TipToSurfaceDistanceTextScale' : '3',
                    'TipToSurfaceDistanceTrajectory' : 'True',
-                   'NeedleModelToNeedleTip' : '0 1 0 0 0 0 1 0 1 0 0 0 0 0 0 1',
-                   'NeedleBaseToNeedle' : '1 0 0 20.93 0 1 0 -6.00 0 0 1 -4.27 0 0 0 1',
+                   'NeedleModelToNeedleTip' : '0.0 1.0 0.0 0.0 0.0 0.0 1.0 0.0 1.0 0.0 0.0 0.0 0 0 0 1',
+                   'NeedleBaseToNeedle' : '1 0 0 20.93 0 1 0 14.00 0 0 1 -4.27 0 0 0 1',
                    'CauteryModelToCauteryTip' : '0 0 1 0 0 -1 0 0 1 0 0 0 0 0 0 1',
                    'PivotCalibrationErrorThresholdMm' :  '0.9',
                    'PivotCalibrationDurationSec' : '5',
@@ -147,6 +147,7 @@ class LumpNavGuidelet(Guidelet):
     self.logic.addValuesToDefaultConfiguration()
 
     moduleDirectoryPath = slicer.modules.lumpnav.path.replace('LumpNav.py', '')
+    self.needleModelTipRadius = 0.0
 
     # Set up main frame.
 
@@ -332,14 +333,14 @@ class LumpNavGuidelet(Guidelet):
           slicer.util.loadModel(qt.QDir.toNativeSeparators(moduleDirectoryPath + '../../../models/temporary/cautery.stl'))
           self.cauteryModel_CauteryTip=slicer.util.getNode(pattern="cautery")
       else:
-          slicer.modules.createmodels.logic().CreateNeedle(100,1.0,2.5,0)
+          slicer.modules.createmodels.logic().CreateNeedle(100,1.0,2.0,0)
           self.cauteryModel_CauteryTip=slicer.util.getNode(pattern="NeedleModel")
           self.cauteryModel_CauteryTip.GetDisplayNode().SetColor(1.0, 1.0, 0)
       self.cauteryModel_CauteryTip.SetName("CauteryModel")
 
     self.needleModel_NeedleTip = slicer.util.getNode('NeedleModel')
     if not self.needleModel_NeedleTip:
-      slicer.modules.createmodels.logic().CreateNeedle(80,1.0,2.5,0)
+      slicer.modules.createmodels.logic().CreateNeedle(60,1.0, self.needleModelTipRadius, 0)
       self.needleModel_NeedleTip=slicer.util.getNode(pattern="NeedleModel")
       self.needleModel_NeedleTip.GetDisplayNode().SetColor(0.333333, 1.0, 1.0)
       self.needleModel_NeedleTip.SetName("NeedleModel")
@@ -1096,7 +1097,7 @@ class LumpNavGuidelet(Guidelet):
     self.needleTipToNeedle.SetMatrixTransformToParent(needleTipToNeedleMatrix)
     self.logic.writeTransformToSettings('NeedleTipToNeedle', needleTipToNeedleMatrix, self.configurationName)
     # Update the needle model
-    slicer.modules.createmodels.logic().CreateNeedle(newLength,1.0,2.5, False, self.needleModel_NeedleTip)
+    slicer.modules.createmodels.logic().CreateNeedle(newLength,1.0, self.needleModelTipRadius, False, self.needleModel_NeedleTip)
 
   # Called after a successful pivot calibration
   def updateDisplayedNeedleLength(self):
@@ -1108,4 +1109,4 @@ class LumpNavGuidelet(Guidelet):
     self.needleLengthSpinBox.setValue(needleLength)
     self.needleLengthSpinBox.blockSignals(wasBlocked)
     # Update the needle model
-    slicer.modules.createmodels.logic().CreateNeedle(needleLength,1.0,2.5, False, self.needleModel_NeedleTip)
+    slicer.modules.createmodels.logic().CreateNeedle(needleLength,1.0, self.needleModelTipRadius, False, self.needleModel_NeedleTip)
