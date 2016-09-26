@@ -5,13 +5,14 @@ import time
 #
 # Viewpoint
 #
-
 class Viewpoint:
+
   def __init__(self, parent):
     parent.title = "Viewpoint"
     parent.categories = ["IGT"]
     parent.dependencies = []
-    parent.contributors = ["Thomas Vaughan (Queen's)",
+    parent.contributors = [
+                           "Thomas Vaughan (Queen's)",
                            "Andras Lasso (Queen's)",
                            "Tamas Ungi (Queen's)",
                            "Gabor Fichtinger (Queen's)"]
@@ -693,27 +694,27 @@ class ViewpointWidget:
     
   def changeUpToAnterior(self):
     currentViewpoint = self.getViewpointForCurrentViewNode()
-    currentViewpoint.bullseyeSetBullseyeUpDirectionRAS(currentViewpoint.bullseyeUpDirectionRASAnterior)
+    currentViewpoint.bullseyeSetUpDirectionRAS(currentViewpoint.bullseyeUpDirectionRASAnterior)
     
   def changeUpToPosterior(self):
     currentViewpoint = self.getViewpointForCurrentViewNode()
-    currentViewpoint.bullseyeSetBullseyeUpDirectionRAS(currentViewpoint.bullseyeUpDirectionRASPosterior)
+    currentViewpoint.bullseyeSetUpDirectionRAS(currentViewpoint.bullseyeUpDirectionRASPosterior)
     
   def changeUpToRight(self):
     currentViewpoint = self.getViewpointForCurrentViewNode()
-    currentViewpoint.bullseyeSetBullseyeUpDirectionRAS(currentViewpoint.bullseyeUpDirectionRASRight)
+    currentViewpoint.bullseyeSetUpDirectionRAS(currentViewpoint.bullseyeUpDirectionRASRight)
     
   def changeUpToLeft(self):
     currentViewpoint = self.getViewpointForCurrentViewNode()
-    currentViewpoint.bullseyeSetBullseyeUpDirectionRAS(currentViewpoint.bullseyeUpDirectionRASLeft)
+    currentViewpoint.bullseyeSetUpDirectionRAS(currentViewpoint.bullseyeUpDirectionRASLeft)
     
   def changeUpToSuperior(self):
     currentViewpoint = self.getViewpointForCurrentViewNode()
-    currentViewpoint.bullseyeSetBullseyeUpDirectionRAS(currentViewpoint.bullseyeUpDirectionRASSuperior)
+    currentViewpoint.bullseyeSetUpDirectionRAS(currentViewpoint.bullseyeUpDirectionRASSuperior)
     
   def changeUpToInferior(self):
     currentViewpoint = self.getViewpointForCurrentViewNode()
-    currentViewpoint.bullseyeSetBullseyeUpDirectionRAS(currentViewpoint.bullseyeUpDirectionRASInferior)
+    currentViewpoint.bullseyeSetUpDirectionRAS(currentViewpoint.bullseyeUpDirectionRASInferior)
     
   # SPECIFIC TO AUTO-CENTER
   
@@ -1128,6 +1129,7 @@ class ViewpointInstance:
     numberDimensions = 3;
     lengthMm = math.Norm(directionFromOriginToFocalPointRAS,numberDimensions)
     epsilon = 0.0001
+    logging.warning(lengthMm)
     if (lengthMm < epsilon):
       logging.warning("Warning: bullseyeComputeCameraProjectionDirectionInRAS() is computing a zero vector. Check target model? Using [0,0,-1] as target direction.")
       directionFromOriginToFocalPointRAS = [0,0,-1];
