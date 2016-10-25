@@ -5,7 +5,9 @@ from Guidelet import GuideletLoadable, GuideletLogic, GuideletTest, GuideletWidg
 from Guidelet import Guidelet
 import logging
 import time
+import urllib, urllib2
 import math
+from slicer import modules
 
 #
 # LumpNav ###
@@ -329,20 +331,32 @@ class LumpNavGuidelet(Guidelet):
     self.cauteryModel_CauteryTip = slicer.util.getNode('CauteryModel')
     if not self.cauteryModel_CauteryTip:
       if (self.parameterNode.GetParameter('TestMode')=='True'):
+          print "Loading stl from local device"
           moduleDirectoryPath = slicer.modules.lumpnav.path.replace('LumpNav.py', '')
           slicer.util.loadModel(qt.QDir.toNativeSeparators(moduleDirectoryPath + '../../../models/temporary/cautery.stl'))
           self.cauteryModel_CauteryTip=slicer.util.getNode(pattern="cautery")
-      else:
-          slicer.modules.createmodels.logic().CreateNeedle(100,1.0,2.0,0)
-          self.cauteryModel_CauteryTip=slicer.util.getNode(pattern="NeedleModel")
-          self.cauteryModel_CauteryTip.GetDisplayNode().SetColor(1.0, 1.0, 0)
-      self.cauteryModel_CauteryTip.SetName("CauteryModel")
-
+      else: # change here
+          flag = True
+          moduleDirectoryPath = slicer.modules.lumpnav.path.replace('LumpNav.py', '')
+          if slicer.util.loadModel(qt.QDir.toNativeSeparators(moduleDirectoryPath + '/Resources/CauteryModel.stl')):
+              self.cauteryModel_CauteryTip= slicer.util.getNode(pattern="CauteryModel") 
+              self.cauteryModel_CauteryTip.GetDisplayNode().SetColor(1.0, 1.0, 0)
+              self.cauteryModel_CauteryTip.SetName("CauteryModel")
+              flag = False
+          else: 
+              print "Defaulting to needle model for cautery"
+              slicer.modules.createmodels.logic().CreateNeedle(100,1.0,2.0,0)
+              self.cauteryModel_CauteryTip=slicer.util.getNode(pattern="NeedleModel")
+              self.cauteryModel_CauteryTip.GetDisplayNode().SetColor(1.0, 1.0, 0)
+              self.cauteryModel_CauteryTip.SetName("CauteryModel")
+              
+              #modules.createmodels.logic().CreateNeedle(100,1.0,2.0,0)
+  
     self.needleModel_NeedleTip = slicer.util.getNode('NeedleModel')
     if not self.needleModel_NeedleTip:
       slicer.modules.createmodels.logic().CreateNeedle(60,1.0, self.needleModelTipRadius, 0)
       self.needleModel_NeedleTip=slicer.util.getNode(pattern="NeedleModel")
-      self.needleModel_NeedleTip.GetDisplayNode().SetColor(0.333333, 1.0, 1.0)
+      self.needleModel_NeedleTip.GetDisplayNode().SetColor(0.33, 1.0, 1.0)
       self.needleModel_NeedleTip.SetName("NeedleModel")
       self.needleModel_NeedleTip.GetDisplayNode().SliceIntersectionVisibilityOn()
 
