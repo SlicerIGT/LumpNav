@@ -337,13 +337,13 @@ class LumpNavGuidelet(Guidelet):
           flag = True
           moduleDirectoryPath = slicer.modules.lumpnav.path.replace('LumpNav.py', '')
           if slicer.util.loadModel(qt.QDir.toNativeSeparators(moduleDirectoryPath + '/Resources/CauteryModel.stl')):
-              print "Loading cautery model"
+              logging.debug('Loading cautery model')
               self.cauteryModel_CauteryTip= slicer.util.getNode(pattern="CauteryModel") 
               self.cauteryModel_CauteryTip.GetDisplayNode().SetColor(1.0, 1.0, 0)
               self.cauteryModel_CauteryTip.SetName("CauteryModel")
               flag = False
           else: 
-              print "Cautery model import failed: Defaulting to needle model"
+              logging.debug('Cautery model import failed: Defaulting to needle model')
               slicer.modules.createmodels.logic().CreateNeedle(100,1.0,2.0,0)
               self.cauteryModel_CauteryTip=slicer.util.getNode(pattern="NeedleModel")
               self.cauteryModel_CauteryTip.GetDisplayNode().SetColor(1.0, 1.0, 0)
