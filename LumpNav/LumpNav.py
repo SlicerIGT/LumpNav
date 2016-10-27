@@ -167,7 +167,7 @@ class LumpNavGuidelet(Guidelet):
 
     # Setting button open on startup.
     self.calibrationCollapsibleButton.setProperty('collapsed', False)
-    
+
     slicer.lumpguidelet = self #TODO: Remove
 
   def createFeaturePanels(self):
@@ -328,21 +328,22 @@ class LumpNavGuidelet(Guidelet):
 
     self.cauteryModel_CauteryTip = slicer.util.getNode('CauteryModel')
     if not self.cauteryModel_CauteryTip:
-      if (self.parameterNode.GetParameter('TestMode')=='True'):
-          moduleDirectoryPath = slicer.modules.lumpnav.path.replace('LumpNav.py', '')
-          slicer.util.loadModel(qt.QDir.toNativeSeparators(moduleDirectoryPath + '../../../models/temporary/cautery.stl'))
-          self.cauteryModel_CauteryTip=slicer.util.getNode(pattern="cautery")
+      moduleDirectoryPath = slicer.modules.lumpnav.path.replace('LumpNav.py', '')
+      modelFilePath = qt.QDir.toNativeSeparators(moduleDirectoryPath + '/Resources/CauteryModel.stl')
+      [success, self.cauteryModel_CauteryTip] = slicer.util.loadModel(modelFilePath, returnNode = True)
+      if success:
+        logging.debug('Loaded cautery model: {0}'.format(modelFilePath))
       else:
-          slicer.modules.createmodels.logic().CreateNeedle(100,1.0,2.0,0)
-          self.cauteryModel_CauteryTip=slicer.util.getNode(pattern="NeedleModel")
-          self.cauteryModel_CauteryTip.GetDisplayNode().SetColor(1.0, 1.0, 0)
+        logging.debug('Cautery model not found ({0}), using stick model instead'.format(modelFilePath))
+        self.cauteryModel_CauteryTip = slicer.modules.createmodels.logic().CreateNeedle(100,1.0,2.0,0)
+      self.cauteryModel_CauteryTip.GetDisplayNode().SetColor(1.0, 1.0, 0)
       self.cauteryModel_CauteryTip.SetName("CauteryModel")
 
     self.needleModel_NeedleTip = slicer.util.getNode('NeedleModel')
     if not self.needleModel_NeedleTip:
       slicer.modules.createmodels.logic().CreateNeedle(60,1.0, self.needleModelTipRadius, 0)
       self.needleModel_NeedleTip=slicer.util.getNode(pattern="NeedleModel")
-      self.needleModel_NeedleTip.GetDisplayNode().SetColor(0.333333, 1.0, 1.0)
+      self.needleModel_NeedleTip.GetDisplayNode().SetColor(0.33, 1.0, 1.0)
       self.needleModel_NeedleTip.SetName("NeedleModel")
       self.needleModel_NeedleTip.GetDisplayNode().SliceIntersectionVisibilityOn()
 
@@ -716,25 +717,25 @@ class LumpNavGuidelet(Guidelet):
 
     self.dual3dButton = qt.QPushButton("Dual 3D")
     self.triple3dButton = qt.QPushButton("Triple 3D")
-    
+
     bullseyeHBox = qt.QHBoxLayout()
     bullseyeHBox.addWidget(self.dual3dButton)
     bullseyeHBox.addWidget(self.triple3dButton)
     self.viewFormLayout.addRow(bullseyeHBox)
 
     autoCenterLabel = qt.QLabel("Auto-center: ")
-    
+
     self.leftAutoCenterCameraButton = qt.QPushButton("Left")
     self.leftAutoCenterCameraButton.setCheckable(True)
 
     self.rightAutoCenterCameraButton = qt.QPushButton("Right")
     self.rightAutoCenterCameraButton.setCheckable(True)
-    
+
     self.bottomAutoCenterCameraButton = qt.QPushButton("Bottom")
     self.bottomAutoCenterCameraButton.setCheckable(True)
-    
+
     self.viewFormLayout.addRow(self.bottomBullseyeCameraButton)
-    
+
     autoCenterHBox = qt.QHBoxLayout()
     autoCenterHBox.addWidget(autoCenterLabel)
     autoCenterHBox.addWidget(self.leftAutoCenterCameraButton)
@@ -818,7 +819,7 @@ class LumpNavGuidelet(Guidelet):
     pointPolyData.SetPoints(points)
 
     delaunay = vtk.vtkDelaunay3D()
-    
+
     logging.debug("use glyphs")
     sphere = vtk.vtkCubeSource()
     glyph = vtk.vtkGlyph3D()
@@ -828,28 +829,28 @@ class LumpNavGuidelet(Guidelet):
     #glyph.SetScaleModeToScaleByVector()
     #glyph.SetScaleFactor(0.25)
     delaunay.SetInputConnection(glyph.GetOutputPort())
-    
+
     surfaceFilter = vtk.vtkDataSetSurfaceFilter()
     surfaceFilter.SetInputConnection(delaunay.GetOutputPort())
-    
+
     smoother = vtk.vtkButterflySubdivisionFilter()
     smoother.SetInputConnection(surfaceFilter.GetOutputPort())
     smoother.SetNumberOfSubdivisions(3)
     smoother.Update()
-    
+
     delaunaySmooth = vtk.vtkDelaunay3D()
     delaunaySmooth.SetInputData(smoother.GetOutput())
     delaunaySmooth.Update()
 
     smoothSurfaceFilter = vtk.vtkDataSetSurfaceFilter()
     smoothSurfaceFilter.SetInputConnection(delaunaySmooth.GetOutputPort())
-    
+
     normals = vtk.vtkPolyDataNormals()
     normals.SetInputConnection(smoothSurfaceFilter.GetOutputPort())
     normals.SetFeatureAngle(100.0)
-    
+
     self.tumorModel_Needle.SetPolyDataConnection(normals.GetOutputPort())
-    
+
     self.tumorModel_Needle.Modified()
 
   def getCamera(self, viewName):
@@ -860,7 +861,7 @@ class LumpNavGuidelet(Guidelet):
     camerasLogic = slicer.modules.cameras.logic()
     camera = camerasLogic.GetViewActiveCameraNode(slicer.util.getNode(viewName))
     return camera
-    
+
   def getViewNode(self, viewName):
     """
     Get the view node for the selected 3D view
@@ -868,7 +869,7 @@ class LumpNavGuidelet(Guidelet):
     logging.debug("getViewNode")
     viewNode = slicer.util.getNode(viewName)
     return viewNode
-    
+
   def onCameraButtonClicked(self, viewName):
     viewNode = self.getViewNode(viewName)
     logging.debug("onCameraButtonClicked")
@@ -879,7 +880,7 @@ class LumpNavGuidelet(Guidelet):
       self.disableViewpointInViewNode(viewNode) # disable any other modes that might be active
       self.enableBullseyeInViewNode(viewNode)
     self.updateGUIButtons()
-    
+
   def enableBullseyeInViewNode(self, viewNode):
     logging.debug("enableBullseyeInViewNode")
     self.disableViewpointInViewNode(viewNode)
@@ -887,13 +888,13 @@ class LumpNavGuidelet(Guidelet):
     self.viewpointLogic.getViewpointForViewNode(viewNode).bullseyeSetTransformNode(self.cauteryCameraToCautery)
     self.viewpointLogic.getViewpointForViewNode(viewNode).bullseyeStart()
     self.updateGUISliders(viewNode)
-    
+
   def disableBullseyeInViewNode(self, viewNode):
     logging.debug("disableBullseyeInViewNode")
     if (self.viewpointLogic.getViewpointForViewNode(viewNode).isCurrentModeBullseye()):
       self.viewpointLogic.getViewpointForViewNode(viewNode).bullseyeStop()
       self.updateGUISliders(viewNode)
-      
+
   def disableBullseyeInAllViewNodes(self):
     logging.debug("disableBullseyeInAllViewNodes")
     leftViewNode = self.getViewNode('View1')
@@ -923,7 +924,7 @@ class LumpNavGuidelet(Guidelet):
       self.cameraXPosSlider.setDisabled(True)
       self.cameraZPosSlider.setDisabled(True)
       self.cameraYPosSlider.setDisabled(True)
-    
+
   def onAutoCenterButtonClicked(self,viewName):
     viewNode = self.getViewNode(viewName)
     logging.debug("onAutoCenterButtonClicked")
@@ -932,12 +933,12 @@ class LumpNavGuidelet(Guidelet):
     else:
       self.enableAutoCenterInViewNode(viewNode)
     self.updateGUIButtons()
-    
+
   def disableAutoCenterInViewNode(self, viewNode):
     logging.debug("disableAutoCenterInViewNode")
     if (self.viewpointLogic.getViewpointForViewNode(viewNode).isCurrentModeAutoCenter()):
       self.viewpointLogic.getViewpointForViewNode(viewNode).autoCenterStop()
-    
+
   def enableAutoCenterInViewNode(self, viewNode):
     logging.debug("enableAutoCenterInViewNode")
     self.disableViewpointInViewNode(viewNode)
@@ -950,63 +951,63 @@ class LumpNavGuidelet(Guidelet):
     self.viewpointLogic.getViewpointForViewNode(viewNode).autoCenterSetSafeYMaximum(heightViewCoordLimits)
     self.viewpointLogic.getViewpointForViewNode(viewNode).autoCenterSetModelNode(self.tumorModel_Needle)
     self.viewpointLogic.getViewpointForViewNode(viewNode).autoCenterStart()
-    
+
   def disableViewpointInViewNode(self,viewNode):
     logging.debug("disableViewpointInViewNode")
     self.disableBullseyeInViewNode(viewNode)
     self.disableAutoCenterInViewNode(viewNode)
-      
+
   def updateGUIButtons(self):
     logging.debug("updateGUIButtons")
-    
+
     leftViewNode = self.getViewNode('View1')
-    
+
     blockSignalState = self.leftAutoCenterCameraButton.blockSignals(True)
     if (self.viewpointLogic.getViewpointForViewNode(leftViewNode).isCurrentModeAutoCenter()):
       self.leftAutoCenterCameraButton.setChecked(True)
     else:
       self.leftAutoCenterCameraButton.setChecked(False)
     self.leftAutoCenterCameraButton.blockSignals(blockSignalState)
-      
+
     blockSignalState = self.leftBullseyeCameraButton.blockSignals(True)
     if (self.viewpointLogic.getViewpointForViewNode(leftViewNode).isCurrentModeBullseye()):
       self.leftBullseyeCameraButton.setChecked(True)
     else:
       self.leftBullseyeCameraButton.setChecked(False)
     self.leftBullseyeCameraButton.blockSignals(blockSignalState)
-      
+
     rightViewNode = self.getViewNode('View2')
-    
+
     blockSignalState = self.rightAutoCenterCameraButton.blockSignals(True)
     if (self.viewpointLogic.getViewpointForViewNode(rightViewNode).isCurrentModeAutoCenter()):
       self.rightAutoCenterCameraButton.setChecked(True)
     else:
       self.rightAutoCenterCameraButton.setChecked(False)
     self.rightAutoCenterCameraButton.blockSignals(blockSignalState)
-      
+
     blockSignalState = self.rightBullseyeCameraButton.blockSignals(True)
     if (self.viewpointLogic.getViewpointForViewNode(rightViewNode).isCurrentModeBullseye()):
       self.rightBullseyeCameraButton.setChecked(True)
     else:
       self.rightBullseyeCameraButton.setChecked(False)
     self.rightBullseyeCameraButton.blockSignals(blockSignalState)
-      
+
     centerViewNode = self.getViewNode('View3')
-    
+
     blockSignalState = self.bottomAutoCenterCameraButton.blockSignals(True)
     if (self.viewpointLogic.getViewpointForViewNode(centerViewNode).isCurrentModeAutoCenter()):
       self.bottomAutoCenterCameraButton.setChecked(True)
     else:
       self.bottomAutoCenterCameraButton.setChecked(False)
     self.bottomAutoCenterCameraButton.blockSignals(blockSignalState)
-      
+
     blockSignalState = self.bottomBullseyeCameraButton.blockSignals(True)
     if (self.viewpointLogic.getViewpointForViewNode(centerViewNode).isCurrentModeBullseye()):
       self.bottomBullseyeCameraButton.setChecked(True)
     else:
       self.bottomBullseyeCameraButton.setChecked(False)
     self.bottomBullseyeCameraButton.blockSignals(blockSignalState)
-    
+
   def onDual3dButtonClicked(self):
     logging.debug("onDual3dButtonClicked")
     self.navigationView = self.VIEW_DUAL_3D
