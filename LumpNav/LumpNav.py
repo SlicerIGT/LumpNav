@@ -115,7 +115,7 @@ class LumpNavLogic(GuideletLogic):
                    'TipToSurfaceDistanceTrajectory' : 'True',
                    'NeedleModelToNeedleTip' : '0.0 1.0 0.0 0.0 0.0 0.0 1.0 0.0 1.0 0.0 0.0 0.0 0 0 0 1',
                    'NeedleBaseToNeedle' : '1 0 0 20.93 0 1 0 14.00 0 0 1 -4.27 0 0 0 1',
-                   'CauteryModelToCauteryTip' : '0 0 1 0 0 -1 0 0 1 0 0 0 0 0 0 1',
+                   'CauteryModelToCauteryTip' : '0.03 0.03 1.01 0.00 -0.23 0.98 -0.02 0.00 -0.97 -0.23 0.03 0.00 0 0 0 1', 
                    'PivotCalibrationErrorThresholdMm' :  '0.9',
                    'PivotCalibrationDurationSec' : '5',
                    'TestMode' : 'False',
@@ -728,6 +728,7 @@ class LumpNavGuidelet(Guidelet):
     self.leftAutoCenterCameraButton = qt.QPushButton("Left")
     self.leftAutoCenterCameraButton.setCheckable(True)
 
+
     self.rightAutoCenterCameraButton = qt.QPushButton("Right")
     self.rightAutoCenterCameraButton.setCheckable(True)
 
@@ -972,8 +973,14 @@ class LumpNavGuidelet(Guidelet):
     blockSignalState = self.leftBullseyeCameraButton.blockSignals(True)
     if (self.viewpointLogic.getViewpointForViewNode(leftViewNode).isCurrentModeBullseye()):
       self.leftBullseyeCameraButton.setChecked(True)
+      cauteryNode = slicer.util.getNode('CauteryModel')
+      cauteryNode.GetDisplayNode().SetOpacity(0.3)
+      print("left cam set opacity to 0.3")
     else:
       self.leftBullseyeCameraButton.setChecked(False)
+      cauteryNode = slicer.util.getNode('CauteryModel')
+      cauteryNode.GetDisplayNode().SetOpacity(1)
+      print("left cam set opacity to 1")
     self.leftBullseyeCameraButton.blockSignals(blockSignalState)
 
     rightViewNode = self.getViewNode('View2')
@@ -988,8 +995,15 @@ class LumpNavGuidelet(Guidelet):
     blockSignalState = self.rightBullseyeCameraButton.blockSignals(True)
     if (self.viewpointLogic.getViewpointForViewNode(rightViewNode).isCurrentModeBullseye()):
       self.rightBullseyeCameraButton.setChecked(True)
+      cauteryNode = slicer.util.getNode('CauteryModel')
+      cauteryNode.GetDisplayNode().SetOpacity(0.3)
+      print("r cam set opacity to 0.3")
     else:
       self.rightBullseyeCameraButton.setChecked(False)
+      cauteryNode = slicer.util.getNode('CauteryModel')
+      if self.leftBullseyeCameraButton.setChecked(False):
+        cauteryNode.GetDisplayNode().SetOpacity(1)
+        print("r cam set opacity to 01")
     self.rightBullseyeCameraButton.blockSignals(blockSignalState)
 
     centerViewNode = self.getViewNode('View3')
