@@ -115,7 +115,7 @@ class LumpNavLogic(GuideletLogic):
                    'TipToSurfaceDistanceTrajectory' : 'True',
                    'NeedleModelToNeedleTip' : '0.0 1.0 0.0 0.0 0.0 0.0 1.0 0.0 1.0 0.0 0.0 0.0 0 0 0 1',
                    'NeedleBaseToNeedle' : '1 0 0 20.93 0 1 0 14.00 0 0 1 -4.27 0 0 0 1',
-                   'CauteryModelToCauteryTip' : '0.03 0.03 1.01 0.00 -0.23 0.98 -0.02 0.00 -0.97 -0.23 0.03 0.00 0 0 0 1', 
+                   'CauteryModelToCauteryTip' : '0.03 0.03 1.01 0.00 -0.97 -0.23 0.03 0.00 0.23 -0.98 0.02 0.00 0 0 0 1', 
                    'PivotCalibrationErrorThresholdMm' :  '0.9',
                    'PivotCalibrationDurationSec' : '5',
                    'TestMode' : 'False',
