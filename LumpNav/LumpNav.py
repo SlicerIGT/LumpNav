@@ -249,6 +249,7 @@ class LumpNavGuidelet(Guidelet):
     Guidelet.setupScene(self)
 
     logging.debug('Create transforms')
+    # Coordinate system definitions: https://app.assembla.com/spaces/slicerigt/wiki/Coordinate_Systems
 
     self.cauteryTipToCautery = slicer.util.getNode('CauteryTipToCautery')
     if not self.cauteryTipToCautery:
