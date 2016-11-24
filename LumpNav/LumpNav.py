@@ -340,10 +340,10 @@ class LumpNavGuidelet(Guidelet):
       self.cauteryModel_CauteryTip.SetName("CauteryModel")
 
       slicer.modules.createmodels.logic().CreateNeedle(100,1.0,2.0,0)
-      self.stickModel = slicer.util.getNode(pattern="NeedleModel")
-      self.stickModel.SetName("StickModel")
-      self.stickModel.GetDisplayNode().SetColor(1.0, 1.0, 0)
-      self.stickModel.GetDisplayNode().VisibilityOff()
+      self.stickModel_CauteryTip = slicer.util.getNode(pattern="NeedleModel")
+      self.stickModel_CauteryTip.SetName("StickModel")
+      self.stickModel_CauteryTip.GetDisplayNode().SetColor(1.0, 1.0, 0)
+      self.stickModel_CauteryTip.GetDisplayNode().VisibilityOff()
          
     self.needleModel_NeedleTip = slicer.util.getNode('NeedleModel')
     if not self.needleModel_NeedleTip:
@@ -424,13 +424,12 @@ class LumpNavGuidelet(Guidelet):
     self.cauteryCameraToCautery.SetAndObserveTransformNodeID(self.cauteryToReference.GetID())
     self.cauteryTipToCautery.SetAndObserveTransformNodeID(self.cauteryToReference.GetID())
     self.cauteryModelToCauteryTip.SetAndObserveTransformNodeID(self.cauteryTipToCautery.GetID())
-    self.stickModel.SetAndObserveTransformNodeID(self.cauteryTipToCautery.GetID())
     self.needleToReference.SetAndObserveTransformNodeID(self.referenceToRas.GetID())
     self.needleTipToNeedle.SetAndObserveTransformNodeID(self.needleToReference.GetID())
     self.needleBaseToNeedle.SetAndObserveTransformNodeID(self.needleToReference.GetID())
     self.needleModelToNeedleTip.SetAndObserveTransformNodeID(self.needleTipToNeedle.GetID())
     self.cauteryModel_CauteryTip.SetAndObserveTransformNodeID(self.cauteryModelToCauteryTip.GetID())
-    self.cauteryModel_CauteryTip.SetAndObserveTransformNodeID(self.stickModel.GetID())
+    self.stickModel_CauteryTip.SetAndObserveTransformNodeID(self.cauteryModelToCauteryTip.GetID())
     self.needleModel_NeedleTip.SetAndObserveTransformNodeID(self.needleModelToNeedleTip.GetID())
     self.tumorModel_Needle.SetAndObserveTransformNodeID(self.needleToReference.GetID())
     self.tumorMarkups_Needle.SetAndObserveTransformNodeID(self.needleToReference.GetID())
@@ -796,22 +795,7 @@ class LumpNavGuidelet(Guidelet):
     self.toolChoiceHBox.addWidget(self.SwitchToCauteryButton)
     self.toolChoiceHBox.addWidget(self.SwitchToStickButton)
     self.toolChoiceFormLayout.addRow(self.toolChoiceHBox)
-    
-    '''
-    self.toolChoiceSelector = slicer.qMRMLNodeComboBox()
-    
 
-    self.toolChoiceSelector.nodeTypes = (("vtkMRMLModelNode", " "))
-    self.toolChoiceSelector.noneEnabled = False
-    self.toolChoiceSelector.addEnabled = False
-    self.toolChoiceSelector.removeEnabled = False
-    self.toolChoiceSelector.setMRMLScene( slicer.mrmlScene )
-    self.toolChoiceSelector.setToolTip("Pick the tool to be visualized as the yellow model, e.g. 'CauteryModel'")
-    self.toolChoiceFormLayout.addRow(self.toolChoiceLabel, self.toolChoiceSelector) 
-    
-    self.changeToolButton = qt.QPushButton("Change Tool")
-    self.toolChoiceFormLayout.addRow(self.changeToolButton)    
-    '''
   def onCalibrationPanelToggled(self, toggled):
     if toggled == False:
       return
@@ -1179,15 +1163,9 @@ class LumpNavGuidelet(Guidelet):
     
   def onSwitchToCauteryButton(self):
     self.cauteryModel_CauteryTip.GetDisplayNode().VisibilityOn()
-    self.stickModel.GetDisplayNode().VisibilityOff()
+    self.stickModel_CauteryTip.GetDisplayNode().VisibilityOff()
   
   def onSwitchToStickButton(self):
     print "stick model should appear now"
     self.cauteryModel_CauteryTip.GetDisplayNode().VisibilityOff()
-    self.stickModel.GetDisplayNode().VisibilityOn()
-    
-    '''
-    self.cauteryModel_CauteryTip = slicer.modules.createmodels.logic().CreateNeedle(100,1.0,2.0,0)
-    self.cauteryModel_CauteryTip.GetDisplayNode().SetColor(1.0, 1.0, 0)
-    '''
-  
+    self.stickModel_CauteryTip.GetDisplayNode().VisibilityOn()
