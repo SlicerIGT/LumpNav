@@ -340,6 +340,12 @@ class LumpNavGuidelet(Guidelet):
       self.cauteryModel_CauteryTip.GetDisplayNode().SetColor(1.0, 1.0, 0)
       self.cauteryModel_CauteryTip.SetName("CauteryModel")
 
+      slicer.modules.createmodels.logic().CreateNeedle(100,1.0,2.0,0)
+      self.stickModel_CauteryTip = slicer.util.getNode(pattern="NeedleModel")
+      self.stickModel_CauteryTip.SetName("StickModel")
+      self.stickModel_CauteryTip.GetDisplayNode().SetColor(1.0, 1.0, 0)
+      self.stickModel_CauteryTip.GetDisplayNode().VisibilityOff()
+         
     self.needleModel_NeedleTip = slicer.util.getNode('NeedleModel')
     if not self.needleModel_NeedleTip:
       slicer.modules.createmodels.logic().CreateNeedle(60,1.0, self.needleModelTipRadius, 0)
@@ -424,6 +430,7 @@ class LumpNavGuidelet(Guidelet):
     self.needleBaseToNeedle.SetAndObserveTransformNodeID(self.needleToReference.GetID())
     self.needleModelToNeedleTip.SetAndObserveTransformNodeID(self.needleTipToNeedle.GetID())
     self.cauteryModel_CauteryTip.SetAndObserveTransformNodeID(self.cauteryModelToCauteryTip.GetID())
+    self.stickModel_CauteryTip.SetAndObserveTransformNodeID(self.cauteryModelToCauteryTip.GetID())
     self.needleModel_NeedleTip.SetAndObserveTransformNodeID(self.needleModelToNeedleTip.GetID())
     self.tumorModel_Needle.SetAndObserveTransformNodeID(self.needleToReference.GetID())
     self.tumorMarkups_Needle.SetAndObserveTransformNodeID(self.needleToReference.GetID())
@@ -761,6 +768,34 @@ class LumpNavGuidelet(Guidelet):
     self.deleteLastFiducialDuringNavigationButton.setIcon(qt.QIcon(":/Icons/MarkupsDelete.png"))
     self.deleteLastFiducialDuringNavigationButton.setEnabled(False)
     self.contourAdjustmentFormLayout.addRow(self.deleteLastFiducialDuringNavigationButton)
+    
+    # "Choose Tool" Collapsible
+    self.toolChoiceCollapsibleButton = ctk.ctkCollapsibleGroupBox()
+    self.toolChoiceCollapsibleButton.title = "Tool Choice"
+    self.toolChoiceCollapsibleButton.collapsed = True
+    self.navigationCollapsibleLayout.addRow(self.toolChoiceCollapsibleButton)
+    
+
+    # Layout within the collapsible button
+    self.toolChoiceFormLayout = qt.QFormLayout(self.toolChoiceCollapsibleButton)
+    self.toolChoiceLabel = qt.QLabel()
+    self.toolChoiceLabel.setText("Select tool: ")
+    
+    self.SwitchToCauteryButton = qt.QPushButton("Cautery Model")
+    self.SwitchToCauteryButton.toolTip = "Switching to cautery model"
+    self.SwitchToCauteryButton.enabled = True
+    self.SwitchToCauteryButton.connect('clicked(bool)', self.onSwitchToCauteryButton)
+    self.SwitchToStickButton = qt.QPushButton("Stick Model")
+    self.SwitchToStickButton.toolTip = "Switching to stick model"
+    self.SwitchToStickButton.enabled = True
+    self.SwitchToStickButton.connect('clicked(bool)', self.onSwitchToStickButton)
+    
+    
+    self.toolChoiceHBox = qt.QHBoxLayout()
+    self.toolChoiceHBox.addWidget(self.toolChoiceLabel)
+    self.toolChoiceHBox.addWidget(self.SwitchToCauteryButton)
+    self.toolChoiceHBox.addWidget(self.SwitchToStickButton)
+    self.toolChoiceFormLayout.addRow(self.toolChoiceHBox)
 
   def onCalibrationPanelToggled(self, toggled):
     if toggled == False:
@@ -1126,3 +1161,12 @@ class LumpNavGuidelet(Guidelet):
     self.needleLengthSpinBox.blockSignals(wasBlocked)
     # Update the needle model
     slicer.modules.createmodels.logic().CreateNeedle(needleLength,1.0, self.needleModelTipRadius, False, self.needleModel_NeedleTip)
+    
+  def onSwitchToCauteryButton(self):
+    self.cauteryModel_CauteryTip.GetDisplayNode().VisibilityOn()
+    self.stickModel_CauteryTip.GetDisplayNode().VisibilityOff()
+  
+  def onSwitchToStickButton(self):
+    print "stick model should appear now"
+    self.cauteryModel_CauteryTip.GetDisplayNode().VisibilityOff()
+    self.stickModel_CauteryTip.GetDisplayNode().VisibilityOn()
