@@ -340,11 +340,13 @@ class LumpNavGuidelet(Guidelet):
       self.cauteryModel_CauteryTip.GetDisplayNode().SetColor(1.0, 1.0, 0)
       self.cauteryModel_CauteryTip.SetName("CauteryModel")
 
+    self.stickModel_CauteryTip = slicer.util.getNode('StickModel')
+    if not self.stickModel_CauteryTip:
       slicer.modules.createmodels.logic().CreateNeedle(100,1.0,2.0,0)
       self.stickModel_CauteryTip = slicer.util.getNode(pattern="NeedleModel")
-      self.stickModel_CauteryTip.SetName("StickModel")
       self.stickModel_CauteryTip.GetDisplayNode().SetColor(1.0, 1.0, 0)
       self.stickModel_CauteryTip.GetDisplayNode().VisibilityOff()
+      self.stickModel_CauteryTip.SetName("StickModel")
          
     self.needleModel_NeedleTip = slicer.util.getNode('NeedleModel')
     if not self.needleModel_NeedleTip:
