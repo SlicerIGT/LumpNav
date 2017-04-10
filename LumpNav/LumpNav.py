@@ -38,6 +38,13 @@ class LumpNavWidget(GuideletWidget):
   """
 
   def __init__(self, parent = None):
+    try:
+      import BreachWarningLight
+      self.breachWarningLightLogic = BreachWarningLight.BreachWarningLightLogic()
+    except ImportError:
+      self.breachWarningLightLogic = None
+      logging.warning('BreachWarningLight module is not available. Light feedback is disabled.')
+
     GuideletWidget.__init__(self, parent)
 
   def setup(self):
@@ -51,34 +58,37 @@ class LumpNavWidget(GuideletWidget):
 
   def onConfigurationChanged(self, selectedConfigurationName):
     GuideletWidget.onConfigurationChanged(self, selectedConfigurationName)
-    settings = slicer.app.userSettings()
-    lightEnabled = settings.value(self.moduleName + '/Configurations/' + self.selectedConfigurationName + '/EnableBreachWarningLight')
-    self.breachWarningLightCheckBox.checked = (lightEnabled == 'True')
+    if self.breachWarningLightLogic:
+      settings = slicer.app.userSettings()
+      lightEnabled = settings.value(self.moduleName + '/Configurations/' + self.selectedConfigurationName + '/EnableBreachWarningLight')
+      self.breachWarningLightCheckBox.checked = (lightEnabled == 'True')
 
   def addBreachWarningLightPreferences(self):
     lnNode = slicer.util.getNode(self.moduleName)
 
-    self.breachWarningLightCheckBox = qt.QCheckBox()
-    checkBoxLabel = qt.QLabel()
-    hBoxCheck = qt.QHBoxLayout()
-    hBoxCheck.setAlignment(0x0001)
-    checkBoxLabel.setText("Use Breach Warning Light: ")
-    hBoxCheck.addWidget(checkBoxLabel)
-    hBoxCheck.addWidget(self.breachWarningLightCheckBox)
-    hBoxCheck.setStretch(1,2)
-    self.launcherFormLayout.addRow(hBoxCheck)
+    if self.breachWarningLightLogic:
 
-    if(lnNode is not None and lnNode.GetParameter('EnableBreachWarningLight')):
-        # logging.debug("There is already a connector EnableBreachWarningLight parameter " + lnNode.GetParameter('EnableBreachWarningLight'))
-        self.breachWarningLightCheckBox.checked = lnNode.GetParameter('EnableBreachWarningLight')
-        self.breachWarningLightCheckBox.setDisabled(True)
-    else:
-        self.breachWarningLightCheckBox.setEnabled(True)
-        settings = slicer.app.userSettings()
-        lightEnabled = settings.value(self.moduleName + '/Configurations/' + self.selectedConfigurationName + '/EnableBreachWarningLight', 'True')
-        self.breachWarningLightCheckBox.checked = (lightEnabled == 'True')
+      self.breachWarningLightCheckBox = qt.QCheckBox()
+      checkBoxLabel = qt.QLabel()
+      hBoxCheck = qt.QHBoxLayout()
+      hBoxCheck.setAlignment(0x0001)
+      checkBoxLabel.setText("Use Breach Warning Light: ")
+      hBoxCheck.addWidget(checkBoxLabel)
+      hBoxCheck.addWidget(self.breachWarningLightCheckBox)
+      hBoxCheck.setStretch(1,2)
+      self.launcherFormLayout.addRow(hBoxCheck)
 
-    self.breachWarningLightCheckBox.connect('stateChanged(int)', self.onBreachWarningLightChanged)
+      if(lnNode is not None and lnNode.GetParameter('EnableBreachWarningLight')):
+          # logging.debug("There is already a connector EnableBreachWarningLight parameter " + lnNode.GetParameter('EnableBreachWarningLight'))
+          self.breachWarningLightCheckBox.checked = lnNode.GetParameter('EnableBreachWarningLight')
+          self.breachWarningLightCheckBox.setDisabled(True)
+      else:
+          self.breachWarningLightCheckBox.setEnabled(True)
+          settings = slicer.app.userSettings()
+          lightEnabled = settings.value(self.moduleName + '/Configurations/' + self.selectedConfigurationName + '/EnableBreachWarningLight', 'True')
+          self.breachWarningLightCheckBox.checked = (lightEnabled == 'True')
+
+      self.breachWarningLightCheckBox.connect('stateChanged(int)', self.onBreachWarningLightChanged)
 
   def onBreachWarningLightChanged(self, state):
     lightEnabled = ''
@@ -142,6 +152,13 @@ class LumpNavTest(GuideletTest):
 class LumpNavGuidelet(Guidelet):
 
   def __init__(self, parent, logic, configurationName='Default'):
+
+    try:
+      import BreachWarningLight
+      self.breachWarningLightLogic = BreachWarningLight.BreachWarningLightLogic()
+    except ImportError:
+      self.breachWarningLightLogic = None
+      
     Guidelet.__init__(self, parent, logic, configurationName)
     logging.debug('LumpNavGuidelet.__init__')
     self.logic.addValuesToDefaultConfiguration()
@@ -195,7 +212,8 @@ class LumpNavGuidelet(Guidelet):
     logging.debug('cleanup')
     self.breachWarningNode.UnRegister(slicer.mrmlScene)
     self.setAndObserveTumorMarkupsNode(None)
-    self.breachWarningLightLogic.stopLightFeedback()
+    if self.breachWarningLightLogic:
+      self.breachWarningLightLogic.stopLightFeedback()
 
   def setupConnections(self):
     logging.debug('LumpNav.setupConnections()')
@@ -410,16 +428,15 @@ class LumpNavGuidelet(Guidelet):
       breachWarningLogic.SetLineToClosestPointVisibility(False, self.breachWarningNode)
 
     # Set up breach warning light
-    import BreachWarningLight
-    logging.debug('Set up breach warning light')
-    self.breachWarningLightLogic = BreachWarningLight.BreachWarningLightLogic()
-    self.breachWarningLightLogic.setMarginSizeMm(float(self.parameterNode.GetParameter('BreachWarningLightMarginSizeMm')))
-    if (self.parameterNode.GetParameter('EnableBreachWarningLight')=='True'):
-      logging.debug("BreachWarningLight: active")
-      self.breachWarningLightLogic.startLightFeedback(self.breachWarningNode, self.connectorNode)
-    else:
-      logging.debug("BreachWarningLight: shutdown")
-      self.breachWarningLightLogic.shutdownLight(self.connectorNode)
+    if self.breachWarningLightLogic:
+      logging.debug('Set up breach warning light')
+      self.breachWarningLightLogic.setMarginSizeMm(float(self.parameterNode.GetParameter('BreachWarningLightMarginSizeMm')))
+      if (self.parameterNode.GetParameter('EnableBreachWarningLight')=='True'):
+        logging.debug("BreachWarningLight: active")
+        self.breachWarningLightLogic.startLightFeedback(self.breachWarningNode, self.connectorNode)
+      else:
+        logging.debug("BreachWarningLight: shutdown")
+        self.breachWarningLightLogic.shutdownLight(self.connectorNode)
 
     # Build transform tree
     logging.debug('Set up transform tree')
