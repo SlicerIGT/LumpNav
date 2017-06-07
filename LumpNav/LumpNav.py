@@ -1056,7 +1056,7 @@ class LumpNavGuidelet(Guidelet):
     else:
       self.rightBullseyeCameraButton.setChecked(False)
       cauteryNode = slicer.util.getNode('CauteryModel')
-      if self.leftBullseyeCameraButton.setChecked(False):
+      if self.rightBullseyeCameraButton.setChecked(False):
         cauteryNode.GetDisplayNode().SetOpacity(1)
         print("r cam set opacity to 01")
     self.rightBullseyeCameraButton.blockSignals(blockSignalState)
