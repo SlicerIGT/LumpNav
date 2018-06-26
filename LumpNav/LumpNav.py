@@ -6,6 +6,8 @@ from Guidelet import Guidelet
 import logging
 import time
 import math
+import numpy
+
 
 #
 # LumpNav ###
@@ -119,13 +121,12 @@ class LumpNavLogic(GuideletLogic):
     GuideletLogic.addValuesToDefaultConfiguration(self)
     moduleDir = os.path.dirname(slicer.modules.lumpnav.path)
     defaultSavePathOfLumpNav = os.path.join(moduleDir, 'SavedScenes')
-    settingList = {'EnableBreachWarningLight' : 'False',
+    settingList = {'StyleSheet' : moduleDir + '\Resources\StyleSheets\LumpNavStyle.qss',
+                   'EnableBreachWarningLight' : 'False',
                    'BreachWarningLightMarginSizeMm' : '2.0',
                    'TipToSurfaceDistanceTextScale' : '3',
                    'TipToSurfaceDistanceTrajectory' : 'True',
-                   'NeedleModelToNeedleTip' : '0.0 1.0 0.0 0.0 0.0 0.0 1.0 0.0 1.0 0.0 0.0 0.0 0 0 0 1',
-                   'NeedleBaseToNeedle' : '1 0 0 20.93 0 1 0 14.00 0 0 1 -4.27 0 0 0 1',
-                   'CauteryModelToCauteryTip' : '0.03 0.03 1.01 0.00 -0.97 -0.23 0.03 0.00 0.23 -0.98 0.02 0.00 0 0 0 1', 
+                   'CauteryModelToCauteryTip' : '0.03 0.03 1.01 0.00 -0.97 -0.23 0.03 0.00 0.23 -0.98 0.02 0.00 0 0 0 1',
                    'PivotCalibrationErrorThresholdMm' :  '0.9',
                    'PivotCalibrationDurationSec' : '5',
                    'TestMode' : 'False',
@@ -150,7 +151,10 @@ class LumpNavTest(GuideletTest):
     #self.test_LumpNav1() #add applet specific tests here
 
 class LumpNavGuidelet(Guidelet):
-
+  
+  LUMPNAV_PIVOT_CALIBRATION = 0
+  LUMPNAV_SPIN_CALIBRATION = 1
+  
   def __init__(self, parent, logic, configurationName='Default'):
 
     try:
@@ -164,7 +168,9 @@ class LumpNavGuidelet(Guidelet):
     self.logic.addValuesToDefaultConfiguration()
 
     moduleDirectoryPath = slicer.modules.lumpnav.path.replace('LumpNav.py', '')
-    self.needleModelTipRadius = 0.0
+    self.needleModelTipRadius = 2.0
+    
+    self.needleCalibrationMode = self.LUMPNAV_PIVOT_CALIBRATION
 
     # Set up main frame.
 
@@ -178,6 +184,20 @@ class LumpNavGuidelet(Guidelet):
     # Set needle and cautery transforms and models
     self.tumorMarkups_Needle = None
     self.tumorMarkups_NeedleObserver = None
+
+    # Second fiducial node used to erase points
+    self.eraseMarkups_Needle = slicer.vtkMRMLMarkupsFiducialNode()
+    slicer.mrmlScene.AddNode(self.eraseMarkups_Needle)
+    self.eraseMarkups_Needle.CreateDefaultDisplayNodes() 
+    self.eraseMarkups_NeedleObserver = None
+    self.setAndObserveErasedMarkupsNode(self.eraseMarkups_Needle)
+
+    # Temporary solution to double function call problem
+    self.eraserFlag = True
+    self.loggingFlag = True
+
+    self.hideDistance = True # Only show distance to tumor after button is clicked
+
     self.setupScene()
 
     self.navigationView = self.VIEW_TRIPLE_3D
@@ -212,6 +232,7 @@ class LumpNavGuidelet(Guidelet):
     logging.debug('cleanup')
     self.breachWarningNode.UnRegister(slicer.mrmlScene)
     self.setAndObserveTumorMarkupsNode(None)
+    self.setAndObserveErasedMarkupsNode(None)
     if self.breachWarningLightLogic:
       self.breachWarningLightLogic.stopLightFeedback()
 
@@ -224,14 +245,18 @@ class LumpNavGuidelet(Guidelet):
 
     self.cauteryPivotButton.connect('clicked()', self.onCauteryPivotClicked)
     self.needlePivotButton.connect('clicked()', self.onNeedlePivotClicked)
+    self.needleSpinButton.connect('clicked()', self.onNeedleSpinClicked)
     self.needleLengthSpinBox.connect('valueChanged(int)', self.onNeedleLengthModified)
     self.placeButton.connect('clicked(bool)', self.onPlaceClicked)
+    self.eraseButton.connect('clicked(bool)', self.onEraseClicked)
     self.deleteLastFiducialButton.connect('clicked()', self.onDeleteLastFiducialClicked)
     self.deleteLastFiducialDuringNavigationButton.connect('clicked()', self.onDeleteLastFiducialClicked)
     self.deleteAllFiducialsButton.connect('clicked()', self.onDeleteAllFiducialsClicked)
+    self.leftBreastButton.connect('clicked()', self.onLeftBreastButtonClicked)
+    self.rightBreastButton.connect('clicked()', self.onRightBreastButtonClicked)
+    self.displayDistanceButton.connect('clicked()', self.onDisplayDistanceClicked)
+    self.distanceFontSizeSpinner.valueChanged.connect(self.onDistanceFontSizeChanged)
 
-    self.leftBullseyeCameraButton.connect('clicked()', lambda: self.onCameraButtonClicked('View1') )
-    self.rightBullseyeCameraButton.connect('clicked()', lambda: self.onCameraButtonClicked('View2') )
     self.bottomBullseyeCameraButton.connect('clicked()', lambda: self.onCameraButtonClicked('View3') )
     self.leftAutoCenterCameraButton.connect('clicked()', lambda: self.onAutoCenterButtonClicked('View1') )
     self.rightAutoCenterCameraButton.connect('clicked()', lambda: self.onAutoCenterButtonClicked('View2') )
@@ -305,15 +330,6 @@ class LumpNavGuidelet(Guidelet):
         self.needleBaseToNeedle.SetMatrixTransformToParent(m)
       slicer.mrmlScene.AddNode(self.needleBaseToNeedle)
 
-    self.needleModelToNeedleTip = slicer.util.getNode('NeedleModelToNeedleTip')
-    if not self.needleModelToNeedleTip:
-      self.needleModelToNeedleTip=slicer.vtkMRMLLinearTransformNode()
-      self.needleModelToNeedleTip.SetName("NeedleModelToNeedleTip")
-      m = self.logic.readTransformFromSettings('NeedleModelToNeedleTip', self.configurationName)
-      if m:
-        self.needleModelToNeedleTip.SetMatrixTransformToParent(m)
-      slicer.mrmlScene.AddNode(self.needleModelToNeedleTip)
-
     self.cauteryCameraToCautery = slicer.util.getNode('CauteryCameraToCautery')
     if not self.cauteryCameraToCautery:
       self.cauteryCameraToCautery=slicer.vtkMRMLLinearTransformNode()
@@ -356,14 +372,14 @@ class LumpNavGuidelet(Guidelet):
         logging.debug('Cautery model not found ({0}), using stick model instead'.format(modelFilePath))
         self.cauteryModel_CauteryTip = slicer.modules.createmodels.logic().CreateNeedle(100,1.0,2.0,0)
       self.cauteryModel_CauteryTip.GetDisplayNode().SetColor(1.0, 1.0, 0)
+      self.cauteryModel_CauteryTip.GetDisplayNode().VisibilityOff()  # stick model is the default cautery model
       self.cauteryModel_CauteryTip.SetName("CauteryModel")
-
+    
     self.stickModel_CauteryTip = slicer.util.getNode('StickModel')
     if not self.stickModel_CauteryTip:
       slicer.modules.createmodels.logic().CreateNeedle(100,1.0,2.0,0)
       self.stickModel_CauteryTip = slicer.util.getNode(pattern="NeedleModel")
       self.stickModel_CauteryTip.GetDisplayNode().SetColor(1.0, 1.0, 0)
-      self.stickModel_CauteryTip.GetDisplayNode().VisibilityOff()
       self.stickModel_CauteryTip.SetName("StickModel")
          
     self.needleModel_NeedleTip = slicer.util.getNode('NeedleModel')
@@ -419,6 +435,7 @@ class LumpNavGuidelet(Guidelet):
       self.breachWarningNode.SetOriginalColor(self.tumorModel_Needle.GetDisplayNode().GetColor())
       self.breachWarningNode.SetAndObserveToolTransformNodeId(self.cauteryTipToCautery.GetID())
       self.breachWarningNode.SetAndObserveWatchedModelNodeID(self.tumorModel_Needle.GetID())
+      self.breachWarningNodeObserver = self.breachWarningNode.AddObserver(vtk.vtkCommand.ModifiedEvent, self.onBreachWarningNodeChanged)
       breachWarningLogic = slicer.modules.breachwarning.logic()
       # Line properties can only be set after the line is creaed (made visible at least once)
       breachWarningLogic.SetLineToClosestPointVisibility(True, self.breachWarningNode)
@@ -447,12 +464,13 @@ class LumpNavGuidelet(Guidelet):
     self.needleToReference.SetAndObserveTransformNodeID(self.referenceToRas.GetID())
     self.needleTipToNeedle.SetAndObserveTransformNodeID(self.needleToReference.GetID())
     self.needleBaseToNeedle.SetAndObserveTransformNodeID(self.needleToReference.GetID())
-    self.needleModelToNeedleTip.SetAndObserveTransformNodeID(self.needleTipToNeedle.GetID())
     self.cauteryModel_CauteryTip.SetAndObserveTransformNodeID(self.cauteryModelToCauteryTip.GetID())
     self.stickModel_CauteryTip.SetAndObserveTransformNodeID(self.cauteryModelToCauteryTip.GetID())
-    self.needleModel_NeedleTip.SetAndObserveTransformNodeID(self.needleModelToNeedleTip.GetID())
+    self.needleModel_NeedleTip.SetAndObserveTransformNodeID(self.needleTipToNeedle.GetID())
     self.tumorModel_Needle.SetAndObserveTransformNodeID(self.needleToReference.GetID())
     self.tumorMarkups_Needle.SetAndObserveTransformNodeID(self.needleToReference.GetID())
+    self.eraseMarkups_Needle.SetAndObserveTransformNodeID(self.needleToReference.GetID())
+
     # self.liveUltrasoundNode_Reference.SetAndObserveTransformNodeID(self.referenceToRas.GetID())
 
     # Hide slice view annotations (patient name, scale, color bar, etc.) as they
@@ -474,19 +492,26 @@ class LumpNavGuidelet(Guidelet):
     if self.tumorMarkups_Needle and self.tumorMarkups_NeedleObserver:
       self.tumorMarkups_Needle.RemoveObserver(self.tumorMarkups_NeedleObserver)
       self.tumorMarkups_NeedleObserver = None
+    
+    if self.eraseMarkups_Needle and self.eraseMarkups_NeedleObserver :
+      self.eraseMarkups_Needle.RemoveObserver(self.eraseMarkups_NeedleObserver)
+      self.eraseMarkups_NeedleObserver = None
 
     self.calibrationCollapsibleButton.disconnect('toggled(bool)', self.onCalibrationPanelToggled)
     self.navigationCollapsibleButton.disconnect('toggled(bool)', self.onNavigationPanelToggled)
 
     self.cauteryPivotButton.disconnect('clicked()', self.onCauteryPivotClicked)
     self.needlePivotButton.disconnect('clicked()', self.onNeedlePivotClicked)
+    self.needleSpinButton.disconnect('clicked()', self.onNeedleSpinClicked)
     self.deleteLastFiducialButton.disconnect('clicked()', self.onDeleteLastFiducialClicked)
     self.deleteLastFiducialDuringNavigationButton.disconnect('clicked()', self.onDeleteLastFiducialClicked)
     self.deleteAllFiducialsButton.disconnect('clicked()', self.onDeleteAllFiducialsClicked)
     self.placeButton.disconnect('clicked(bool)', self.onPlaceClicked)
+    self.eraseButton.disconnect('clicked(bool)', self.onEraseClicked)
+    self.leftBreastButton.connect('clicked()', self.onLeftBreastButtonClicked)
+    self.rightBreastButton.connect('clicked()', self.onRightBreastButtonClicked)
+    self.displayDistanceButton.disconnect('clicked()', self.onDisplayDistanceClicked)
 
-    self.leftBullseyeCameraButton.disconnect('clicked()', lambda: self.onCameraButtonClicked('View1') )
-    self.rightBullseyeCameraButton.disconnect('clicked()', lambda: self.onCameraButtonClicked('View2') )
     self.bottomBullseyeCameraButton.disconnect('clicked()', lambda: self.onCameraButtonClicked('View3') )
     self.leftAutoCenterCameraButton.disconnect('clicked()', lambda: self.onAutoCenterButtonClicked('View1') )
     self.rightAutoCenterCameraButton.disconnect('clicked()', lambda: self.onAutoCenterButtonClicked('View2') )
@@ -495,7 +520,6 @@ class LumpNavGuidelet(Guidelet):
     self.pivotSamplingTimer.disconnect('timeout()',self.onPivotSamplingTimeout)
 
     self.placeTumorPointAtCauteryTipButton.disconnect('clicked(bool)', self.onPlaceTumorPointAtCauteryTipClicked)
-
 
   def onPivotSamplingTimeout(self):#lumpnav
     self.countdownLabel.setText("Pivot calibrating for {0:.0f} more seconds".format(self.pivotCalibrationStopTime-time.time()))
@@ -507,7 +531,9 @@ class LumpNavGuidelet(Guidelet):
       self.onStopPivotCalibration()
 
   def startPivotCalibration(self, toolToReferenceTransformName, toolToReferenceTransformNode, toolTipToToolTransformNode):#lumpnav
+    self.needleCalibrationMode = self.LUMPNAV_PIVOT_CALIBRATION
     self.needlePivotButton.setEnabled(False)
+    self.needleSpinButton.setEnabled(False)
     self.cauteryPivotButton.setEnabled(False)
     self.pivotCalibrationResultTargetNode =  toolTipToToolTransformNode
     self.pivotCalibrationResultTargetName = toolToReferenceTransformName
@@ -519,8 +545,14 @@ class LumpNavGuidelet(Guidelet):
   def onStopPivotCalibration(self):#lumpnav
     self.pivotCalibrationLogic.SetRecordingState(False)
     self.needlePivotButton.setEnabled(True)
+    self.needleSpinButton.setEnabled(True)
     self.cauteryPivotButton.setEnabled(True)
-    calibrationSuccess = self.pivotCalibrationLogic.ComputePivotCalibration()
+    
+    if self.needleCalibrationMode == self.LUMPNAV_PIVOT_CALIBRATION:
+      calibrationSuccess = self.pivotCalibrationLogic.ComputePivotCalibration()
+    else:
+      calibrationSuccess = self.pivotCalibrationLogic.ComputeSpinCalibration()
+    
     if not calibrationSuccess:
       self.countdownLabel.setText("Calibration failed: " + self.pivotCalibrationLogic.GetErrorText())
       self.pivotCalibrationLogic.ClearToolToReferenceMatrices()
@@ -529,6 +561,7 @@ class LumpNavGuidelet(Guidelet):
       self.countdownLabel.setText("Calibration failed, error = {0:.2f} mm, please calibrate again!".format(self.pivotCalibrationLogic.GetPivotRMSE()))
       self.pivotCalibrationLogic.ClearToolToReferenceMatrices()
       return
+    
     tooltipToToolMatrix = vtk.vtkMatrix4x4()
     self.pivotCalibrationLogic.GetToolTipToToolMatrix(tooltipToToolMatrix)
     self.pivotCalibrationLogic.ClearToolToReferenceMatrices()
@@ -553,8 +586,24 @@ class LumpNavGuidelet(Guidelet):
     # (NeedleBaseToNeedle is constant, depends on the geometry of the needle clip)
     logging.debug('onNeedlePivotClicked')
     self.startPivotCalibration('NeedleTipToNeedle', self.needleToReference, self.needleTipToNeedle)
-
+  
+  def onNeedleSpinClicked(self):#lumpnav
+    logging.debug('onNeedleSpinClicked')
+    self.needleCalibrationMode = self.LUMPNAV_SPIN_CALIBRATION
+    self.needlePivotButton.setEnabled(False)
+    self.needleSpinButton.setEnabled(False)
+    self.cauteryPivotButton.setEnabled(False)
+    self.pivotCalibrationResultTargetNode = self.needleTipToNeedle
+    self.pivotCalibrationResultTargetName = 'NeedleTipToNeedle'
+    self.pivotCalibrationLogic.SetAndObserveTransformNode( self.needleToReference )
+    self.pivotCalibrationStopTime = time.time() + float(self.parameterNode.GetParameter('PivotCalibrationDurationSec'))
+    self.pivotCalibrationLogic.SetRecordingState(True)
+    self.onPivotSamplingTimeout()
+    
+  
   def onPlaceClicked(self, pushed):
+    self.eraseButton.setChecked(False)
+    logging.info("Mark Points clicked")
     logging.debug('onPlaceClicked')
     interactionNode = slicer.app.applicationLogic().GetInteractionNode()
     if pushed:
@@ -568,19 +617,50 @@ class LumpNavGuidelet(Guidelet):
       # deactivate placement mode
       interactionNode.SetCurrentInteractionMode(interactionNode.ViewTransform)
 
+  def onEraseClicked(self, pushed):
+    self.placeButton.setChecked(False)
+    logging.info("Erase Points clicked")
+    logging.debug('onEraseClicked')
+
+    interactionNode = slicer.app.applicationLogic().GetInteractionNode()
+    if pushed:
+      # activate placement mode
+      selectionNode = slicer.app.applicationLogic().GetSelectionNode()
+      selectionNode.SetReferenceActivePlaceNodeClassName("vtkMRMLMarkupsFiducialNode")
+      selectionNode.SetActivePlaceNodeID(self.eraseMarkups_Needle.GetID())
+      interactionNode.SetPlaceModePersistence(1)
+      interactionNode.SetCurrentInteractionMode(interactionNode.Place)
+    else:
+      # deactivate placement mode
+      interactionNode.SetCurrentInteractionMode(interactionNode.ViewTransform)
+
   def onDeleteLastFiducialClicked(self):
+    if self.placeButton.isChecked() : # ensures point placed doesn't get logged twice
+      self.placeButton.click()
     numberOfPoints = self.tumorMarkups_Needle.GetNumberOfFiducials()
+    deleted_coord = [0.0, 0.0, 0.0]
+    self.tumorMarkups_Needle.GetNthFiducialPosition(numberOfPoints-1,deleted_coord)
     self.tumorMarkups_Needle.RemoveMarkup(numberOfPoints-1)
-    if numberOfPoints<=1:
-        self.deleteLastFiducialButton.setEnabled(False)
-        self.deleteAllFiducialsButton.setEnabled(False)
-        self.deleteLastFiducialDuringNavigationButton.setEnabled(False)
+    logging.info("Deleted last fiducial at %s", deleted_coord)
+    if numberOfPoints<=1:        
+      self.deleteLastFiducialButton.setEnabled(False)
+      self.deleteAllFiducialsButton.setEnabled(False)
+      self.deleteLastFiducialDuringNavigationButton.setEnabled(False)
+      self.eraseButton.setEnabled(False)
+      self.eraseButton.setChecked(False)
+      sphereSource = vtk.vtkSphereSource()
+      sphereSource.SetRadius(0.001)
+      self.tumorModel_Needle.SetPolyDataConnection(sphereSource.GetOutputPort())
+      self.tumorModel_Needle.Modified()
 
   def onDeleteAllFiducialsClicked(self):
     self.tumorMarkups_Needle.RemoveAllMarkups()
+    logging.info("Deleted all fiducials")
     self.deleteLastFiducialButton.setEnabled(False)
     self.deleteAllFiducialsButton.setEnabled(False)
     self.deleteLastFiducialDuringNavigationButton.setEnabled(False)
+    self.eraseButton.setEnabled(False)
+    self.eraseButton.setChecked(False)
     sphereSource = vtk.vtkSphereSource()
     sphereSource.SetRadius(0.001)
     self.tumorModel_Needle.SetPolyDataConnection(sphereSource.GetOutputPort())
@@ -590,6 +670,7 @@ class LumpNavGuidelet(Guidelet):
     cauteryTipToNeedle = vtk.vtkMatrix4x4()
     self.cauteryTipToCautery.GetMatrixTransformToNode(self.needleToReference, cauteryTipToNeedle)
     self.tumorMarkups_Needle.AddFiducial(cauteryTipToNeedle.GetElement(0,3), cauteryTipToNeedle.GetElement(1,3), cauteryTipToNeedle.GetElement(2,3))
+    logging.info("Tumor point placed at cautery tip, (%s, %s, %s)", cauteryTipToNeedle.GetElement(0,3), cauteryTipToNeedle.GetElement(1,3), cauteryTipToNeedle.GetElement(2,3))
 
   def setupCalibrationPanel(self):
     logging.debug('setupCalibrationPanel')
@@ -621,15 +702,39 @@ class LumpNavGuidelet(Guidelet):
     # Layout within the collapsible button
     self.advancedNeedleCalibrationFormLayout = qt.QFormLayout(self.advancedNeedleCalibrationCollapsibleButton)
 
-    self.needlePivotButton = qt.QPushButton('Start needle calibration')
+    self.needlePivotButton = qt.QPushButton('Pivot calibration')
     self.advancedNeedleCalibrationFormLayout.addRow(self.needlePivotButton)
-
+    
+    self.needleSpinButton = qt.QPushButton('Spin calibration')
+    self.advancedNeedleCalibrationFormLayout.addRow(self.needleSpinButton)
+    
     self.countdownLabel = qt.QLabel()
-    self.calibrationLayout.addRow(self.countdownLabel)
+    self.advancedNeedleCalibrationFormLayout.addRow(self.countdownLabel)
 
     self.pivotSamplingTimer = qt.QTimer()
     self.pivotSamplingTimer.setInterval(500)
     self.pivotSamplingTimer.setSingleShot(True)
+
+    # "New Needle Clip Calibration" Collapsible
+    self.newNeedleClipCollapsibleButton = ctk.ctkCollapsibleGroupBox()
+    self.newNeedleClipCollapsibleButton.title = "New needle clip calibration"
+    self.newNeedleClipCollapsibleButton.collapsed = True
+    self.calibrationLayout.addRow(self.newNeedleClipCollapsibleButton)
+  
+    # Layout within the collapsible button
+    newNeedleClipHBox = qt.QHBoxLayout()
+    self.newNeedleClipFormLayout = qt.QFormLayout(self.newNeedleClipCollapsibleButton)
+    self.calibrateNeedleClipButton = qt.QPushButton("Calibrate clip")
+    self.calibrateNeedleClipButton.connect('clicked()', self.onNeedleClipClicked)
+    self.needleLengthLabel = qt.QLabel('Specify needle length (mm):')
+    self.needleLengthForClipCalibrationSpinBox = qt.QSpinBox()
+    self.needleLengthForClipCalibrationSpinBox.setValue(50)
+
+    newNeedleClipHBox.addWidget(self.calibrateNeedleClipButton)
+    newNeedleClipHBox.addWidget(self.needleLengthLabel)
+    newNeedleClipHBox.addWidget(self.needleLengthForClipCalibrationSpinBox)
+
+    self.newNeedleClipFormLayout.addRow(newNeedleClipHBox)
 
   def addTumorContouringToUltrasoundPanel(self):
 
@@ -638,7 +743,17 @@ class LumpNavGuidelet(Guidelet):
     self.placeButton = qt.QPushButton("Mark points")
     self.placeButton.setCheckable(True)
     self.placeButton.setIcon(qt.QIcon(":/Icons/MarkupsMouseModePlace.png"))
-    self.ultrasoundLayout.addRow(self.placeButton)
+
+    moduleDirectoryPath = slicer.modules.lumpnav.path.replace('LumpNav.py', '') # eraser .png file saved in Icons folder
+    self.eraseButton = qt.QPushButton("Erase points")
+    self.eraseButton.setCheckable(True)
+    self.eraseButton.setEnabled(False)
+    self.eraseButton.setIcon(qt.QIcon(moduleDirectoryPath + '/Resources/Icons/Eraser.png'))
+    
+    markPointsHBox = qt.QHBoxLayout()
+    markPointsHBox.addWidget(self.placeButton)
+    markPointsHBox.addWidget(self.eraseButton)
+    self.ultrasoundLayout.addRow(markPointsHBox)
 
     self.deleteLastFiducialButton = qt.QPushButton("Delete last")
     self.deleteLastFiducialButton.setIcon(qt.QIcon(":/Icons/MarkupsDelete.png"))
@@ -674,19 +789,43 @@ class LumpNavGuidelet(Guidelet):
     self.navigationCollapsibleLayout.setContentsMargins(12, 4, 4, 4)
     self.navigationCollapsibleLayout.setSpacing(4)
 
-    self.leftBullseyeCameraButton = qt.QPushButton("Left camera")
-    self.leftBullseyeCameraButton.setCheckable(True)
+    # Preset camera position options
+    self.leftBreastButton = qt.QPushButton("Left Breast")
+    self.leftBreastButton.setCheckable(True)
 
-    self.rightBullseyeCameraButton = qt.QPushButton("Right camera")
-    self.rightBullseyeCameraButton.setCheckable(True)
-
+    self.rightBreastButton = qt.QPushButton("Right Breast")
+    self.rightBreastButton.setCheckable(True)
+ 
     self.bottomBullseyeCameraButton = qt.QPushButton("Bottom camera")
     self.bottomBullseyeCameraButton.setCheckable(True)
 
-    bullseyeHBox = qt.QHBoxLayout()
-    bullseyeHBox.addWidget(self.leftBullseyeCameraButton)
-    bullseyeHBox.addWidget(self.rightBullseyeCameraButton)
-    self.navigationCollapsibleLayout.addRow(bullseyeHBox)
+    self.presetViewLabel = qt.QLabel("Preset Views :")
+    self.navigationCollapsibleLayout.addRow(self.presetViewLabel)
+
+    presetViewHBox = qt.QHBoxLayout()
+    presetViewHBox.addWidget(self.leftBreastButton)
+    presetViewHBox.addWidget(self.rightBreastButton)
+    self.navigationCollapsibleLayout.addRow(presetViewHBox)
+
+    # "Distance to Tumor" Collapsible
+    self.distanceToTumorCollapsibleButton = ctk.ctkCollapsibleGroupBox()
+    self.distanceToTumorCollapsibleButton.title = "Distance to tumor margin"
+    self.distanceToTumorCollapsibleButton.collapsed=True
+    self.navigationCollapsibleLayout.addRow(self.distanceToTumorCollapsibleButton)
+
+    # Layout within the collapsible button
+    self.distanceToTumorFormLayout = qt.QFormLayout(self.distanceToTumorCollapsibleButton)
+
+    self.displayDistanceButton = qt.QPushButton("Display Distance")
+    self.distanceToTumorFormLayout.addRow(self.displayDistanceButton)
+
+    self.distanceFontSizeLabel = qt.QLabel(qt.Qt.Horizontal,None)
+    self.distanceFontSizeLabel.setText("Distance to Tumor Font Size [mm]: ")
+    self.distanceFontSizeSpinner = qt.QSpinBox()
+    self.distanceFontSizeSpinner.setMinimum(5)
+    self.distanceFontSizeSpinner.setMaximum(60)
+    self.distanceFontSizeSpinner.setValue(35) # default font size
+    self.distanceToTumorFormLayout.addRow(self.distanceFontSizeLabel, self.distanceFontSizeSpinner)
 
     # "View" Collapsible
     self.viewCollapsibleButton = ctk.ctkCollapsibleGroupBox()
@@ -755,7 +894,6 @@ class LumpNavGuidelet(Guidelet):
     self.leftAutoCenterCameraButton = qt.QPushButton("Left")
     self.leftAutoCenterCameraButton.setCheckable(True)
 
-
     self.rightAutoCenterCameraButton = qt.QPushButton("Right")
     self.rightAutoCenterCameraButton.setCheckable(True)
 
@@ -809,7 +947,6 @@ class LumpNavGuidelet(Guidelet):
     self.SwitchToStickButton.enabled = True
     self.SwitchToStickButton.connect('clicked(bool)', self.onSwitchToStickButton)
     
-    
     self.toolChoiceHBox = qt.QHBoxLayout()
     self.toolChoiceHBox.addWidget(self.toolChoiceLabel)
     self.toolChoiceHBox.addWidget(self.SwitchToCauteryButton)
@@ -821,15 +958,20 @@ class LumpNavGuidelet(Guidelet):
       return
 
     logging.debug('onCalibrationPanelToggled: {0}'.format(toggled))
+    logging.info("Calibration Panel Toggled")
 
     if self.tumorMarkups_Needle:
       self.tumorMarkups_Needle.SetDisplayVisibility(0)
 
     self.selectView(self.VIEW_ULTRASOUND_3D)
-    self.placeButton.checked = False
 
   def onUltrasoundPanelToggled(self, toggled):
     Guidelet.onUltrasoundPanelToggled(self, toggled)
+
+    if self.eraseButton.isChecked():
+      self.onEraseClicked(toggled)    
+    elif self.placeButton.isChecked():
+      self.onPlaceClicked(toggled)
 
     if self.tumorMarkups_Needle:
         self.tumorMarkups_Needle.SetDisplayVisibility(0)
@@ -838,34 +980,47 @@ class LumpNavGuidelet(Guidelet):
     # Disable automatic ultrasound image auto-fit when the user unfreezes (connect)
     # to avoid zooming out of the image.
     self.fitUltrasoundImageToViewOnConnect = not toggled
+  
+  def showDistanceToTumor(self) :
+    if self.hideDistance : 
+      return
+    for i in range (0,3) : # There will always be three threeD views mapped in layout when the navigation panel is toggled
+      view = slicer.app.layoutManager().threeDWidget(i).threeDView()
+      view.setCornerAnnotationText("Distance: {0:.2f}mm".format(self.breachWarningNode.GetClosestDistanceToModelFromToolTip()))
 
   def createTumorFromMarkups(self):
     logging.debug('createTumorFromMarkups')
     #self.tumorMarkups_Needle.SetDisplayVisibility(0)
-
     # Create polydata point set from markup points
     points = vtk.vtkPoints()
     cellArray = vtk.vtkCellArray()
-
     numberOfPoints = self.tumorMarkups_Needle.GetNumberOfFiducials()
 
     if numberOfPoints>0:
         self.deleteLastFiducialButton.setEnabled(True)
         self.deleteAllFiducialsButton.setEnabled(True)
         self.deleteLastFiducialDuringNavigationButton.setEnabled(True)
+        self.eraseButton.setEnabled(True)
 
     # Surface generation algorithms behave unpredictably when there are not enough points
     # return if there are very few points
     if numberOfPoints<1:
       return
-
+    
     points.SetNumberOfPoints(numberOfPoints)
     new_coord = [0.0, 0.0, 0.0]
-
     for i in range(numberOfPoints):
       self.tumorMarkups_Needle.GetNthFiducialPosition(i,new_coord)
       points.SetPoint(i, new_coord)
 
+    if self.placeButton.isChecked() :
+      if self.loggingFlag == False : 
+        self.loggingFlag = True
+      else :
+        self.loggingFlag = False
+        self.tumorMarkups_Needle.GetNthFiducialPosition(numberOfPoints-1,new_coord)
+        logging.info("Placed point at position: %s", new_coord)
+    
     cellArray.InsertNextCell(numberOfPoints)
     for i in range(numberOfPoints):
       cellArray.InsertCellPoint(i)
@@ -908,6 +1063,60 @@ class LumpNavGuidelet(Guidelet):
     self.tumorModel_Needle.SetPolyDataConnection(normals.GetOutputPort())
 
     self.tumorModel_Needle.Modified()
+ 
+  def removeFiducialPoint(self) : 
+    self.eraseMarkups_Needle.SetDisplayVisibility(0)
+    if self.eraserFlag == False :
+      self.eraserFlag = True
+      return
+    self.eraserFlag = False
+    numberOfPoints = self.tumorMarkups_Needle.GetNumberOfFiducials()
+    fiducialPosition = [0.0,0.0,0.0]
+    if numberOfPoints == 1 :
+      self.deleteLastFiducialButton.setEnabled(False)
+      self.deleteAllFiducialsButton.setEnabled(False)
+      self.deleteLastFiducialDuringNavigationButton.setEnabled(False)
+      self.eraseButton.setEnabled(False)
+      self.eraseButton.setChecked(False)
+      self.tumorMarkups_Needle.GetNthFiducialPosition(0,fiducialPosition)
+      logging.info("Used eraser to remove point at %s", fiducialPosition)
+      self.tumorMarkups_Needle.RemoveMarkup(0)
+      sphereSource = vtk.vtkSphereSource()
+      sphereSource.SetRadius(0.001)
+      self.tumorModel_Needle.SetPolyDataConnection(sphereSource.GetOutputPort())
+      self.tumorModel_Needle.Modified()
+    elif numberOfPoints > 1 : 
+      numberOfErasedPoints = self.eraseMarkups_Needle.GetNumberOfFiducials()
+      mostRecentPoint = [0.0,0.0,0.0]
+      self.eraseMarkups_Needle.GetNthFiducialPosition(numberOfErasedPoints-1, mostRecentPoint)
+      closestPoint = self.returnClosestPoint(self.tumorMarkups_Needle, mostRecentPoint)
+      self.tumorMarkups_Needle.RemoveMarkup(closestPoint)
+      self.tumorModel_Needle.Modified()
+
+  # returns closest marked point to where eraser fiducial was placed
+  def returnClosestPoint(self, fiducialNode, erasePoint) :
+    closestIndex = 0
+    numberOfPoints = fiducialNode.GetNumberOfFiducials()
+    closestPosition = [0.0,0.0,0.0]
+    fiducialNode.GetNthFiducialPosition(0, closestPosition)
+    distanceToClosest = self.returnDistance(closestPosition, erasePoint)
+    fiducialPosition = [0.0,0.0,0.0]
+    for fiducialIndex in range(1, numberOfPoints) :
+      fiducialNode.GetNthFiducialPosition(fiducialIndex, fiducialPosition)
+      distanceToPoint = self.returnDistance(fiducialPosition, erasePoint)
+      if distanceToPoint < distanceToClosest :
+        closestIndex = fiducialIndex
+        distanceToClosest = distanceToPoint
+    fiducialNode.GetNthFiducialPosition(closestIndex, fiducialPosition)
+    logging.info("Used eraser to remove point at %s", fiducialPosition)
+    return closestIndex
+  
+  def returnDistance(self, point1, point2) :
+    import numpy as np
+    tumorFiducialPoint = np.array(point1)
+    eraserPoint = np.array(point2)
+    distance = np.linalg.norm(tumorFiducialPoint-eraserPoint)
+    return distance
 
   def getCamera(self, viewName):
     """
@@ -936,6 +1145,78 @@ class LumpNavGuidelet(Guidelet):
       self.disableViewpointInViewNode(viewNode) # disable any other modes that might be active
       self.enableBullseyeInViewNode(viewNode)
     self.updateGUIButtons()
+
+  # Preset View Radio Buttons
+  def onLeftBreastButtonClicked(self) :
+    logging.info("Left breast button clicked")
+    logging.debug("onLeftBreastButtonClicked")
+    self.rightBreastButton.setEnabled(True)
+    self.rightBreastButton.setChecked(False)
+    self.leftBreastButton.setEnabled(False)
+    # check if autocenter buttons are already clicked before activating autocenter
+    if not self.leftAutoCenterCameraButton.isChecked() :
+      self.onAutoCenterButtonClicked('View1')
+    if not self.rightAutoCenterCameraButton.isChecked() :
+      self.onAutoCenterButtonClicked('View2')
+    if not self.bottomAutoCenterCameraButton.isChecked() :
+      self.onAutoCenterButtonClicked('View3')
+    cameraNode1 = self.getCamera('View1')
+    cameraNode2 = self.getCamera('View2')
+    cameraNode3 = self.getCamera('View3')
+    cameraNode1.SetPosition(-242.0042709749552, 331.2026122150233, -36.6617924419265)
+    cameraNode1.SetViewUp(0.802637869051714, 0.5959392355990031, -0.025077452777348814)
+    cameraNode1.SetFocalPoint(0.0,0.0,0.0)
+    cameraNode2.SetPosition(0.0, 500.0, 0.0)
+    cameraNode2.SetViewUp(1.0, 0.0, 0.0)
+    cameraNode2.SetFocalPoint(0.0, 0.0, 0.0)
+    cameraNode1.SetViewAngle(25.0)
+    cameraNode2.SetViewAngle(25.0)
+    cameraNode3.SetViewAngle(20.0)
+    cameraNode2.ResetClippingRange()
+    cameraNode1.ResetClippingRange()
+
+  def onRightBreastButtonClicked(self) :
+    logging.debug("onRightBreastButtonClicked")
+    logging.info("Right breast button clicked")
+    self.rightBreastButton.setEnabled(False)
+    self.leftBreastButton.setEnabled(True)
+    self.leftBreastButton.setChecked(False)
+    if not self.leftAutoCenterCameraButton.isChecked() :
+      self.onAutoCenterButtonClicked('View1')
+    if not self.rightAutoCenterCameraButton.isChecked() :
+      self.onAutoCenterButtonClicked('View2')
+    if not self.bottomAutoCenterCameraButton.isChecked() :
+      self.onAutoCenterButtonClicked('View3')
+    cameraNode1 = self.getCamera('View1')
+    cameraNode2 = self.getCamera('View2')
+    cameraNode3 = self.getCamera('View3')
+    cameraNode1.SetPosition(275.4944476449362, 309.31555951664205, 42.169967768629164)
+    cameraNode1.SetViewUp(-0.749449157051234, 0.661802245162601, -0.018540477149624528)
+    cameraNode1.SetFocalPoint(0.0,0.0,0.0)
+    cameraNode2.SetPosition(0.0, 500.0, 0.0)
+    cameraNode2.SetViewUp(-1.0, 0.0, 0.0)
+    cameraNode2.SetFocalPoint(0.0,0.0,0.0)
+    cameraNode1.SetViewAngle(25.0)
+    cameraNode2.SetViewAngle(25.0)
+    cameraNode3.SetViewAngle(20.0)
+    cameraNode2.ResetClippingRange()
+    cameraNode1.ResetClippingRange()
+  
+  def onDisplayDistanceClicked(self) :
+    logging.debug("onDisplayDistanceClicked")
+    logging.info("Distance to Tumor button clicked")
+    if self.hideDistance == False :
+      self.hideDistance = True
+      for i in range (0,3) : # Clear all text
+        view = slicer.app.layoutManager().threeDWidget(i).threeDView()
+        view.cornerAnnotation().ClearAllTexts()
+      return
+    self.hideDistance = False
+    for i in range(0,3):
+      view = slicer.app.layoutManager().threeDWidget(i).threeDView()
+      view.cornerAnnotation().UpperLeft
+      view.cornerAnnotation().SetNonlinearFontScaleFactor(0.9)
+      view.cornerAnnotation().SetMaximumFontSize(self.distanceFontSizeSpinner.value)
 
   def enableBullseyeInViewNode(self, viewNode):
     logging.debug("enableBullseyeInViewNode")
@@ -988,12 +1269,14 @@ class LumpNavGuidelet(Guidelet):
       self.disableAutoCenterInViewNode(viewNode)
     else:
       self.enableAutoCenterInViewNode(viewNode)
+      logging.info("Auto center for %s enabled", viewName)
     self.updateGUIButtons()
 
   def disableAutoCenterInViewNode(self, viewNode):
     logging.debug("disableAutoCenterInViewNode")
     if (self.viewpointLogic.getViewpointForViewNode(viewNode).isCurrentModeAutoCenter()):
       self.viewpointLogic.getViewpointForViewNode(viewNode).autoCenterStop()
+      logging.info("Auto center for %s disabled", viewNode.GetName())
 
   def enableAutoCenterInViewNode(self, viewNode):
     logging.debug("enableAutoCenterInViewNode")
@@ -1025,19 +1308,6 @@ class LumpNavGuidelet(Guidelet):
       self.leftAutoCenterCameraButton.setChecked(False)
     self.leftAutoCenterCameraButton.blockSignals(blockSignalState)
 
-    blockSignalState = self.leftBullseyeCameraButton.blockSignals(True)
-    if (self.viewpointLogic.getViewpointForViewNode(leftViewNode).isCurrentModeBullseye()):
-      self.leftBullseyeCameraButton.setChecked(True)
-      cauteryNode = slicer.util.getNode('CauteryModel')
-      cauteryNode.GetDisplayNode().SetOpacity(0.3)
-      print("left cam set opacity to 0.3")
-    else:
-      self.leftBullseyeCameraButton.setChecked(False)
-      cauteryNode = slicer.util.getNode('CauteryModel')
-      cauteryNode.GetDisplayNode().SetOpacity(1)
-      print("left cam set opacity to 1")
-    self.leftBullseyeCameraButton.blockSignals(blockSignalState)
-
     rightViewNode = self.getViewNode('View2')
 
     blockSignalState = self.rightAutoCenterCameraButton.blockSignals(True)
@@ -1046,20 +1316,6 @@ class LumpNavGuidelet(Guidelet):
     else:
       self.rightAutoCenterCameraButton.setChecked(False)
     self.rightAutoCenterCameraButton.blockSignals(blockSignalState)
-
-    blockSignalState = self.rightBullseyeCameraButton.blockSignals(True)
-    if (self.viewpointLogic.getViewpointForViewNode(rightViewNode).isCurrentModeBullseye()):
-      self.rightBullseyeCameraButton.setChecked(True)
-      cauteryNode = slicer.util.getNode('CauteryModel')
-      cauteryNode.GetDisplayNode().SetOpacity(0.3)
-      print("r cam set opacity to 0.3")
-    else:
-      self.rightBullseyeCameraButton.setChecked(False)
-      cauteryNode = slicer.util.getNode('CauteryModel')
-      if self.rightBullseyeCameraButton.setChecked(False):
-        cauteryNode.GetDisplayNode().SetOpacity(1)
-        print("r cam set opacity to 01")
-    self.rightBullseyeCameraButton.blockSignals(blockSignalState)
 
     centerViewNode = self.getViewNode('View3')
 
@@ -1078,13 +1334,23 @@ class LumpNavGuidelet(Guidelet):
     self.bottomBullseyeCameraButton.blockSignals(blockSignalState)
 
   def onDual3dButtonClicked(self):
+    logging.info("Dual 3D button clicked")
     logging.debug("onDual3dButtonClicked")
     self.navigationView = self.VIEW_DUAL_3D
+    cameraNode1 = self.getCamera('View1')
+    cameraNode2 = self.getCamera('View2')
+    cameraNode1.SetViewAngle(45.0)
+    cameraNode2.SetViewAngle(45.0)
     self.updateNavigationView()
 
   def onTriple3dButtonClicked(self):
+    logging.info("Triple 3D button clicked")
     logging.debug("onDual3dButtonClicked")
     self.navigationView = self.VIEW_TRIPLE_3D
+    cameraNode1 = self.getCamera('View1')
+    cameraNode2 = self.getCamera('View2')
+    cameraNode1.SetViewAngle(25.0)
+    cameraNode2.SetViewAngle(25.0)
     self.updateNavigationView()
 
   def updateNavigationView(self):
@@ -1117,18 +1383,15 @@ class LumpNavGuidelet(Guidelet):
       depthViewCamera.RotateTo(depthViewCamera.Inferior)
 
   def onNavigationPanelToggled(self, toggled):
-    logging.debug("onNavigationPanelToggled")
-
     breachWarningLogic = slicer.modules.breachwarning.logic()
     showTrajectoryToClosestPoint = toggled and (self.parameterNode.GetParameter('TipToSurfaceDistanceTrajectory')=='True')
     breachWarningLogic.SetLineToClosestPointVisibility(showTrajectoryToClosestPoint, self.breachWarningNode)
 
     if toggled == False:
       return
-
+    logging.info("Navigation panel toggled")
     logging.debug('onNavigationPanelToggled')
     self.updateNavigationView()
-    self.placeButton.checked = False
     if self.tumorMarkups_Needle:
       self.tumorMarkups_Needle.SetDisplayVisibility(0)
 
@@ -1139,6 +1402,27 @@ class LumpNavGuidelet(Guidelet):
   def onTumorMarkupsNodeModified(self, observer, eventid):
     logging.debug("onTumorMarkupsNodeModified")
     self.createTumorFromMarkups()
+
+  def onEraserClicked(self, observer, eventid) :
+    logging.debug("onEraserClicked")
+    self.removeFiducialPoint()
+
+  def onBreachWarningNodeChanged(self, observer, eventid) :
+    self.showDistanceToTumor()
+    
+  def setAndObserveErasedMarkupsNode(self, eraseMarkups_Needle):
+    logging.debug("setAndObserveErasedMarkupsNode")
+    if eraseMarkups_Needle == self.eraseMarkups_Needle and self.eraseMarkups_NeedleObserver:
+      # no change and node is already observed
+      return
+    # Remove observer to old parameter node
+    if self.eraseMarkups_Needle and self.eraseMarkups_NeedleObserver:
+      self.eraseMarkups_Needle.RemoveObserver(self.eraseMarkups_NeedleObserver)
+      self.eraseMarkups_NeedleObserver = None
+    # Set and observe new parameter node
+    self.eraseMarkups_Needle = eraseMarkups_Needle
+    if self.eraseMarkups_Needle:
+      self.eraseMarkups_NeedleObserver = self.eraseMarkups_Needle.AddObserver(vtk.vtkCommand.ModifiedEvent , self.onEraserClicked)
 
   def setAndObserveTumorMarkupsNode(self, tumorMarkups_Needle):
     logging.debug("setAndObserveTumorMarkupsNode")
@@ -1152,21 +1436,23 @@ class LumpNavGuidelet(Guidelet):
     # Set and observe new parameter node
     self.tumorMarkups_Needle = tumorMarkups_Needle
     if self.tumorMarkups_Needle:
-      self.tumorMarkups_NeedleObserver = self.tumorMarkups_Needle.AddObserver(vtk.vtkCommand.ModifiedEvent, self.onTumorMarkupsNodeModified)
+      self.tumorMarkups_NeedleObserver = self.tumorMarkups_Needle.AddObserver(vtk.vtkCommand.ModifiedEvent , self.onTumorMarkupsNodeModified)
 
   # Called when the user changes the needle length
   def onNeedleLengthModified(self, newLength):
     logging.debug('onNeedleLengthModified {0}'.format(newLength))
     needleBaseToNeedleMatrix = self.needleBaseToNeedle.GetMatrixTransformToParent()
-    # NeedleTip and NeedleBase coordinate system have the same axes, just the origin is different (tip/base of the needle)
-    needleTipToNeedleBaseMatrix = vtk.vtkMatrix4x4()
-    needleTipToNeedleBaseMatrix.SetElement(1,3,newLength)
-    needleTipToNeedleMatrix = vtk.vtkMatrix4x4()
-    # needleBaseToNeedleMatrix * needleTipToNeedleBaseMatrix = needleTipToNeedleMatrix
-    vtk.vtkMatrix4x4.Multiply4x4(needleBaseToNeedleMatrix, needleTipToNeedleBaseMatrix, needleTipToNeedleMatrix)
-    self.needleTipToNeedle.SetMatrixTransformToParent(needleTipToNeedleMatrix)
-    self.logic.writeTransformToSettings('NeedleTipToNeedle', needleTipToNeedleMatrix, self.configurationName)
-    # Update the needle model
+    
+    needleTipToNeedleBaseTransform = vtk.vtkTransform()
+    needleTipToNeedleBaseTransform.Translate(0, 0, newLength)
+    
+    needleTipToNeedleTransform = vtk.vtkTransform()
+    needleTipToNeedleTransform.Concatenate(self.needleBaseToNeedle.GetTransformToParent())
+    needleTipToNeedleTransform.Concatenate(needleTipToNeedleBaseTransform)
+    
+    self.needleTipToNeedle.SetAndObserveTransformToParent(needleTipToNeedleTransform)
+    self.logic.writeTransformToSettings('NeedleTipToNeedle', self.needleTipToNeedle.GetMatrixTransformToParent(), self.configurationName)
+    
     slicer.modules.createmodels.logic().CreateNeedle(newLength,1.0, self.needleModelTipRadius, False, self.needleModel_NeedleTip)
 
   # Called after a successful pivot calibration
@@ -1180,12 +1466,38 @@ class LumpNavGuidelet(Guidelet):
     self.needleLengthSpinBox.blockSignals(wasBlocked)
     # Update the needle model
     slicer.modules.createmodels.logic().CreateNeedle(needleLength,1.0, self.needleModelTipRadius, False, self.needleModel_NeedleTip)
+
+  # Called when the user change the distance font size displayed
+  def onDistanceFontSizeChanged(self):
+    logging.debug("onDistanceFontSizeChanged")
+    for i in range(0,3):
+      view = slicer.app.layoutManager().threeDWidget(i).threeDView()
+      view.cornerAnnotation().SetMaximumFontSize(self.distanceFontSizeSpinner.value)
+
+  def onNeedleClipClicked(self) :
+    logging.debug("onNewNeedleClipClicked")
     
+    length = self.needleLengthForClipCalibrationSpinBox.value
+    needleBaseToNeedleTipTransform = vtk.vtkTransform()
+    needleBaseToNeedleTipTransform.Translate(0, 0, - length)
+    
+    needleTipToNeedleTransform = self.needleTipToNeedle.GetMatrixTransformToParent()
+    
+    needleBaseToNeedleTransform = vtk.vtkTransform()
+    needleBaseToNeedleTransform.Concatenate(needleTipToNeedleTransform)
+    needleBaseToNeedleTransform.Concatenate(needleBaseToNeedleTipTransform)
+    
+    self.needleBaseToNeedle.SetAndObserveTransformToParent(needleBaseToNeedleTransform)
+    self.logic.writeTransformToSettings('NeedleBaseToNeedle', needleBaseToNeedleTransform.GetMatrix(), self.configurationName)
+    self.needleLengthSpinBox.setValue(length)
+
+
   def onSwitchToCauteryButton(self):
+    logging.info("Switched to cautery model")
     self.cauteryModel_CauteryTip.GetDisplayNode().VisibilityOn()
     self.stickModel_CauteryTip.GetDisplayNode().VisibilityOff()
   
   def onSwitchToStickButton(self):
-    print "stick model should appear now"
+    logging.info("Switched to stick model")
     self.cauteryModel_CauteryTip.GetDisplayNode().VisibilityOff()
     self.stickModel_CauteryTip.GetDisplayNode().VisibilityOn()

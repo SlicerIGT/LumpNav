@@ -1,0 +1,60 @@
+QAbstractButton,
+
+QPushButton {
+    border-style: outset; 
+    border-width: 3px; 
+    border-radius: 10px; 
+    background-color: #C7DDF5; 
+    border-color: beige;
+    font-size: 18pt; height: 45px;
+}
+
+QAbstractButton:pressed,
+
+QAbstractButton:checked,
+QPushButton:pressed,
+QPushButton:checked {
+    border-style: outset; 
+    border-width: 3px; 
+    border-radius: 10px; 
+    background-color: #669ACC; 
+    border-color: beige; 
+    font-size: 18pt; 
+    height: 45px;
+}     
+
+ctkCollapsibleGroupBox {
+    font-size: 14pt; height: 30px;
+    color : white;
+}
+
+QLabel {
+    font-size: 14pt; height: 30px;
+    color : white;
+}
+
+QSpinBox {
+    background-color : #f5f5ff;
+    font-size: 14pt;
+}
+
+QComboBox {
+    background-color : #f5f5ff;
+    font-size: 14pt;
+}
+
+QFrame {
+    background-color: #0765bf;
+    border-color: #9ACEFF;
+}
+
+QDockWidget:title {
+    background-color: #0765bf;
+    text-align : center;
+}
+
+QDockWidget {
+    color: #ffffff;
+    font : bold 20pt;
+    height : 45px;
+}
