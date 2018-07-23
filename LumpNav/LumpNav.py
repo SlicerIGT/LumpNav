@@ -570,9 +570,13 @@ class LumpNavGuidelet(Guidelet):
     self.pivotCalibrationLogic.GetToolTipToToolMatrix(tooltipToToolMatrix)
     self.pivotCalibrationLogic.ClearToolToReferenceMatrices()
     self.pivotCalibrationResultTargetNode.SetMatrixTransformToParent(tooltipToToolMatrix)
-    slicer.util.saveNode(self.pivotCalibrationResultTargetNode, os.path.join(self.moduleTransformsPath, 'NeedleTipToNeedle.h5'))
-    self.countdownLabel.setText("Calibration completed, error = {0:.2f} mm".format(self.pivotCalibrationLogic.GetPivotRMSE()))
-    logging.debug("Pivot calibration completed. Tool: {0}. RMSE = {1:.2f} mm".format(self.pivotCalibrationResultTargetNode.GetName(), self.pivotCalibrationLogic.GetPivotRMSE()))
+    slicer.util.saveNode(self.pivotCalibrationResultTargetNode, os.path.join(self.moduleTransformsPath, self.pivotCalibrationResultTargetName + ".h5"))
+    if self.needleCalibrationMode == self.LUMPNAV_PIVOT_CALIBRATION:
+      self.countdownLabel.setText("Pivot calibration completed, error = {0:.2f} mm".format(self.pivotCalibrationLogic.GetPivotRMSE()))
+      logging.debug("Pivot calibration completed. Tool: {0}. RMSE = {1:.2f} mm".format(self.pivotCalibrationResultTargetNode.GetName(), self.pivotCalibrationLogic.GetPivotRMSE()))
+    else:
+      self.countdownLabel.setText("Spin calibration completed.")
+      logging.debug("Spin calibration completed.")
     # We compute approximate needle length if we perform pivot calibration for the needle
     if self.pivotCalibrationResultTargetName == 'NeedleTipToNeedle':
       self.updateDisplayedNeedleLength()
@@ -712,9 +716,6 @@ class LumpNavGuidelet(Guidelet):
     self.needleSpinButton = qt.QPushButton('Spin calibration')
     self.advancedNeedleCalibrationFormLayout.addRow(self.needleSpinButton)
     
-    self.countdownLabel = qt.QLabel()
-    self.advancedNeedleCalibrationFormLayout.addRow(self.countdownLabel)
-
     self.pivotSamplingTimer = qt.QTimer()
     self.pivotSamplingTimer.setInterval(500)
     self.pivotSamplingTimer.setSingleShot(True)
@@ -739,6 +740,9 @@ class LumpNavGuidelet(Guidelet):
     newNeedleClipHBox.addWidget(self.needleLengthForClipCalibrationSpinBox)
 
     self.newNeedleClipFormLayout.addRow(newNeedleClipHBox)
+    
+    self.countdownLabel = qt.QLabel()
+    self.calibrationLayout.addRow(self.countdownLabel)
 
   def addTumorContouringToUltrasoundPanel(self):
 
