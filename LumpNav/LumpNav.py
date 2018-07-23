@@ -126,7 +126,6 @@ class LumpNavLogic(GuideletLogic):
                    'BreachWarningLightMarginSizeMm' : '2.0',
                    'TipToSurfaceDistanceTextScale' : '3',
                    'TipToSurfaceDistanceTrajectory' : 'True',
-                   'CauteryModelToCauteryTip' : '0.03 0.03 1.01 0.00 -0.97 -0.23 0.03 0.00 0.23 -0.98 0.02 0.00 0 0 0 1',
                    'PivotCalibrationErrorThresholdMm' :  '0.9',
                    'PivotCalibrationDurationSec' : '5',
                    'TestMode' : 'False',
@@ -167,6 +166,8 @@ class LumpNavGuidelet(Guidelet):
     logging.debug('LumpNavGuidelet.__init__')
     self.logic.addValuesToDefaultConfiguration()
 
+    self.modulePath = os.path.dirname(slicer.modules.lumpnav.path)
+    self.moduleTransformsPath = os.path.join(self.modulePath, 'Resources/Transforms')
     moduleDirectoryPath = slicer.modules.lumpnav.path.replace('LumpNav.py', '')
     self.needleModelTipRadius = 2.0
     
@@ -292,43 +293,46 @@ class LumpNavGuidelet(Guidelet):
     Guidelet.setupScene(self)
 
     logging.debug('Create transforms')
-    # Coordinate system definitions: https://app.assembla.com/spaces/slicerigt/wiki/Coordinate_Systems
-
+  
     self.cauteryTipToCautery = slicer.util.getNode('CauteryTipToCautery')
     if not self.cauteryTipToCautery:
-      self.cauteryTipToCautery=slicer.vtkMRMLLinearTransformNode()
-      self.cauteryTipToCautery.SetName("CauteryTipToCautery")
-      m = self.logic.readTransformFromSettings('CauteryTipToCautery', self.configurationName)
-      if m:
-        self.cauteryTipToCautery.SetMatrixTransformToParent(m)
-      slicer.mrmlScene.AddNode(self.cauteryTipToCautery)
+      cauteryTipToCauteryFilePath = os.path.join(self.moduleTransformsPath, 'CauteryTipToCautery.h5')
+      [success, self.cauteryTipToCautery] = slicer.util.loadTransform(cauteryTipToCauteryFilePath, returnNode = True)
+      if success == False:
+        logging.error('Could not read CauteryTipToCautery transform')
+      else:
+        self.cauteryTipToCautery.SetName("CauteryTipToCautery")
+        slicer.mrmlScene.AddNode(self.cauteryTipToCautery)
 
     self.cauteryModelToCauteryTip = slicer.util.getNode('CauteryModelToCauteryTip')
     if not self.cauteryModelToCauteryTip:
-      self.cauteryModelToCauteryTip=slicer.vtkMRMLLinearTransformNode()
-      self.cauteryModelToCauteryTip.SetName("CauteryModelToCauteryTip")
-      m = self.logic.readTransformFromSettings('CauteryModelToCauteryTip', self.configurationName)
-      if m:
-        self.cauteryModelToCauteryTip.SetMatrixTransformToParent(m)
-      slicer.mrmlScene.AddNode(self.cauteryModelToCauteryTip)
+      cauteryModelToCauteryTipFilePath = os.path.join(self.moduleTransformsPath, 'CauteryModelToCauteryTip.h5')
+      [success, self.cauteryModelToCauteryTip] = slicer.util.loadTransform(cauteryModelToCauteryTipFilePath, returnNode = True)
+      if success == False:
+        logging.error('Could not read CauteryModelToCauteryTip transform')
+      else:
+        self.cauteryModelToCauteryTip.SetName("CauteryModelToCauteryTip")
+        slicer.mrmlScene.AddNode(self.cauteryModelToCauteryTip)
 
     self.needleTipToNeedle = slicer.util.getNode('NeedleTipToNeedle')
     if not self.needleTipToNeedle:
-      self.needleTipToNeedle=slicer.vtkMRMLLinearTransformNode()
-      self.needleTipToNeedle.SetName("NeedleTipToNeedle")
-      m = self.logic.readTransformFromSettings('NeedleTipToNeedle', self.configurationName)
-      if m:
-        self.needleTipToNeedle.SetMatrixTransformToParent(m)
-      slicer.mrmlScene.AddNode(self.needleTipToNeedle)
+      needleTipToNeedleFilePath = os.path.join(self.moduleTransformsPath, 'NeedleTipToNeedle.h5')
+      [success, self.needleTipToNeedle] = slicer.util.loadTransform(needleTipToNeedleFilePath, returnNode = True)
+      if success == False:
+        logging.error('Could not read NeedleTipToNeedle transform')
+      else:
+        self.needleTipToNeedle.SetName("NeedleTipToNeedle")
+        slicer.mrmlScene.AddNode(self.needleTipToNeedle)
 
     self.needleBaseToNeedle = slicer.util.getNode('NeedleBaseToNeedle')
     if not self.needleBaseToNeedle:
-      self.needleBaseToNeedle=slicer.vtkMRMLLinearTransformNode()
-      self.needleBaseToNeedle.SetName("NeedleBaseToNeedle")
-      m = self.logic.readTransformFromSettings('NeedleBaseToNeedle', self.configurationName)
-      if m:
-        self.needleBaseToNeedle.SetMatrixTransformToParent(m)
-      slicer.mrmlScene.AddNode(self.needleBaseToNeedle)
+      needleBaseToNeedleFilePath = os.path.join(self.moduleTransformsPath, 'NeedleBaseToNeedle.h5')
+      [success, self.needleBaseToNeedle] = slicer.util.loadTransform(needleBaseToNeedleFilePath, returnNode = True)
+      if success == False:
+        logging.error('Could not read NeedleBaseToNeedle transform')
+      else:
+        self.needleBaseToNeedle.SetName("NeedleBaseToNeedle")
+        slicer.mrmlScene.AddNode(self.needleBaseToNeedle)
 
     self.cauteryCameraToCautery = slicer.util.getNode('CauteryCameraToCautery')
     if not self.cauteryCameraToCautery:
@@ -566,7 +570,7 @@ class LumpNavGuidelet(Guidelet):
     self.pivotCalibrationLogic.GetToolTipToToolMatrix(tooltipToToolMatrix)
     self.pivotCalibrationLogic.ClearToolToReferenceMatrices()
     self.pivotCalibrationResultTargetNode.SetMatrixTransformToParent(tooltipToToolMatrix)
-    self.logic.writeTransformToSettings(self.pivotCalibrationResultTargetName, tooltipToToolMatrix, self.configurationName)
+    slicer.util.saveNode(self.pivotCalibrationResultTargetNode, os.path.join(self.moduleTransformsPath, 'NeedleTipToNeedle.h5'))
     self.countdownLabel.setText("Calibration completed, error = {0:.2f} mm".format(self.pivotCalibrationLogic.GetPivotRMSE()))
     logging.debug("Pivot calibration completed. Tool: {0}. RMSE = {1:.2f} mm".format(self.pivotCalibrationResultTargetNode.GetName(), self.pivotCalibrationLogic.GetPivotRMSE()))
     # We compute approximate needle length if we perform pivot calibration for the needle
@@ -1451,7 +1455,7 @@ class LumpNavGuidelet(Guidelet):
     needleTipToNeedleTransform.Concatenate(needleTipToNeedleBaseTransform)
     
     self.needleTipToNeedle.SetAndObserveTransformToParent(needleTipToNeedleTransform)
-    self.logic.writeTransformToSettings('NeedleTipToNeedle', self.needleTipToNeedle.GetMatrixTransformToParent(), self.configurationName)
+    slicer.util.saveNode(self.needleTipToNeedle, os.path.join(self.moduleTransformsPath, 'NeedleTipToNeedle.h5'))
     
     slicer.modules.createmodels.logic().CreateNeedle(newLength,1.0, self.needleModelTipRadius, False, self.needleModel_NeedleTip)
 
@@ -1488,7 +1492,7 @@ class LumpNavGuidelet(Guidelet):
     needleBaseToNeedleTransform.Concatenate(needleBaseToNeedleTipTransform)
     
     self.needleBaseToNeedle.SetAndObserveTransformToParent(needleBaseToNeedleTransform)
-    self.logic.writeTransformToSettings('NeedleBaseToNeedle', needleBaseToNeedleTransform.GetMatrix(), self.configurationName)
+    slicer.util.saveNode(self.needleBaseToNeedle, os.path.join(self.moduleTransformsPath, 'NeedleBaseToNeedle.h5'))
     self.needleLengthSpinBox.setValue(length)
 
 
