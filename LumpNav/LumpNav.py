@@ -256,7 +256,6 @@ class LumpNavGuidelet(Guidelet):
     self.leftBreastButton.connect('clicked()', self.onLeftBreastButtonClicked)
     self.rightBreastButton.connect('clicked()', self.onRightBreastButtonClicked)
     self.displayDistanceButton.connect('clicked()', self.onDisplayDistanceClicked)
-    self.distanceFontSizeSpinner.valueChanged.connect(self.onDistanceFontSizeChanged)
 
     self.bottomBullseyeCameraButton.connect('clicked()', lambda: self.onCameraButtonClicked('View3') )
     self.leftAutoCenterCameraButton.connect('clicked()', lambda: self.onAutoCenterButtonClicked('View1') )
@@ -376,7 +375,6 @@ class LumpNavGuidelet(Guidelet):
         logging.debug('Cautery model not found ({0}), using stick model instead'.format(modelFilePath))
         self.cauteryModel_CauteryTip = slicer.modules.createmodels.logic().CreateNeedle(100,1.0,2.0,0)
       self.cauteryModel_CauteryTip.GetDisplayNode().SetColor(1.0, 1.0, 0)
-      self.cauteryModel_CauteryTip.GetDisplayNode().VisibilityOff()  # stick model is the default cautery model
       self.cauteryModel_CauteryTip.SetName("CauteryModel")
     
     self.stickModel_CauteryTip = slicer.util.getNode('StickModel')
@@ -384,6 +382,7 @@ class LumpNavGuidelet(Guidelet):
       slicer.modules.createmodels.logic().CreateNeedle(100,1.0,2.0,0)
       self.stickModel_CauteryTip = slicer.util.getNode(pattern="NeedleModel")
       self.stickModel_CauteryTip.GetDisplayNode().SetColor(1.0, 1.0, 0)
+      self.stickModel_CauteryTip.GetDisplayNode().VisibilityOff()  # Cautery model is the default
       self.stickModel_CauteryTip.SetName("StickModel")
          
     self.needleModel_NeedleTip = slicer.util.getNode('NeedleModel')
@@ -698,8 +697,28 @@ class LumpNavGuidelet(Guidelet):
     self.needleLengthSpinBox = qt.QSpinBox()
     self.needleLengthSpinBox.setMinimum(10)
     self.needleLengthSpinBox.setMaximum(200)
-    self.needleLengthLayout.addRow('Needle length (mm)', self.needleLengthSpinBox)
+
+    self.needleLengthLabel = qt.QLabel()
+
+    self.calibrationLayout.addRow(qt.QLabel(""))
+    self.needleLengthLayout.addRow('Needle length (mm):  ', self.needleLengthLabel)
     self.calibrationLayout.addRow(self.needleLengthLayout)
+
+    moduleDirectoryPath = slicer.modules.lumpnav.path.replace('LumpNav.py', '')
+    self.upArrowButton = qt.QPushButton()
+    self.upArrowButton.setIcon(qt.QIcon(moduleDirectoryPath + '/Resources/Icons/arrow-up.png'))
+    self.upArrowButton.connect('clicked()', self.onUpArrowClicked)
+
+    self.downArrowButton = qt.QPushButton()
+    self.downArrowButton.setIcon(qt.QIcon(moduleDirectoryPath + '/Resources/Icons/arrow-down.png'))
+    self.downArrowButton.connect('clicked()', self.onDownArrowClicked)
+
+    arrowsVBox = qt.QVBoxLayout()
+    arrowsVBox.addWidget(self.upArrowButton)
+    arrowsVBox.addWidget(self.downArrowButton)
+
+    self.calibrationLayout.addRow(arrowsVBox)
+    self.calibrationLayout.addRow(qt.QLabel(""))
 
     # "Advanced needle calibration" Collapsible
     self.advancedNeedleCalibrationCollapsibleButton = ctk.ctkCollapsibleGroupBox()
@@ -731,15 +750,29 @@ class LumpNavGuidelet(Guidelet):
     self.newNeedleClipFormLayout = qt.QFormLayout(self.newNeedleClipCollapsibleButton)
     self.calibrateNeedleClipButton = qt.QPushButton("Calibrate clip")
     self.calibrateNeedleClipButton.connect('clicked()', self.onNeedleClipClicked)
-    self.needleLengthLabel = qt.QLabel('Specify needle length (mm):')
-    self.needleLengthForClipCalibrationSpinBox = qt.QSpinBox()
-    self.needleLengthForClipCalibrationSpinBox.setValue(50)
+    self.needleLengthForClipCalibration = qt.QLabel('Specify needle length (mm):  ')
+    self.needleLengthForClipCalibrationLabel = qt.QLabel("57")
 
-    newNeedleClipHBox.addWidget(self.calibrateNeedleClipButton)
-    newNeedleClipHBox.addWidget(self.needleLengthLabel)
-    newNeedleClipHBox.addWidget(self.needleLengthForClipCalibrationSpinBox)
+    self.newClipUpArrowButton = qt.QPushButton()
+    self.newClipUpArrowButton.setIcon(qt.QIcon(moduleDirectoryPath + '/Resources/Icons/arrow-up.png'))
+    self.newClipUpArrowButton.connect('clicked()', self.onNewClipUpArrowClicked)
 
+    self.newClipDownArrowButton = qt.QPushButton()
+    self.newClipDownArrowButton.setIcon(qt.QIcon(moduleDirectoryPath + '/Resources/Icons/arrow-down.png'))
+    self.newClipDownArrowButton.connect('clicked()', self.onNewClipDownArrowClicked)
+
+    newClipArrowsVBox = qt.QVBoxLayout()
+    newClipArrowsVBox.addWidget(self.newClipUpArrowButton)
+    newClipArrowsVBox.addWidget(self.newClipDownArrowButton)
+
+    newNeedleClipHBox.addWidget(self.needleLengthForClipCalibration)
+    newNeedleClipHBox.addWidget(self.needleLengthForClipCalibrationLabel)
+
+    self.newNeedleClipFormLayout.addRow(qt.QLabel(""))
     self.newNeedleClipFormLayout.addRow(newNeedleClipHBox)
+    self.newNeedleClipFormLayout.addRow(newClipArrowsVBox)
+    self.newNeedleClipFormLayout.addRow(qt.QLabel(""))
+    self.newNeedleClipFormLayout.addRow(self.calibrateNeedleClipButton)
     
     self.countdownLabel = qt.QLabel()
     self.calibrationLayout.addRow(self.countdownLabel)
@@ -815,25 +848,31 @@ class LumpNavGuidelet(Guidelet):
     presetViewHBox.addWidget(self.rightBreastButton)
     self.navigationCollapsibleLayout.addRow(presetViewHBox)
 
-    # "Distance to Tumor" Collapsible
-    self.distanceToTumorCollapsibleButton = ctk.ctkCollapsibleGroupBox()
-    self.distanceToTumorCollapsibleButton.title = "Distance to tumor margin"
-    self.distanceToTumorCollapsibleButton.collapsed=True
-    self.navigationCollapsibleLayout.addRow(self.distanceToTumorCollapsibleButton)
+    self.displayDistanceButton = qt.QPushButton("Display Distance to Tumor")
+    self.navigationCollapsibleLayout.addRow(self.displayDistanceButton)
+    self.navigationCollapsibleLayout.addRow(qt.QLabel(""))
 
-    # Layout within the collapsible button
-    self.distanceToTumorFormLayout = qt.QFormLayout(self.distanceToTumorCollapsibleButton)
+    # "Change distance font size" Collapsible
+    self.distanceFontSizeCollapsible = ctk.ctkCollapsibleGroupBox()
+    self.distanceFontSizeCollapsible.title = "Change distance font size"
+    self.distanceFontSizeCollapsible.collapsed = True
+    self.navigationCollapsibleLayout.addRow(self.distanceFontSizeCollapsible)
+    self.distanceFormLayout = qt.QFormLayout(self.distanceFontSizeCollapsible)
+    
+    moduleDirectoryPath = slicer.modules.lumpnav.path.replace('LumpNav.py', '')
+    self.distanceFontSizeUpArrowButton = qt.QPushButton()
+    self.distanceFontSizeUpArrowButton.setIcon(qt.QIcon(moduleDirectoryPath + '/Resources/Icons/arrow-up.png'))
+    self.distanceFontSizeUpArrowButton.connect('clicked()', self.onDistanceFontSizeUpArrowClicked)
 
-    self.displayDistanceButton = qt.QPushButton("Display Distance")
-    self.distanceToTumorFormLayout.addRow(self.displayDistanceButton)
+    self.distanceFontSizeDownArrowButton = qt.QPushButton()
+    self.distanceFontSizeDownArrowButton.setIcon(qt.QIcon(moduleDirectoryPath + '/Resources/Icons/arrow-down.png'))
+    self.distanceFontSizeDownArrowButton.connect('clicked()', self.onDistanceFontSizeDownArrowClicked)
 
-    self.distanceFontSizeLabel = qt.QLabel(qt.Qt.Horizontal,None)
-    self.distanceFontSizeLabel.setText("Distance to Tumor Font Size [mm]: ")
-    self.distanceFontSizeSpinner = qt.QSpinBox()
-    self.distanceFontSizeSpinner.setMinimum(5)
-    self.distanceFontSizeSpinner.setMaximum(60)
-    self.distanceFontSizeSpinner.setValue(35) # default font size
-    self.distanceToTumorFormLayout.addRow(self.distanceFontSizeLabel, self.distanceFontSizeSpinner)
+    arrowsVBox = qt.QVBoxLayout()
+    arrowsVBox.addWidget(self.distanceFontSizeUpArrowButton)
+    arrowsVBox.addWidget(self.distanceFontSizeDownArrowButton)
+
+    self.distanceFormLayout.addRow(arrowsVBox)
 
     # "View" Collapsible
     self.viewCollapsibleButton = ctk.ctkCollapsibleGroupBox()
@@ -934,18 +973,15 @@ class LumpNavGuidelet(Guidelet):
     self.deleteLastFiducialDuringNavigationButton.setEnabled(False)
     self.contourAdjustmentFormLayout.addRow(self.deleteLastFiducialDuringNavigationButton)
     
-    # "Choose Tool" Collapsible
+    # "Choose tool" Collapsible
     self.toolChoiceCollapsibleButton = ctk.ctkCollapsibleGroupBox()
-    self.toolChoiceCollapsibleButton.title = "Tool Choice"
+    self.toolChoiceCollapsibleButton.title = "Tool choice"
     self.toolChoiceCollapsibleButton.collapsed = True
     self.navigationCollapsibleLayout.addRow(self.toolChoiceCollapsibleButton)
     
-
     # Layout within the collapsible button
     self.toolChoiceFormLayout = qt.QFormLayout(self.toolChoiceCollapsibleButton)
-    self.toolChoiceLabel = qt.QLabel()
-    self.toolChoiceLabel.setText("Select tool: ")
-    
+
     self.SwitchToCauteryButton = qt.QPushButton("Cautery Model")
     self.SwitchToCauteryButton.toolTip = "Switching to cautery model"
     self.SwitchToCauteryButton.enabled = True
@@ -956,7 +992,6 @@ class LumpNavGuidelet(Guidelet):
     self.SwitchToStickButton.connect('clicked(bool)', self.onSwitchToStickButton)
     
     self.toolChoiceHBox = qt.QHBoxLayout()
-    self.toolChoiceHBox.addWidget(self.toolChoiceLabel)
     self.toolChoiceHBox.addWidget(self.SwitchToCauteryButton)
     self.toolChoiceHBox.addWidget(self.SwitchToStickButton)
     self.toolChoiceFormLayout.addRow(self.toolChoiceHBox)
@@ -994,7 +1029,11 @@ class LumpNavGuidelet(Guidelet):
       return
     for i in range (0,3) : # There will always be three threeD views mapped in layout when the navigation panel is toggled
       view = slicer.app.layoutManager().threeDWidget(i).threeDView()
-      view.setCornerAnnotationText("Distance: {0:.2f}mm".format(self.breachWarningNode.GetClosestDistanceToModelFromToolTip()))
+      distanceToTumor = self.breachWarningNode.GetClosestDistanceToModelFromToolTip()
+      if distanceToTumor > 10 : # Only show distance with 2 decimal places if the cautery is within 10mm of the tumor boundary
+        view.setCornerAnnotationText("{0:.1f}mm".format(self.breachWarningNode.GetClosestDistanceToModelFromToolTip()))
+      else :
+        view.setCornerAnnotationText("{0:.2f}mm".format(self.breachWarningNode.GetClosestDistanceToModelFromToolTip()))
 
   def createTumorFromMarkups(self):
     logging.debug('createTumorFromMarkups')
@@ -1212,7 +1251,7 @@ class LumpNavGuidelet(Guidelet):
   
   def onDisplayDistanceClicked(self) :
     logging.debug("onDisplayDistanceClicked")
-    logging.info("Distance to Tumor button clicked")
+    logging.info("Display Distance to Tumor button clicked")
     if self.hideDistance == False :
       self.hideDistance = True
       for i in range (0,3) : # Clear all text
@@ -1220,11 +1259,14 @@ class LumpNavGuidelet(Guidelet):
         view.cornerAnnotation().ClearAllTexts()
       return
     self.hideDistance = False
+    distanceTextProperty = vtk.vtkTextProperty()
+    distanceTextProperty.BoldOn()
     for i in range(0,3):
       view = slicer.app.layoutManager().threeDWidget(i).threeDView()
       view.cornerAnnotation().UpperLeft
       view.cornerAnnotation().SetNonlinearFontScaleFactor(0.9)
-      view.cornerAnnotation().SetMaximumFontSize(self.distanceFontSizeSpinner.value)
+      view.cornerAnnotation().SetMaximumFontSize(35)
+      view.cornerAnnotation().SetTextProperty(distanceTextProperty)
 
   def enableBullseyeInViewNode(self, viewNode):
     logging.debug("enableBullseyeInViewNode")
@@ -1468,24 +1510,18 @@ class LumpNavGuidelet(Guidelet):
     logging.debug("updateDisplayedNeedleLength")
     needleTipToNeedleBaseTransform = vtk.vtkMatrix4x4()
     self.needleTipToNeedle.GetMatrixTransformToNode(self.needleBaseToNeedle, needleTipToNeedleBaseTransform)
-    needleLength = math.sqrt(needleTipToNeedleBaseTransform.GetElement(0,3)**2+needleTipToNeedleBaseTransform.GetElement(1,3)**2+needleTipToNeedleBaseTransform.GetElement(2,3)**2)
+    needleLength = int(math.sqrt(needleTipToNeedleBaseTransform.GetElement(0,3)**2+needleTipToNeedleBaseTransform.GetElement(1,3)**2+needleTipToNeedleBaseTransform.GetElement(2,3)**2))
     wasBlocked = self.needleLengthSpinBox.blockSignals(True)
-    self.needleLengthSpinBox.setValue(needleLength)
+    self.needleLengthLabel.setText(needleLength)
     self.needleLengthSpinBox.blockSignals(wasBlocked)
     # Update the needle model
     slicer.modules.createmodels.logic().CreateNeedle(needleLength,1.0, self.needleModelTipRadius, False, self.needleModel_NeedleTip)
 
-  # Called when the user change the distance font size displayed
-  def onDistanceFontSizeChanged(self):
-    logging.debug("onDistanceFontSizeChanged")
-    for i in range(0,3):
-      view = slicer.app.layoutManager().threeDWidget(i).threeDView()
-      view.cornerAnnotation().SetMaximumFontSize(self.distanceFontSizeSpinner.value)
-
   def onNeedleClipClicked(self) :
     logging.debug("onNewNeedleClipClicked")
+    logging.info("Calibrated new needle clip")
     
-    length = self.needleLengthForClipCalibrationSpinBox.value
+    length = int(self.needleLengthForClipCalibrationLabel.text)
     needleBaseToNeedleTipTransform = vtk.vtkTransform()
     needleBaseToNeedleTipTransform.Translate(0, 0, - length)
     
@@ -1497,8 +1533,48 @@ class LumpNavGuidelet(Guidelet):
     
     self.needleBaseToNeedle.SetAndObserveTransformToParent(needleBaseToNeedleTransform)
     slicer.util.saveNode(self.needleBaseToNeedle, os.path.join(self.moduleTransformsPath, 'NeedleBaseToNeedle.h5'))
-    self.needleLengthSpinBox.setValue(length)
+    self.updateDisplayedNeedleLength()
 
+  def onUpArrowClicked(self):
+    logging.debug("onUpArrowClicked")
+    needleLength = int(self.needleLengthLabel.text)
+    needleLength += 1
+    self.needleLengthLabel.setText(needleLength)
+    self.onNeedleLengthModified(needleLength)
+
+  def onDownArrowClicked(self):
+    logging.debug("onDownArrowClicked")
+    needleLength = int(self.needleLengthLabel.text)
+    needleLength -= 1
+    self.needleLengthLabel.setText(needleLength)
+    self.onNeedleLengthModified(needleLength)
+
+  def onNewClipUpArrowClicked(self):
+    logging.debug("onNewClipUpArrowClicked")
+    needleLength = int(self.needleLengthForClipCalibrationLabel.text)
+    needleLength += 1
+    self.needleLengthForClipCalibrationLabel.setText(needleLength)
+
+  def onNewClipDownArrowClicked(self):
+    logging.debug("onNewClipDownArrowClicked")
+    needleLength = int(self.needleLengthForClipCalibrationLabel.text)
+    needleLength -= 1
+    self.needleLengthForClipCalibrationLabel.setText(needleLength)
+  
+   # Called when the user change the distance font size displayed
+  def onDistanceFontSizeUpArrowClicked(self):
+    logging.debug("onDistanceFontSizeUpArrowClicked")
+    for i in range(0,3):
+      view = slicer.app.layoutManager().threeDWidget(i).threeDView()
+      fontSize = view.cornerAnnotation().GetMaximumFontSize() + 1
+      view.cornerAnnotation().SetMaximumFontSize(fontSize)
+
+  def onDistanceFontSizeDownArrowClicked(self):
+    logging.debug("onDistanceFontSizeDownArrowClicked")
+    for i in range(0,3):
+      view = slicer.app.layoutManager().threeDWidget(i).threeDView()
+      fontSize = view.cornerAnnotation().GetMaximumFontSize() - 1
+      view.cornerAnnotation().SetMaximumFontSize(fontSize)
 
   def onSwitchToCauteryButton(self):
     logging.info("Switched to cautery model")

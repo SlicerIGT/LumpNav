@@ -6,7 +6,9 @@ QPushButton {
     border-radius: 10px; 
     background-color: #C7DDF5; 
     border-color: beige;
-    font-size: 18pt; height: 45px;
+    min-width: 8px;
+    font : bold 18pt "Arial"; 
+    height: 50px;
 }
 
 QAbstractButton:pressed,
@@ -19,28 +21,29 @@ QPushButton:checked {
     border-radius: 10px; 
     background-color: #669ACC; 
     border-color: beige; 
-    font-size: 18pt; 
-    height: 45px;
+    font : bold 18pt "Arial"; 
+    height: 50px;
 }     
 
 ctkCollapsibleGroupBox {
-    font-size: 14pt; height: 30px;
+    font : bold 16pt "Arial"; 
     color : white;
 }
 
 QLabel {
-    font-size: 14pt; height: 30px;
+    font : bold 16pt "Arial"; 
     color : white;
 }
 
 QSpinBox {
     background-color : #f5f5ff;
-    font-size: 14pt;
+    border: 2px solid #C4C4C3;
+    font : bold 16pt "Arial";
 }
 
 QComboBox {
     background-color : #f5f5ff;
-    font-size: 14pt;
+    font : bold 16pt "Arial"; 
 }
 
 QFrame {
@@ -55,6 +58,6 @@ QDockWidget:title {
 
 QDockWidget {
     color: #ffffff;
-    font : bold 20pt;
+    font : bold 22pt "Arial"; 
     height : 45px;
 }
