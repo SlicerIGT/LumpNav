@@ -38,14 +38,17 @@ class LumpNav(GuideletLoadable):
 class LumpNavWidget(GuideletWidget):
   """Uses GuideletWidget base class, available at:
   """
+  
+  breachWarningLightLogic = None
 
   def __init__(self, parent = None):
-    try:
-      import BreachWarningLight
-      self.breachWarningLightLogic = BreachWarningLight.BreachWarningLightLogic()
-    except ImportError:
-      self.breachWarningLightLogic = None
-      logging.warning('BreachWarningLight module is not available. Light feedback is disabled.')
+    # 2018-08-22: This has been disabled because slicer gives an error about missing vtkSlicerOpenIGTLinkCommand
+    #try:
+    #  import BreachWarningLight
+    #  self.breachWarningLightLogic = BreachWarningLight.BreachWarningLightLogic()
+    #except ImportError:
+    #  self.breachWarningLightLogic = None
+    #  logging.warning('BreachWarningLight module is not available. Light feedback is disabled.')
 
     GuideletWidget.__init__(self, parent)
 
@@ -56,7 +59,8 @@ class LumpNavWidget(GuideletWidget):
     GuideletWidget.addLauncherWidgets(self)
 
     # BreachWarning
-    self.addBreachWarningLightPreferences()
+    # 2018-08-22: This has been disabled because slicer throws slicer.util.MRMLNodeNotFoundException (at least on Linux)
+    #self.addBreachWarningLightPreferences()
 
   def onConfigurationChanged(self, selectedConfigurationName):
     GuideletWidget.onConfigurationChanged(self, selectedConfigurationName)
@@ -154,13 +158,16 @@ class LumpNavGuidelet(Guidelet):
   LUMPNAV_PIVOT_CALIBRATION = 0
   LUMPNAV_SPIN_CALIBRATION = 1
   
+  breachWarningLightLogic = None
+  
   def __init__(self, parent, logic, configurationName='Default'):
 
-    try:
-      import BreachWarningLight
-      self.breachWarningLightLogic = BreachWarningLight.BreachWarningLightLogic()
-    except ImportError:
-      self.breachWarningLightLogic = None
+    # 2018-08-22: This has been disabled because slicer gives an error about missing vtkSlicerOpenIGTLinkCommand
+    #try:
+    #  import BreachWarningLight
+    #  self.breachWarningLightLogic = BreachWarningLight.BreachWarningLightLogic()
+    #except ImportError:
+    #  self.breachWarningLightLogic = None
       
     Guidelet.__init__(self, parent, logic, configurationName)
     logging.debug('LumpNavGuidelet.__init__')
