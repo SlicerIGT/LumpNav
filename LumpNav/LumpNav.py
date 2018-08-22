@@ -70,7 +70,6 @@ class LumpNavWidget(GuideletWidget):
       self.breachWarningLightCheckBox.checked = (lightEnabled == 'True')
 
   def addBreachWarningLightPreferences(self):
-    lnNode = slicer.util.getNode(self.moduleName)
 
     if self.breachWarningLightLogic:
 
@@ -84,6 +83,7 @@ class LumpNavWidget(GuideletWidget):
       hBoxCheck.setStretch(1,2)
       self.launcherFormLayout.addRow(hBoxCheck)
 
+      lnNode = slicer.util.getFirstNodeByName(self.moduleName)
       if(lnNode is not None and lnNode.GetParameter('EnableBreachWarningLight')):
           # logging.debug("There is already a connector EnableBreachWarningLight parameter " + lnNode.GetParameter('EnableBreachWarningLight'))
           self.breachWarningLightCheckBox.checked = lnNode.GetParameter('EnableBreachWarningLight')
@@ -290,7 +290,7 @@ class LumpNavGuidelet(Guidelet):
 
     # ReferenceToRas is needed for ultrasound initialization, so we need to
     # set it up before calling Guidelet.setupScene().
-    self.referenceToRas = slicer.util.getNode('ReferenceToRas')
+    self.referenceToRas = slicer.util.getFirstNodeByName('ReferenceToRas')
     if not self.referenceToRas:
       self.referenceToRas=slicer.vtkMRMLLinearTransformNode()
       self.referenceToRas.SetName("ReferenceToRas")
@@ -306,7 +306,7 @@ class LumpNavGuidelet(Guidelet):
 
     logging.debug('Create transforms')
   
-    self.cauteryTipToCautery = slicer.util.getNode('CauteryTipToCautery')
+    self.cauteryTipToCautery = slicer.util.getFirstNodeByName('CauteryTipToCautery')
     if not self.cauteryTipToCautery:
       cauteryTipToCauteryFilePath = os.path.join(self.moduleTransformsPath, 'CauteryTipToCautery.h5')
       [success, self.cauteryTipToCautery] = slicer.util.loadTransform(cauteryTipToCauteryFilePath, returnNode = True)
@@ -316,7 +316,7 @@ class LumpNavGuidelet(Guidelet):
         self.cauteryTipToCautery.SetName("CauteryTipToCautery")
         slicer.mrmlScene.AddNode(self.cauteryTipToCautery)
 
-    self.cauteryModelToCauteryTip = slicer.util.getNode('CauteryModelToCauteryTip')
+    self.cauteryModelToCauteryTip = slicer.util.getFirstNodeByName('CauteryModelToCauteryTip')
     if not self.cauteryModelToCauteryTip:
       cauteryModelToCauteryTipFilePath = os.path.join(self.moduleTransformsPath, 'CauteryModelToCauteryTip.h5')
       [success, self.cauteryModelToCauteryTip] = slicer.util.loadTransform(cauteryModelToCauteryTipFilePath, returnNode = True)
@@ -326,7 +326,7 @@ class LumpNavGuidelet(Guidelet):
         self.cauteryModelToCauteryTip.SetName("CauteryModelToCauteryTip")
         slicer.mrmlScene.AddNode(self.cauteryModelToCauteryTip)
 
-    self.needleTipToNeedle = slicer.util.getNode('NeedleTipToNeedle')
+    self.needleTipToNeedle = slicer.util.getFirstNodeByName('NeedleTipToNeedle')
     if not self.needleTipToNeedle:
       needleTipToNeedleFilePath = os.path.join(self.moduleTransformsPath, 'NeedleTipToNeedle.h5')
       [success, self.needleTipToNeedle] = slicer.util.loadTransform(needleTipToNeedleFilePath, returnNode = True)
@@ -336,7 +336,7 @@ class LumpNavGuidelet(Guidelet):
         self.needleTipToNeedle.SetName("NeedleTipToNeedle")
         slicer.mrmlScene.AddNode(self.needleTipToNeedle)
 
-    self.needleBaseToNeedle = slicer.util.getNode('NeedleBaseToNeedle')
+    self.needleBaseToNeedle = slicer.util.getFirstNodeByName('NeedleBaseToNeedle')
     if not self.needleBaseToNeedle:
       needleBaseToNeedleFilePath = os.path.join(self.moduleTransformsPath, 'NeedleBaseToNeedle.h5')
       [success, self.needleBaseToNeedle] = slicer.util.loadTransform(needleBaseToNeedleFilePath, returnNode = True)
@@ -346,7 +346,7 @@ class LumpNavGuidelet(Guidelet):
         self.needleBaseToNeedle.SetName("NeedleBaseToNeedle")
         slicer.mrmlScene.AddNode(self.needleBaseToNeedle)
 
-    self.cauteryCameraToCautery = slicer.util.getNode('CauteryCameraToCautery')
+    self.cauteryCameraToCautery = slicer.util.getFirstNodeByName('CauteryCameraToCautery')
     if not self.cauteryCameraToCautery:
       self.cauteryCameraToCautery=slicer.vtkMRMLLinearTransformNode()
       self.cauteryCameraToCautery.SetName("CauteryCameraToCautery")
@@ -354,7 +354,7 @@ class LumpNavGuidelet(Guidelet):
       self.cauteryCameraToCautery.SetMatrixTransformToParent(m)
       slicer.mrmlScene.AddNode(self.cauteryCameraToCautery)
 
-    self.CauteryToNeedle = slicer.util.getNode('CauteryToNeedle')
+    self.CauteryToNeedle = slicer.util.getFirstNodeByName('CauteryToNeedle')
     if not self.CauteryToNeedle:
       self.CauteryToNeedle=slicer.vtkMRMLLinearTransformNode()
       self.CauteryToNeedle.SetName("CauteryToNeedle")
@@ -362,13 +362,13 @@ class LumpNavGuidelet(Guidelet):
 
     # Create transforms that will be updated through OpenIGTLink
 
-    self.cauteryToReference = slicer.util.getNode('CauteryToReference')
+    self.cauteryToReference = slicer.util.getFirstNodeByName('CauteryToReference')
     if not self.cauteryToReference:
       self.cauteryToReference=slicer.vtkMRMLLinearTransformNode()
       self.cauteryToReference.SetName("CauteryToReference")
       slicer.mrmlScene.AddNode(self.cauteryToReference)
 
-    self.needleToReference = slicer.util.getNode('NeedleToReference')
+    self.needleToReference = slicer.util.getFirstNodeByName('NeedleToReference')
     if not self.needleToReference:
       self.needleToReference=slicer.vtkMRMLLinearTransformNode()
       self.needleToReference.SetName("NeedleToReference")
@@ -377,7 +377,7 @@ class LumpNavGuidelet(Guidelet):
     # Models
     logging.debug('Create models')
 
-    self.cauteryModel_CauteryTip = slicer.util.getNode('CauteryModel')
+    self.cauteryModel_CauteryTip = slicer.util.getFirstNodeByName('CauteryModel','vtkMRMLModelNode')
     if not self.cauteryModel_CauteryTip:
       moduleDirectoryPath = slicer.modules.lumpnav.path.replace('LumpNav.py', '')
       modelFilePath = qt.QDir.toNativeSeparators(moduleDirectoryPath + '/Resources/CauteryModel.stl')
@@ -390,18 +390,18 @@ class LumpNavGuidelet(Guidelet):
       self.cauteryModel_CauteryTip.GetDisplayNode().SetColor(1.0, 1.0, 0)
       self.cauteryModel_CauteryTip.SetName("CauteryModel")
     
-    self.stickModel_CauteryTip = slicer.util.getNode('StickModel')
+    self.stickModel_CauteryTip = slicer.util.getFirstNodeByName('StickModel','vtkMRMLModelNode')
     if not self.stickModel_CauteryTip:
       slicer.modules.createmodels.logic().CreateNeedle(100,1.0,2.0,0)
-      self.stickModel_CauteryTip = slicer.util.getNode(pattern="NeedleModel")
+      self.stickModel_CauteryTip = slicer.util.getFirstNodeByName("NeedleModel",'vtkMRMLModelNode')
       self.stickModel_CauteryTip.GetDisplayNode().SetColor(1.0, 1.0, 0)
       self.stickModel_CauteryTip.GetDisplayNode().VisibilityOff()  # Cautery model is the default
       self.stickModel_CauteryTip.SetName("StickModel")
          
-    self.needleModel_NeedleTip = slicer.util.getNode('NeedleModel')
+    self.needleModel_NeedleTip = slicer.util.getFirstNodeByName('NeedleModel','vtkMRMLModelNode')
     if not self.needleModel_NeedleTip:
       slicer.modules.createmodels.logic().CreateNeedle(60,1.0, self.needleModelTipRadius, 0)
-      self.needleModel_NeedleTip=slicer.util.getNode(pattern="NeedleModel")
+      self.needleModel_NeedleTip=slicer.util.getFirstNodeByName("NeedleModel",'vtkMRMLModelNode')
       self.needleModel_NeedleTip.GetDisplayNode().SetColor(0.33, 1.0, 1.0)
       self.needleModel_NeedleTip.SetName("NeedleModel")
       self.needleModel_NeedleTip.GetDisplayNode().SliceIntersectionVisibilityOn()
@@ -410,7 +410,7 @@ class LumpNavGuidelet(Guidelet):
 
     logging.debug('Create surface from point set')
 
-    self.tumorModel_Needle = slicer.util.getNode('TumorModel')
+    self.tumorModel_Needle = slicer.util.getFirstNodeByName('TumorModel')
     if not self.tumorModel_Needle:
       self.tumorModel_Needle = slicer.vtkMRMLModelNode()
       self.tumorModel_Needle.SetName("TumorModel")
@@ -428,7 +428,7 @@ class LumpNavGuidelet(Guidelet):
       slicer.mrmlScene.AddNode(modelDisplayNode)
       self.tumorModel_Needle.SetAndObserveDisplayNodeID(modelDisplayNode.GetID())
 
-    tumorMarkups_Needle = slicer.util.getNode('T')
+    tumorMarkups_Needle = slicer.util.getFirstNodeByName('T')
     if not tumorMarkups_Needle:
       tumorMarkups_Needle = slicer.vtkMRMLMarkupsFiducialNode()
       tumorMarkups_Needle.SetName("T")
@@ -439,7 +439,7 @@ class LumpNavGuidelet(Guidelet):
 
     # Set up breach warning node
     logging.debug('Set up breach warning')
-    self.breachWarningNode = slicer.util.getNode('LumpNavBreachWarning')
+    self.breachWarningNode = slicer.util.getFirstNodeByName('LumpNavBreachWarning')
 
     if not self.breachWarningNode:
       self.breachWarningNode = slicer.mrmlScene.CreateNodeByClass('vtkMRMLBreachWarningNode')
@@ -1179,7 +1179,7 @@ class LumpNavGuidelet(Guidelet):
     """
     logging.debug("getCamera")
     camerasLogic = slicer.modules.cameras.logic()
-    camera = camerasLogic.GetViewActiveCameraNode(slicer.util.getNode(viewName))
+    camera = camerasLogic.GetViewActiveCameraNode(slicer.util.getFirstNodeByName(viewName))
     return camera
 
   def getViewNode(self, viewName):
@@ -1187,7 +1187,7 @@ class LumpNavGuidelet(Guidelet):
     Get the view node for the selected 3D view
     """
     logging.debug("getViewNode")
-    viewNode = slicer.util.getNode(viewName)
+    viewNode = slicer.util.getFirstNodeByName(viewName)
     return viewNode
 
   def onCameraButtonClicked(self, viewName):
@@ -1417,18 +1417,18 @@ class LumpNavGuidelet(Guidelet):
 
     # Reset orientation marker
     if hasattr(slicer.vtkMRMLViewNode(),'SetOrientationMarkerType'): # orientation marker is not available in older Slicer versions
-      v1=slicer.util.getNode('View1')
+      v1=slicer.util.getFirstNodeByName('View1')
       v1v2OrientationMarkerSize = v1.OrientationMarkerSizeMedium if self.navigationView == self.VIEW_TRIPLE_3D else v1.OrientationMarkerSizeSmall
       v1.SetOrientationMarkerType(v1.OrientationMarkerTypeHuman)
       v1.SetOrientationMarkerSize(v1v2OrientationMarkerSize)
       v1.SetBoxVisible(False)
       v1.SetAxisLabelsVisible(False)
-      v2=slicer.util.getNode('View2')
+      v2=slicer.util.getFirstNodeByName('View2')
       v2.SetOrientationMarkerType(v2.OrientationMarkerTypeHuman)
       v2.SetOrientationMarkerSize(v1v2OrientationMarkerSize)
       v2.SetBoxVisible(False)
       v2.SetAxisLabelsVisible(False)
-      v3=slicer.util.getNode('View3')
+      v3=slicer.util.getFirstNodeByName('View3')
       if v3: # only available in triple view
         v3.SetOrientationMarkerType(v1.OrientationMarkerTypeHuman)
         v3.SetOrientationMarkerSize(v1.OrientationMarkerSizeLarge)
