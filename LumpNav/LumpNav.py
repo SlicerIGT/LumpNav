@@ -290,7 +290,7 @@ class LumpNavGuidelet(Guidelet):
 
     # ReferenceToRas is needed for ultrasound initialization, so we need to
     # set it up before calling Guidelet.setupScene().
-    self.referenceToRas = slicer.util.getFirstNodeByName('ReferenceToRas')
+    self.referenceToRas = slicer.util.getFirstNodeByName('ReferenceToRas', className='vtkMRMLLinearTransformNode')
     if not self.referenceToRas:
       self.referenceToRas=slicer.vtkMRMLLinearTransformNode()
       self.referenceToRas.SetName("ReferenceToRas")
@@ -306,7 +306,7 @@ class LumpNavGuidelet(Guidelet):
 
     logging.debug('Create transforms')
   
-    self.cauteryTipToCautery = slicer.util.getFirstNodeByName('CauteryTipToCautery')
+    self.cauteryTipToCautery = slicer.util.getFirstNodeByName('CauteryTipToCautery', className='vtkMRMLLinearTransformNode')
     if not self.cauteryTipToCautery:
       cauteryTipToCauteryFilePath = os.path.join(self.moduleTransformsPath, 'CauteryTipToCautery.h5')
       [success, self.cauteryTipToCautery] = slicer.util.loadTransform(cauteryTipToCauteryFilePath, returnNode = True)
@@ -316,7 +316,8 @@ class LumpNavGuidelet(Guidelet):
         self.cauteryTipToCautery.SetName("CauteryTipToCautery")
         slicer.mrmlScene.AddNode(self.cauteryTipToCautery)
 
-    self.cauteryModelToCauteryTip = slicer.util.getFirstNodeByName('CauteryModelToCauteryTip')
+    self.cauteryModelToCauteryTip = slicer.util.getFirstNodeByName(
+      'CauteryModelToCauteryTip', className='vtkMRMLLinearTransformNode')
     if not self.cauteryModelToCauteryTip:
       cauteryModelToCauteryTipFilePath = os.path.join(self.moduleTransformsPath, 'CauteryModelToCauteryTip.h5')
       [success, self.cauteryModelToCauteryTip] = slicer.util.loadTransform(cauteryModelToCauteryTipFilePath, returnNode = True)
@@ -326,7 +327,8 @@ class LumpNavGuidelet(Guidelet):
         self.cauteryModelToCauteryTip.SetName("CauteryModelToCauteryTip")
         slicer.mrmlScene.AddNode(self.cauteryModelToCauteryTip)
 
-    self.needleTipToNeedle = slicer.util.getFirstNodeByName('NeedleTipToNeedle')
+    self.needleTipToNeedle = slicer.util.getFirstNodeByName(
+      'NeedleTipToNeedle', className='vtkMRMLLinearTransformNode')
     if not self.needleTipToNeedle:
       needleTipToNeedleFilePath = os.path.join(self.moduleTransformsPath, 'NeedleTipToNeedle.h5')
       [success, self.needleTipToNeedle] = slicer.util.loadTransform(needleTipToNeedleFilePath, returnNode = True)
@@ -336,7 +338,8 @@ class LumpNavGuidelet(Guidelet):
         self.needleTipToNeedle.SetName("NeedleTipToNeedle")
         slicer.mrmlScene.AddNode(self.needleTipToNeedle)
 
-    self.needleBaseToNeedle = slicer.util.getFirstNodeByName('NeedleBaseToNeedle')
+    self.needleBaseToNeedle = slicer.util.getFirstNodeByName(
+      'NeedleBaseToNeedle', className='vtkMRMLLinearTransformNode')
     if not self.needleBaseToNeedle:
       needleBaseToNeedleFilePath = os.path.join(self.moduleTransformsPath, 'NeedleBaseToNeedle.h5')
       [success, self.needleBaseToNeedle] = slicer.util.loadTransform(needleBaseToNeedleFilePath, returnNode = True)
@@ -346,7 +349,8 @@ class LumpNavGuidelet(Guidelet):
         self.needleBaseToNeedle.SetName("NeedleBaseToNeedle")
         slicer.mrmlScene.AddNode(self.needleBaseToNeedle)
 
-    self.cauteryCameraToCautery = slicer.util.getFirstNodeByName('CauteryCameraToCautery')
+    self.cauteryCameraToCautery = slicer.util.getFirstNodeByName(
+      'CauteryCameraToCautery', className='vtkMRMLLinearTransformNode')
     if not self.cauteryCameraToCautery:
       self.cauteryCameraToCautery=slicer.vtkMRMLLinearTransformNode()
       self.cauteryCameraToCautery.SetName("CauteryCameraToCautery")
@@ -354,7 +358,8 @@ class LumpNavGuidelet(Guidelet):
       self.cauteryCameraToCautery.SetMatrixTransformToParent(m)
       slicer.mrmlScene.AddNode(self.cauteryCameraToCautery)
 
-    self.CauteryToNeedle = slicer.util.getFirstNodeByName('CauteryToNeedle')
+    self.CauteryToNeedle = slicer.util.getFirstNodeByName(
+      'CauteryToNeedle', className='vtkMRMLLinearTransformNode')
     if not self.CauteryToNeedle:
       self.CauteryToNeedle=slicer.vtkMRMLLinearTransformNode()
       self.CauteryToNeedle.SetName("CauteryToNeedle")
@@ -362,13 +367,15 @@ class LumpNavGuidelet(Guidelet):
 
     # Create transforms that will be updated through OpenIGTLink
 
-    self.cauteryToReference = slicer.util.getFirstNodeByName('CauteryToReference')
+    self.cauteryToReference = slicer.util.getFirstNodeByName(
+      'CauteryToReference', className='vtkMRMLLinearTransformNode')
     if not self.cauteryToReference:
       self.cauteryToReference=slicer.vtkMRMLLinearTransformNode()
       self.cauteryToReference.SetName("CauteryToReference")
       slicer.mrmlScene.AddNode(self.cauteryToReference)
 
-    self.needleToReference = slicer.util.getFirstNodeByName('NeedleToReference')
+    self.needleToReference = slicer.util.getFirstNodeByName(
+      'NeedleToReference', className='vtkMRMLLinearTransformNode')
     if not self.needleToReference:
       self.needleToReference=slicer.vtkMRMLLinearTransformNode()
       self.needleToReference.SetName("NeedleToReference")
@@ -410,7 +417,7 @@ class LumpNavGuidelet(Guidelet):
 
     logging.debug('Create surface from point set')
 
-    self.tumorModel_Needle = slicer.util.getFirstNodeByName('TumorModel')
+    self.tumorModel_Needle = slicer.util.getFirstNodeByName('TumorModel', className='vtkMRMLModelNode')
     if not self.tumorModel_Needle:
       self.tumorModel_Needle = slicer.vtkMRMLModelNode()
       self.tumorModel_Needle.SetName("TumorModel")
@@ -428,7 +435,7 @@ class LumpNavGuidelet(Guidelet):
       slicer.mrmlScene.AddNode(modelDisplayNode)
       self.tumorModel_Needle.SetAndObserveDisplayNodeID(modelDisplayNode.GetID())
 
-    tumorMarkups_Needle = slicer.util.getFirstNodeByName('T')
+    tumorMarkups_Needle = slicer.util.getFirstNodeByName('T', className='vtkMRMLMarkupsFiducialNode')
     if not tumorMarkups_Needle:
       tumorMarkups_Needle = slicer.vtkMRMLMarkupsFiducialNode()
       tumorMarkups_Needle.SetName("T")
