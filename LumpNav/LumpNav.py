@@ -232,12 +232,12 @@ class LumpNavGuidelet(Guidelet):
     return featurePanelList
 
   def __del__(self):#common
-    self.cleanup()
+    self.preCleanup()
 
   # Clean up when slicelet is closed
-  def cleanup(self):#common
-    Guidelet.cleanup(self)
-    logging.debug('cleanup')
+  def preCleanup(self):#common
+    Guidelet.preCleanup(self)
+    logging.debug('preCleanup')
     self.breachWarningNode.UnRegister(slicer.mrmlScene)
     self.setAndObserveTumorMarkupsNode(None)
     self.setAndObserveErasedMarkupsNode(None)
