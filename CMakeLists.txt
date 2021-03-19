@@ -21,6 +21,7 @@ include(${Slicer_USE_FILE})
 # Extension modules
 add_subdirectory(BreachWarningLight)
 add_subdirectory(LumpNav)
+add_subdirectory(LumpNav2)
 ## NEXT_MODULE
 
 #-----------------------------------------------------------------------------
