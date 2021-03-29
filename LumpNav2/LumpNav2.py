@@ -204,6 +204,7 @@ class LumpNav2Widget(ScriptedLoadableModuleWidget, VTKObservationMixin):
       if firstVolumeNode:
         self._parameterNode.SetNodeReferenceID("InputVolume", firstVolumeNode.GetID())
 
+
   def setParameterNode(self, inputParameterNode):
     """
     Set and observe parameter node.
@@ -251,6 +252,13 @@ class LumpNav2Widget(ScriptedLoadableModuleWidget, VTKObservationMixin):
     else:
       self.ui.applyButton.toolTip = "Select input and output volume nodes"
       self.ui.applyButton.enabled = False
+
+    customUi = self._parameterNode.GetParameter(self.logic.CUSTOM_UI)
+    if customUi == "True":
+      self.ui.customUiButton.checked = True
+      self.onCustomUiClicked(True)
+    else:
+      self.ui.customUiButton.checked = False
 
     # All the GUI updates are done
     self._updatingGUIFromParameterNode = False
@@ -310,6 +318,12 @@ class LumpNav2Logic(ScriptedLoadableModuleLogic):
   https://github.com/Slicer/Slicer/blob/master/Base/Python/slicer/ScriptedLoadableModule.py
   """
 
+  CUSTOM_UI = "CustomUi"
+
+  # Transform names
+
+  REFERENCE_TO_RAS = "ReferenceToRas"
+
   def __init__(self):
     """
     Called when the logic class is instantiated. Can be used for initializing member variables.
@@ -324,6 +338,8 @@ class LumpNav2Logic(ScriptedLoadableModuleLogic):
       parameterNode.SetParameter("Threshold", "100.0")
     if not parameterNode.GetParameter("Invert"):
       parameterNode.SetParameter("Invert", "false")
+    if not parameterNode.GetParameter(self.CUSTOM_UI):
+      parameterNode.SetParameter(self.CUSTOM_UI, "True")
 
   def process(self, inputVolume, outputVolume, imageThreshold, invert=False, showResult=True):
     """
@@ -356,6 +372,15 @@ class LumpNav2Logic(ScriptedLoadableModuleLogic):
 
     stopTime = time.time()
     logging.info('Processing completed in {0:.2f} seconds'.format(stopTime-startTime))
+
+  def setupTransformHierarchy(self):
+    parameterNode = self.getParameterNode()
+
+    referenceToRas = parameterNode.GetNodeReference(self.REFERENCE_TO_RAS)
+    if referenceToRas is None:
+      referenceToRas = slicer.mrmlScene.AddNewNodeByClass("vtkMRMLLinearTransformNode", self.REFERENCE_TO_RAS)
+      parameterNode.SetNodeReferenceID(referenceToRas.GetID())
+    
 
 #
 # LumpNav2Test
