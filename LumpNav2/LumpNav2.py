@@ -122,6 +122,9 @@ class LumpNav2Widget(ScriptedLoadableModuleWidget, VTKObservationMixin):
     # Create logic class. Logic implements all computations that should be possible to run
     # in batch mode, without a graphical user interface.
     self.logic = LumpNav2Logic()
+    self._updatingGUIFromParameterNode = True
+    self.logic.setup()
+    self._updatingGUIFromParameterNode = False
 
     # Connections
 
@@ -323,6 +326,8 @@ class LumpNav2Logic(ScriptedLoadableModuleLogic):
   # Transform names
 
   REFERENCE_TO_RAS = "ReferenceToRas"
+  NEEDLE_TO_REFERENCE = "NeedleToReference"
+  NEEDLETIP_TO_NEEDLE = "NeedleTipToNeedle"
 
   def __init__(self):
     """
@@ -339,7 +344,7 @@ class LumpNav2Logic(ScriptedLoadableModuleLogic):
     if not parameterNode.GetParameter("Invert"):
       parameterNode.SetParameter("Invert", "false")
     if not parameterNode.GetParameter(self.CUSTOM_UI):
-      parameterNode.SetParameter(self.CUSTOM_UI, "True")
+      parameterNode.SetParameter(self.CUSTOM_UI, "False")
 
   def process(self, inputVolume, outputVolume, imageThreshold, invert=False, showResult=True):
     """
@@ -373,14 +378,28 @@ class LumpNav2Logic(ScriptedLoadableModuleLogic):
     stopTime = time.time()
     logging.info('Processing completed in {0:.2f} seconds'.format(stopTime-startTime))
 
+  def setup(self):
+    self.setupTransformHierarchy()
+
   def setupTransformHierarchy(self):
     parameterNode = self.getParameterNode()
 
     referenceToRas = parameterNode.GetNodeReference(self.REFERENCE_TO_RAS)
     if referenceToRas is None:
       referenceToRas = slicer.mrmlScene.AddNewNodeByClass("vtkMRMLLinearTransformNode", self.REFERENCE_TO_RAS)
-      parameterNode.SetNodeReferenceID(referenceToRas.GetID())
-    
+      parameterNode.SetNodeReferenceID(self.REFERENCE_TO_RAS, referenceToRas.GetID())
+
+    needleToReference = parameterNode.GetNodeReference(self.NEEDLE_TO_REFERENCE)
+    if needleToReference is None:
+      needleToReference = slicer.mrmlScene.AddNewNodeByClass("vtkMRMLLinearTransformNode", self.NEEDLE_TO_REFERENCE)
+      parameterNode.SetNodeReferenceID(self.NEEDLE_TO_REFERENCE, needleToReference.GetID())
+    needleToReference.SetAndObserveTransformNodeID(referenceToRas.GetID())
+
+    needleTipToNeedle = parameterNode.GetNodeReference(self.NEEDLETIP_TO_NEEDLE)
+    if needleTipToNeedle is None:
+      needleTipToNeedle = slicer.mrmlScene.AddNewNodeByClass("vtkMRMLLinearTransformNode", self.NEEDLETIP_TO_NEEDLE)
+      parameterNode.SetNodeReferenceID(self.NEEDLETIP_TO_NEEDLE, needleTipToNeedle.GetID())
+    needleTipToNeedle.SetAndObserveTransformNodeID(needleToReference.GetID())
 
 #
 # LumpNav2Test
