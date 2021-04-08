@@ -328,6 +328,14 @@ class LumpNav2Logic(ScriptedLoadableModuleLogic):
   REFERENCE_TO_RAS = "ReferenceToRas"
   NEEDLE_TO_REFERENCE = "NeedleToReference"
   NEEDLETIP_TO_NEEDLE = "NeedleTipToNeedle"
+  CAUTERY_TO_REFERENCE = "CauteryToReference"
+  CAUTERYTIP_TO_CAUTERY = "CauteryTipToCautery"
+  
+  # Model names
+
+  NEEDLE_MODEL = "NeedleModel"
+  CAUTERY_MODEL = "CauteryModel"
+  CAUTERY_MODEL_FILENAME = "CauteryModel.stl"
 
   def __init__(self):
     """
@@ -379,7 +387,40 @@ class LumpNav2Logic(ScriptedLoadableModuleLogic):
     logging.info('Processing completed in {0:.2f} seconds'.format(stopTime-startTime))
 
   def setup(self):
+    """
+    Sets up the Slicer scene. Creates nodes if they are missing.
+    """
+    parameterNode = self.getParameterNode()
+
     self.setupTransformHierarchy()
+
+    # Create models
+
+    createModelsLogic = slicer.modules.createmodels.logic()
+
+    needleModel = parameterNode.GetNodeReference(self.NEEDLE_MODEL)
+    if needleModel is None:
+      needleModel = createModelsLogic.CreateNeedle(60.0, 1.0, 2.0, 0)
+      needleModel.GetDisplayNode().SetColor(0.33, 1.0, 1.0)
+      needleModel.SetName(self.NEEDLE_MODEL)
+      needleModel.GetDisplayNode().SliceIntersectionVisibilityOn()
+      parameterNode.SetNodeReferenceID(self.NEEDLE_MODEL, needleModel.GetID())
+
+    needleTipToNeedle = parameterNode.GetNodeReference(self.NEEDLETIP_TO_NEEDLE)
+    needleModel.SetAndObserveTransformNodeID(needleTipToNeedle.GetID())
+
+    moduleDir = os.path.dirname(slicer.modules.lumpnav2.path)
+    cauteryModelFullpath = os.path.join(moduleDir, "Resources", self.CAUTERY_MODEL_FILENAME)
+
+    cauteryModel = parameterNode.GetNodeReference(self.CAUTERY_MODEL)
+    if cauteryModel is None:
+      cauteryModel = slicer.util.loadModel(cauteryModelFullpath)
+      cauteryModel.GetDisplayNode().SetColor(1.0, 1.0, 0.0)
+      cauteryModel.SetName(self.CAUTERY_MODEL)
+      parameterNode.SetNodeReferenceID(self.CAUTERY_MODEL, cauteryModel.GetID())
+    
+    cauteryTipToCautery = parameterNode.GetNodeReference(self.CAUTERYTIP_TO_CAUTERY)
+    cauteryModel.SetAndObserveTransformNodeID(cauteryTipToCautery.GetID())
 
   def setupTransformHierarchy(self):
     parameterNode = self.getParameterNode()
@@ -400,6 +441,18 @@ class LumpNav2Logic(ScriptedLoadableModuleLogic):
       needleTipToNeedle = slicer.mrmlScene.AddNewNodeByClass("vtkMRMLLinearTransformNode", self.NEEDLETIP_TO_NEEDLE)
       parameterNode.SetNodeReferenceID(self.NEEDLETIP_TO_NEEDLE, needleTipToNeedle.GetID())
     needleTipToNeedle.SetAndObserveTransformNodeID(needleToReference.GetID())
+
+    cauteryToReference = parameterNode.GetNodeReference(self.CAUTERY_TO_REFERENCE)
+    if cauteryToReference is None:
+      cauteryToReference = slicer.mrmlScene.AddNewNodeByClass("vtkMRMLLinearTransformNode", self.CAUTERY_TO_REFERENCE)
+      parameterNode.SetNodeReferenceID(self.CAUTERY_TO_REFERENCE, cauteryToReference.GetID())
+    cauteryToReference.SetAndObserveTransformNodeID(referenceToRas.GetID())
+
+    cauteryTipToCautery = parameterNode.GetNodeReference(self.CAUTERYTIP_TO_CAUTERY)
+    if cauteryTipToCautery is None:
+      cauteryTipToCautery = slicer.mrmlScene.AddNewNodeByClass("vtkMRMLLinearTransformNode", self.CAUTERYTIP_TO_CAUTERY)
+      parameterNode.SetNodeReferenceID(self.CAUTERYTIP_TO_CAUTERY, cauteryTipToCautery.GetID())
+    cauteryTipToCautery.SetAndObserveTransformNodeID(cauteryToReference.GetID())
 
 #
 # LumpNav2Test

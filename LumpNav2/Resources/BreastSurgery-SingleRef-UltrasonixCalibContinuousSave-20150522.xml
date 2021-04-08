@@ -1,0 +1,123 @@
+<PlusConfiguration version="2.3">
+
+  <DataCollection StartupDelaySec="1.0" >
+    <DeviceSet 
+      Name="Breast lumpectomy phantom L14 - auto depth and clip, continuous tracker save"
+      Description="EM sensors: 1 Probe, 2 Reference, 3 Needle, 4 Cautery. Uses Ultrasonix calibration, valid at any depth. Automatic clipping. Recording is supported. Tracking data is continuously recorded." 
+    />
+
+    <Device
+      Id="TrackerDevice" 
+      Type="Ascension3DG" 
+      AcquisitionRate="50" 
+      LocalTimeOffsetSec="0.0" 
+      FilterAcWideNotch="1"
+      ToolReferenceFrame="Tracker">
+      <DataSources>
+        <DataSource Type="Tool" Id="Probe" BufferSize="500" PortName="0" AveragedItemsForFiltering="20" />
+        <DataSource Type="Tool" Id="Reference" BufferSize="500" PortName="1" AveragedItemsForFiltering="20" />
+        <DataSource Type="Tool" Id="Needle" BufferSize="500" PortName="2" AveragedItemsForFiltering="20" />
+        <DataSource Type="Tool" Id="Cautery" BufferSize="500" PortName="3" AveragedItemsForFiltering="20" />
+      </DataSources>
+      <OutputChannels>
+        <OutputChannel Id="TrackerStream" >
+          <DataSource Id="Probe"/>
+          <DataSource Id="Reference"/>
+          <DataSource Id="Needle"/>
+          <DataSource Id="Cautery"/>
+        </OutputChannel>
+      </OutputChannels>
+    </Device>
+
+    <Device
+      Id="VideoDevice"
+      Type="SonixVideo" 
+      AcquisitionRate="30" 
+      LocalTimeOffsetSec="0.0"
+      IP="localhost" 
+      Depth="50" 
+      CompressionStatus="0"
+      SoundVelocity="1500"
+	    AutoClipEnabled="TRUE"
+      ImageToTransducerTransformName="ImageToTransducer" >
+      <DataSources>
+        <DataSource Type="Video" Id="Video" PortName="B" PortUsImageOrientation="UF" BufferSize="200" AveragedItemsForFiltering="20" />
+      </DataSources>
+      <OutputChannels>
+        <OutputChannel Id="VideoStream" VideoDataSourceId="Video"/>
+      </OutputChannels>
+    </Device>
+
+    <Device 
+      Id="TrackedVideoDevice" 
+      Type="VirtualMixer" >
+      <InputChannels>
+        <InputChannel Id="TrackerStream" />
+        <InputChannel Id="VideoStream" />
+      </InputChannels>
+      <OutputChannels>
+        <OutputChannel Id="TrackedVideoStream"/>
+      </OutputChannels>
+    </Device>
+    
+    <Device
+      Id="CaptureDevice"
+      Type="VirtualDiscCapture"
+      BaseFilename="LumpNavTrackedVideo.mhd"
+      EnableCapturingOnStart="FALSE"
+      EnableFileCompression="FALSE" >
+      <InputChannels>
+        <InputChannel Id="TrackedVideoStream" />
+      </InputChannels>
+    </Device>
+
+    <Device
+      Id="CaptureDeviceTracker"
+      Type="VirtualDiscCapture"
+      BaseFilename="LumpNavTracking.mhd"
+      EnableCapturingOnStart="TRUE"
+      EnableFileCompression="FALSE"
+      RequestedFrameRate="15"
+      FrameBufferSize="450" >
+      <InputChannels>
+        <InputChannel Id="TrackerStream" />
+      </InputChannels>
+    </Device>
+
+  </DataCollection>
+
+  <PlusOpenIGTLinkServer
+    MaxNumberOfIgtlMessagesToSend="10"
+    MaxTimeSpentWithProcessingMs="50"
+    ListeningPort="18944"
+    SendValidTransformsOnly="true"
+    OutputChannelId="TrackedVideoStream" >
+    <DefaultClientInfo>
+      <MessageTypes>
+        <Message Type="IMAGE" />
+        <Message Type="TRANSFORM" />
+      </MessageTypes>
+      <TransformNames>
+        <Transform Name="CauteryToReference" />
+        <Transform Name="NeedleToReference" />
+        <Transform Name="CauteryToNeedle" />
+      </TransformNames>
+      <ImageNames>
+        <Image Name="Image" EmbeddedTransformToFrame="Reference" />
+      </ImageNames>
+    </DefaultClientInfo>
+  </PlusOpenIGTLinkServer>
+
+  <CoordinateDefinitions>    
+	
+    <!-- TransducerToProbe transform matrix is computed from calibration matrices provided by Ultrasonix for linear GPS probe -->
+    <Transform From="Transducer" To="Probe"
+      Matrix="
+        0.0018    0.9477   -0.0175   14.8449
+       -1.0000    0.0016   -0.0052   15.0061
+       -0.0052    0.0166    0.9998    0.1638
+             0         0         0    1.0000" />
+
+  </CoordinateDefinitions> 
+
+</PlusConfiguration>
