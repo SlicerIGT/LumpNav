@@ -143,9 +143,15 @@ class LumpNav2Widget(ScriptedLoadableModuleWidget, VTKObservationMixin):
     # Buttons
     self.ui.applyButton.connect('clicked(bool)', self.onApplyButton)
     self.ui.customUiButton.connect('toggled(bool)', self.onCustomUiClicked)
+    self.ui.startPlusButton.connect('clicked(bool)', self.startPlusClicked)
 
     # Make sure parameter node is initialized (needed for module reload)
     self.initializeParameterNode()
+
+  def startPlusClicked(self):
+    plusServerNode = self._parameterNode.GetNodeReference(self.logic.PLUS_SERVER_NODE)
+    if plusServerNode:
+      plusServerNode.StartServer()
 
   def onCustomUiClicked(self, checked):
     slicer.util.setToolbarsVisible(not checked)
@@ -330,7 +336,14 @@ class LumpNav2Logic(ScriptedLoadableModuleLogic):
   NEEDLETIP_TO_NEEDLE = "NeedleTipToNeedle"
   CAUTERY_TO_REFERENCE = "CauteryToReference"
   CAUTERYTIP_TO_CAUTERY = "CauteryTipToCautery"
-  
+
+  # OpenIGTLink PLUS connection
+
+  CONFIG_FILE = "Childrens_2020.xml"
+  CONFIG_TEXT_NODE = "ConfigTextNode"
+  PLUS_SERVER_NODE = "PlusServer"
+  PLUS_SERVER_LAUNCHER_NODE = "PlusServerLauncher"
+
   # Model names
 
   NEEDLE_MODEL = "NeedleModel"
@@ -422,7 +435,12 @@ class LumpNav2Logic(ScriptedLoadableModuleLogic):
     cauteryTipToCautery = parameterNode.GetNodeReference(self.CAUTERYTIP_TO_CAUTERY)
     cauteryModel.SetAndObserveTransformNodeID(cauteryTipToCautery.GetID())
 
+    self.setupPlusServer()
+
   def setupTransformHierarchy(self):
+    """
+    Sets up transform nodes in the scene if they don't exist yet.
+    """
     parameterNode = self.getParameterNode()
 
     referenceToRas = parameterNode.GetNodeReference(self.REFERENCE_TO_RAS)
@@ -453,6 +471,44 @@ class LumpNav2Logic(ScriptedLoadableModuleLogic):
       cauteryTipToCautery = slicer.mrmlScene.AddNewNodeByClass("vtkMRMLLinearTransformNode", self.CAUTERYTIP_TO_CAUTERY)
       parameterNode.SetNodeReferenceID(self.CAUTERYTIP_TO_CAUTERY, cauteryTipToCautery.GetID())
     cauteryTipToCautery.SetAndObserveTransformNodeID(cauteryToReference.GetID())
+
+  def setupPlusServer(self):
+    """
+    Creates PLUS server and OpenIGTLink connection if it doesn't exist already.
+    """
+    parameterNode = self.getParameterNode()
+
+    moduleDir = os.path.dirname(slicer.modules.lumpnav2.path)
+    configFullpath = os.path.join(moduleDir, "Resources", self.CONFIG_FILE)
+
+    configTextNode = parameterNode.GetNodeReference(self.CONFIG_TEXT_NODE)
+    if configTextNode is None:
+      configTextNode = slicer.mrmlScene.AddNewNodeByClass("vtkMRMLTextNode", self.CONFIG_TEXT_NODE)
+      configTextNode.SaveWithSceneOff()
+      configTextNode.SetForceCreateStorageNode(slicer.vtkMRMLTextNode.CreateStorageNodeAlways)
+      parameterNode.SetNodeReferenceID(self.CONFIG_TEXT_NODE, configTextNode.GetID())
+    if not configTextNode.GetStorageNode():
+      configTextNode.AddDefaultStorageNode()
+    configTextStorageNode = configTextNode.GetStorageNode()
+    configTextStorageNode.SaveWithSceneOff()
+    configTextStorageNode.SetFileName(configFullpath)
+    configTextStorageNode.ReadData(configTextNode)
+
+    plusServerNode = parameterNode.GetNodeReference(self.PLUS_SERVER_NODE)
+    if not plusServerNode:
+      plusServerNode = slicer.mrmlScene.AddNewNodeByClass("vtkMRMLPlusServerNode", self.PLUS_SERVER_NODE)
+      plusServerNode.SaveWithSceneOff()
+      parameterNode.SetNodeReferenceID(self.PLUS_SERVER_NODE, plusServerNode.GetID())
+    plusServerNode.SetAndObserveConfigNode(configTextNode)
+
+    plusServerLauncherNode = parameterNode.GetNodeReference(self.PLUS_SERVER_LAUNCHER_NODE)
+    if not plusServerLauncherNode:
+      plusServerLauncherNode = slicer.mrmlScene.AddNewNodeByClass("vtkMRMLPlusServerLauncherNode", self.PLUS_SERVER_LAUNCHER_NODE)
+      plusServerLauncherNode.SaveWithSceneOff()
+
+    if plusServerLauncherNode.GetNodeReferenceID('plusServerRef') != plusServerNode.GetID():
+      plusServerLauncherNode.AddAndObserveServerNode(plusServerNode)
+
 
 #
 # LumpNav2Test
