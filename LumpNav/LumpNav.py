@@ -1487,8 +1487,10 @@ class LumpNavGuidelet(Guidelet):
     # Set and observe new parameter node
     self.eraseMarkups_Needle = eraseMarkups_Needle
     if self.eraseMarkups_Needle:
-      self.eraseMarkups_NeedleObserver = self.eraseMarkups_Needle.AddObserver(vtk.vtkCommand.ModifiedEvent , self.onEraserClicked)
-
+      if slicer.app.majorVersion*100+slicer.app.minorVersion >= 411:
+        self.eraseMarkups_NeedleObserver = self.eraseMarkups_Needle.AddObserver(slicer.vtkMRMLMarkupsNode.PointModifiedEvent, self.onEraserClicked)
+      else:
+        self.eraseMarkups_NeedleObserver = self.eraseMarkups_Needle.AddObserver(vtk.vtkCommand.ModifiedEvent , self.onEraserClicked)
   def setAndObserveTumorMarkupsNode(self, tumorMarkups_Needle):
     logging.debug("setAndObserveTumorMarkupsNode")
     if tumorMarkups_Needle == self.tumorMarkups_Needle and self.tumorMarkups_NeedleObserver:
@@ -1501,7 +1503,10 @@ class LumpNavGuidelet(Guidelet):
     # Set and observe new parameter node
     self.tumorMarkups_Needle = tumorMarkups_Needle
     if self.tumorMarkups_Needle:
-      self.tumorMarkups_NeedleObserver = self.tumorMarkups_Needle.AddObserver(vtk.vtkCommand.ModifiedEvent , self.onTumorMarkupsNodeModified)
+      if slicer.app.majorVersion*100+slicer.app.minorVersion >= 411:
+        self.tumorMarkups_NeedleObserver = self.tumorMarkups_Needle.AddObserver(slicer.vtkMRMLMarkupsNode.PointModifiedEvent, self.onTumorMarkupsNodeModified)
+      else:
+        self.tumorMarkups_NeedleObserver = self.tumorMarkups_Needle.AddObserver(vtk.vtkCommand.ModifiedEvent , self.onTumorMarkupsNodeModified)
 
   # Called when the user changes the needle length
   def onNeedleLengthModified(self, newLength):
