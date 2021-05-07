@@ -132,26 +132,45 @@ class LumpNav2Widget(ScriptedLoadableModuleWidget, VTKObservationMixin):
     self.addObserver(slicer.mrmlScene, slicer.mrmlScene.StartCloseEvent, self.onSceneStartClose)
     self.addObserver(slicer.mrmlScene, slicer.mrmlScene.EndCloseEvent, self.onSceneEndClose)
 
-    # These connections ensure that whenever user changes some settings on the GUI, that is saved in the MRML scene
-    # (in the selected parameter node).
-    self.ui.inputSelector.connect("currentNodeChanged(vtkMRMLNode*)", self.updateParameterNodeFromGUI)
-    self.ui.outputSelector.connect("currentNodeChanged(vtkMRMLNode*)", self.updateParameterNodeFromGUI)
-    self.ui.imageThresholdSliderWidget.connect("valueChanged(double)", self.updateParameterNodeFromGUI)
-    self.ui.invertOutputCheckBox.connect("toggled(bool)", self.updateParameterNodeFromGUI)
-    self.ui.invertedOutputSelector.connect("currentNodeChanged(vtkMRMLNode*)", self.updateParameterNodeFromGUI)
-
     # Buttons
-    self.ui.applyButton.connect('clicked(bool)', self.onApplyButton)
     self.ui.customUiButton.connect('toggled(bool)', self.onCustomUiClicked)
-    self.ui.startPlusButton.connect('clicked(bool)', self.startPlusClicked)
+    self.ui.startPlusButton.connect('toggled(bool)', self.onStartPlusClicked)
+
+    self.ui.toolsCollapsibleButton.connect('contentsCollapsed(bool)', self.onToolsCollapsed)
+    self.ui.contouringCollapsibleButton.connect('contentsCollapsed(bool)', self.onContouringCollapsed)
+    self.ui.navigationCollapsibleButton.connect('contentsCollapsed(bool)', self.onNavigationCollapsed)
+
+    self.ui.needleVisibilityButton.connect('toggled(bool)', self.onNeedleVisibilityToggled)
 
     # Make sure parameter node is initialized (needed for module reload)
     self.initializeParameterNode()
 
-  def startPlusClicked(self):
+  def onNeedleVisibilityToggled(self, toggled):
+    self.logic.setNeedleVisibility(toggled)
+
+  def onToolsCollapsed(self, collapsed):
+    if collapsed == False:
+      self.ui.contouringCollapsibleButton.collapsed = True
+      self.ui.navigationCollapsibleButton.collapsed = True
+
+  def onContouringCollapsed(self, collapsed):
+    if collapsed == False:
+      self.ui.toolsCollapsibleButton.collapsed = True
+      self.ui.navigationCollapsibleButton.collapsed = True
+
+  def onNavigationCollapsed(self, collapsed):
+    if collapsed == False:
+      self.ui.toolsCollapsibleButton.collapsed = True
+      self.ui.contouringCollapsibleButton.collapsed = True
+
+  def onStartPlusClicked(self, toggled):
     plusServerNode = self._parameterNode.GetNodeReference(self.logic.PLUS_SERVER_NODE)
     if plusServerNode:
-      plusServerNode.StartServer()
+      if toggled == True:
+        plusServerNode.StartServer()
+      else:
+        # self.ui.startPlusButton.text
+        plusServerNode.StopServer()
 
   def onCustomUiClicked(self, checked):
     slicer.util.setToolbarsVisible(not checked)
@@ -161,12 +180,16 @@ class LumpNav2Widget(ScriptedLoadableModuleWidget, VTKObservationMixin):
     slicer.util.setModulePanelTitleVisible(not checked)
     slicer.util.setDataProbeVisible(not checked)
     slicer.util.setStatusBarVisible(not checked)
-    slicer.util.setPythonConsoleVisible(not checked)
 
   def cleanup(self):
     """
     Called when the application closes and the module widget is destroyed.
     """
+
+    plusServerNode = self._parameterNode.GetNodeReference(self.logic.PLUS_SERVER_NODE)
+    if plusServerNode:
+      plusServerNode.StopServer()
+
     self.removeObservers()
 
   def enter(self):
@@ -176,12 +199,22 @@ class LumpNav2Widget(ScriptedLoadableModuleWidget, VTKObservationMixin):
     # Make sure parameter node exists and observed
     self.initializeParameterNode()
 
+    slicer.util.setDataProbeVisible(False)
+    slicer.util.setApplicationLogoVisible(False)
+    slicer.util.setModuleHelpSectionVisible(False)
+    slicer.util.setModulePanelTitleVisible(False)
+
   def exit(self):
     """
     Called each time the user opens a different module.
     """
     # Do not react to parameter node changes (GUI wlil be updated when the user enters into the module)
     self.removeObserver(self._parameterNode, vtk.vtkCommand.ModifiedEvent, self.updateGUIFromParameterNode)
+
+    slicer.util.setDataProbeVisible(True)
+    slicer.util.setApplicationLogoVisible(True)
+    slicer.util.setModuleHelpSectionVisible(True)
+    slicer.util.setModulePanelTitleVisible(True)
 
   def onSceneStartClose(self, caller, event):
     """
@@ -247,20 +280,21 @@ class LumpNav2Widget(ScriptedLoadableModuleWidget, VTKObservationMixin):
     # Make sure GUI changes do not call updateParameterNodeFromGUI (it could cause infinite loop)
     self._updatingGUIFromParameterNode = True
 
-    # Update node selectors and sliders
-    self.ui.inputSelector.setCurrentNode(self._parameterNode.GetNodeReference("InputVolume"))
-    self.ui.outputSelector.setCurrentNode(self._parameterNode.GetNodeReference("OutputVolume"))
-    self.ui.invertedOutputSelector.setCurrentNode(self._parameterNode.GetNodeReference("OutputVolumeInverse"))
-    self.ui.imageThresholdSliderWidget.value = float(self._parameterNode.GetParameter("Threshold"))
-    self.ui.invertOutputCheckBox.checked = (self._parameterNode.GetParameter("Invert") == "true")
+    # Model visibility control
 
-    # Update buttons states and tooltips
-    if self._parameterNode.GetNodeReference("InputVolume") and self._parameterNode.GetNodeReference("OutputVolume"):
-      self.ui.applyButton.toolTip = "Compute output volume"
-      self.ui.applyButton.enabled = True
+    needleModelVisibleStr = self._parameterNode.GetParameter(self.logic.NEEDLE_MODEL_VISIBLE)
+    if needleModelVisibleStr.lower() == 'true':
+      needleModelVisible = True
     else:
-      self.ui.applyButton.toolTip = "Select input and output volume nodes"
-      self.ui.applyButton.enabled = False
+      needleModelVisible = False
+
+    if needleModelVisible:
+      self.ui.needleVisibilityButton.checked = True
+      self.ui.needleVisibilityButton.text = "Hide needle model"
+    else:
+      self.ui.needleVisibilityButton.checked = False
+      self.ui.needleVisibilityButton.text = "Show needle model"
+
 
     customUi = self._parameterNode.GetParameter(self.logic.CUSTOM_UI)
     if customUi == "True":
@@ -283,34 +317,13 @@ class LumpNav2Widget(ScriptedLoadableModuleWidget, VTKObservationMixin):
 
     wasModified = self._parameterNode.StartModify()  # Modify all properties in a single batch
 
-    self._parameterNode.SetNodeReferenceID("InputVolume", self.ui.inputSelector.currentNodeID)
-    self._parameterNode.SetNodeReferenceID("OutputVolume", self.ui.outputSelector.currentNodeID)
-    self._parameterNode.SetParameter("Threshold", str(self.ui.imageThresholdSliderWidget.value))
-    self._parameterNode.SetParameter("Invert", "true" if self.ui.invertOutputCheckBox.checked else "false")
-    self._parameterNode.SetNodeReferenceID("OutputVolumeInverse", self.ui.invertedOutputSelector.currentNodeID)
+    needleVisible = self.ui.needleVisibilityButton.checked
+    if needleVisible:
+      self._parameterNode.SetParameter(self.logic.NEEDLE_MODEL_VISIBLE, "true")
+    else:
+      self._parameterNode.SetParameter(self.logic.NEEDLE_MODEL_VISIBLE, "false")
 
     self._parameterNode.EndModify(wasModified)
-
-  def onApplyButton(self):
-    """
-    Run processing when user clicks "Apply" button.
-    """
-    try:
-
-      # Compute output
-      self.logic.process(self.ui.inputSelector.currentNode(), self.ui.outputSelector.currentNode(),
-        self.ui.imageThresholdSliderWidget.value, self.ui.invertOutputCheckBox.checked)
-
-      # Compute inverted output (if needed)
-      if self.ui.invertedOutputSelector.currentNode():
-        # If additional output volume is selected then result with inverted threshold is written there
-        self.logic.process(self.ui.inputSelector.currentNode(), self.ui.invertedOutputSelector.currentNode(),
-          self.ui.imageThresholdSliderWidget.value, not self.ui.invertOutputCheckBox.checked, showResult=False)
-
-    except Exception as e:
-      slicer.util.errorDisplay("Failed to compute results: "+str(e))
-      import traceback
-      traceback.print_exc()
 
 
 #
@@ -347,6 +360,7 @@ class LumpNav2Logic(ScriptedLoadableModuleLogic):
   # Model names
 
   NEEDLE_MODEL = "NeedleModel"
+  NEEDLE_MODEL_VISIBLE = "NeedleModelVisibile"
   CAUTERY_MODEL = "CauteryModel"
   CAUTERY_MODEL_FILENAME = "CauteryModel.stl"
 
@@ -366,6 +380,20 @@ class LumpNav2Logic(ScriptedLoadableModuleLogic):
       parameterNode.SetParameter("Invert", "false")
     if not parameterNode.GetParameter(self.CUSTOM_UI):
       parameterNode.SetParameter(self.CUSTOM_UI, "False")
+
+    if not parameterNode.GetParameter(self.NEEDLE_MODEL_VISIBLE):
+      parameterNode.SetParameter(self.NEEDLE_MODEL_VISIBLE, "true")
+
+  def setNeedleVisibility(self, visible):
+    parameterNode = self.getParameterNode()
+
+    if visible:
+      parameterNode.SetParameter(self.NEEDLE_MODEL_VISIBLE, "true")
+    else:
+      parameterNode.SetParameter(self.NEEDLE_MODEL_VISIBLE, "false")
+
+    needleModel = parameterNode.GetNodeReference(self.NEEDLE_MODEL)
+    needleModel.SetDisplayVisibility(visible)
 
   def process(self, inputVolume, outputVolume, imageThreshold, invert=False, showResult=True):
     """
