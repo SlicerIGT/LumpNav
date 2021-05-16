@@ -83,6 +83,38 @@ def registerSampleData():
     nodeNames='LumpNav22'
   )
 
+
+# Event filter for LumpNav widget main window
+
+class LumpNavEventFilter(qt.QWidget):
+  """
+  Install this event filter to overwrite default behavior of main window events like closing the window or saving the
+  scene.
+  """
+
+  def __init__(self, moduleWidget):
+    qt.QWidget.__init__(self)
+    self.moduleWidget = moduleWidget
+
+  def eventFilter(self, object, event):
+    if self.moduleWidget.getSlicerInterfaceVisible():
+      return False
+
+    if event.type() == qt.QEvent.Close:
+      if self.moduleWidget.confirmExit():
+        slicer.app.quit()
+        return True
+      else:
+        event.ignore()
+        return True
+
+    # elif (event.type() == qt.QEvent.KeyPress and event.key() == qt.Qt.Key_S and (event.modifiers() & qt.Qt.ControlModifier)):
+    #   print("CTRL + S intercepted")
+    #   return True
+
+    return False
+
+
 #
 # LumpNav2Widget
 #
@@ -126,6 +158,15 @@ class LumpNav2Widget(ScriptedLoadableModuleWidget, VTKObservationMixin):
     self.logic.setup()
     self._updatingGUIFromParameterNode = False
 
+    # Install event filter for main window.
+
+    self.eventFilter = LumpNavEventFilter(self)
+    slicer.util.mainWindow().installEventFilter(self.eventFilter)
+
+    # Set state of custom UI button
+
+    self.setSlicerInterfaceVisible(self.getSlicerInterfaceVisible())
+
     # Connections
 
     # These connections ensure that we update parameter node when scene is closed
@@ -144,6 +185,21 @@ class LumpNav2Widget(ScriptedLoadableModuleWidget, VTKObservationMixin):
 
     # Make sure parameter node is initialized (needed for module reload)
     self.initializeParameterNode()
+
+  def confirmExit(self):
+    msgBox = qt.QMessageBox()
+    msgBox.setStyleSheet(slicer.util.mainWindow().styleSheet)
+    msgBox.setWindowTitle("Confirm exit")
+    msgBox.setText("Some data may not have been saved yet. Do you want to exit and discard the current scene?")
+    discardButton = msgBox.addButton("Exit", qt.QMessageBox.DestructiveRole)
+    cancelButton = msgBox.addButton("Cancel", qt.QMessageBox.RejectRole)
+    msgBox.setModal(True)
+    msgBox.exec()
+
+    if msgBox.clickedButton() == discardButton:
+      return True
+    else:
+      return False
 
   def onNeedleVisibilityToggled(self, toggled):
     self.logic.setNeedleVisibility(toggled)
@@ -173,13 +229,24 @@ class LumpNav2Widget(ScriptedLoadableModuleWidget, VTKObservationMixin):
         plusServerNode.StopServer()
 
   def onCustomUiClicked(self, checked):
-    slicer.util.setToolbarsVisible(not checked)
-    slicer.util.setMenuBarsVisible(not checked)
-    slicer.util.setApplicationLogoVisible(not checked)
-    slicer.util.setModuleHelpSectionVisible(not checked)
-    slicer.util.setModulePanelTitleVisible(not checked)
-    slicer.util.setDataProbeVisible(not checked)
-    slicer.util.setStatusBarVisible(not checked)
+    self.setSlicerInterfaceVisible(not checked)
+
+  def setSlicerInterfaceVisible(self, visible):
+    settings = qt.QSettings()
+    settings.setValue('LumpNav2/SlicerInterfaceVisible', visible)
+
+    slicer.util.setToolbarsVisible(visible)
+    slicer.util.setMenuBarsVisible(visible)
+    slicer.util.setApplicationLogoVisible(visible)
+    slicer.util.setModuleHelpSectionVisible(visible)
+    slicer.util.setModulePanelTitleVisible(visible)
+    slicer.util.setDataProbeVisible(visible)
+    slicer.util.setStatusBarVisible(visible)
+
+    self.ui.customUiButton.checked = not visible
+
+  def getSlicerInterfaceVisible(self):
+    return slicer.util.settingsValue('LumpNav2/SlicerInterfaceVisible', False, converter=slicer.util.toBool)
 
   def cleanup(self):
     """
@@ -189,6 +256,8 @@ class LumpNav2Widget(ScriptedLoadableModuleWidget, VTKObservationMixin):
     plusServerNode = self._parameterNode.GetNodeReference(self.logic.PLUS_SERVER_NODE)
     if plusServerNode:
       plusServerNode.StopServer()
+
+    slicer.util.mainWindow().removeEventFilter(self.eventFilter)
 
     self.removeObservers()
 
@@ -295,14 +364,6 @@ class LumpNav2Widget(ScriptedLoadableModuleWidget, VTKObservationMixin):
       self.ui.needleVisibilityButton.checked = False
       self.ui.needleVisibilityButton.text = "Show needle model"
 
-
-    customUi = self._parameterNode.GetParameter(self.logic.CUSTOM_UI)
-    if customUi == "True":
-      self.ui.customUiButton.checked = True
-      self.onCustomUiClicked(True)
-    else:
-      self.ui.customUiButton.checked = False
-
     # All the GUI updates are done
     self._updatingGUIFromParameterNode = False
 
@@ -340,8 +401,6 @@ class LumpNav2Logic(ScriptedLoadableModuleLogic):
   https://github.com/Slicer/Slicer/blob/master/Base/Python/slicer/ScriptedLoadableModule.py
   """
 
-  CUSTOM_UI = "CustomUi"
-
   # Transform names
 
   REFERENCE_TO_RAS = "ReferenceToRas"
@@ -378,8 +437,6 @@ class LumpNav2Logic(ScriptedLoadableModuleLogic):
       parameterNode.SetParameter("Threshold", "100.0")
     if not parameterNode.GetParameter("Invert"):
       parameterNode.SetParameter("Invert", "false")
-    if not parameterNode.GetParameter(self.CUSTOM_UI):
-      parameterNode.SetParameter(self.CUSTOM_UI, "False")
 
     if not parameterNode.GetParameter(self.NEEDLE_MODEL_VISIBLE):
       parameterNode.SetParameter(self.NEEDLE_MODEL_VISIBLE, "true")
