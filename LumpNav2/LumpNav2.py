@@ -165,7 +165,7 @@ class LumpNav2Widget(ScriptedLoadableModuleWidget, VTKObservationMixin):
 
     # Set state of custom UI button
 
-    self.setSlicerInterfaceVisible(self.getSlicerInterfaceVisible())
+    self.setCustomStyle(not self.getSlicerInterfaceVisible())
 
     # Connections
 
@@ -229,21 +229,36 @@ class LumpNav2Widget(ScriptedLoadableModuleWidget, VTKObservationMixin):
         plusServerNode.StopServer()
 
   def onCustomUiClicked(self, checked):
-    self.setSlicerInterfaceVisible(not checked)
+    self.setCustomStyle(checked)
 
-  def setSlicerInterfaceVisible(self, visible):
+  def setCustomStyle(self, visible):
+    """
+    Applies UI customization. Hide Slicer widgets and apply custom stylesheet.
+    :param visible: True to apply custom style.
+    :returns: None
+    """
     settings = qt.QSettings()
-    settings.setValue('LumpNav2/SlicerInterfaceVisible', visible)
+    settings.setValue('LumpNav2/SlicerInterfaceVisible', not visible)
 
-    slicer.util.setToolbarsVisible(visible)
-    slicer.util.setMenuBarsVisible(visible)
-    slicer.util.setApplicationLogoVisible(visible)
-    slicer.util.setModuleHelpSectionVisible(visible)
-    slicer.util.setModulePanelTitleVisible(visible)
-    slicer.util.setDataProbeVisible(visible)
-    slicer.util.setStatusBarVisible(visible)
+    slicer.util.setToolbarsVisible(not visible)
+    slicer.util.setMenuBarsVisible(not visible)
+    slicer.util.setApplicationLogoVisible(not visible)
+    slicer.util.setModuleHelpSectionVisible(not visible)
+    slicer.util.setModulePanelTitleVisible(not visible)
+    slicer.util.setDataProbeVisible(not visible)
+    slicer.util.setStatusBarVisible(not visible)
 
-    self.ui.customUiButton.checked = not visible
+    if visible:
+      styleFile = self.resourcePath("LumpNav.qss")
+      f = qt.QFile(styleFile)
+      f.open(qt.QFile.ReadOnly | qt.QFile.Text)
+      ts = qt.QTextStream(f)
+      stylesheet = ts.readAll()
+      slicer.util.mainWindow().setStyleSheet(stylesheet)
+    else:
+      slicer.util.mainWindow().setStyleSheet("")
+
+    self.ui.customUiButton.checked = visible
 
   def getSlicerInterfaceVisible(self):
     return slicer.util.settingsValue('LumpNav2/SlicerInterfaceVisible', False, converter=slicer.util.toBool)

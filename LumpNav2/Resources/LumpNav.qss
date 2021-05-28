@@ -1,0 +1,35 @@
+QWidget
+{
+  background-color: #2E4052;
+  color: #FFFFFF;
+  font-size: 15pt;
+}
+
+QWidget:focus {
+  outline: 0px;
+}
+
+QPushButton
+{
+  color: #000000;
+  background-color: #A997DF;
+  border: 1px solid black;
+  border-radius: 5px;
+  padding: 6px;
+}
+
+QPushButton:checked
+{
+  background-color: #636ccf;
+  border: 1px solid yellow;
+}
+
+QPushButton:pressed
+{
+  background-color: #b263cf;
+}
+
+QPushButton:hover
+{
+  border: 1px solid cyan;
+}
