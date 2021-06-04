@@ -182,9 +182,14 @@ class LumpNav2Widget(ScriptedLoadableModuleWidget, VTKObservationMixin):
     self.ui.navigationCollapsibleButton.connect('contentsCollapsed(bool)', self.onNavigationCollapsed)
 
     self.ui.needleVisibilityButton.connect('toggled(bool)', self.onNeedleVisibilityToggled)
+    self.ui.cauteryVisibilityButton.connect('toggled(bool)', self.onCauteryVisibilityToggled)
 
     # Make sure parameter node is initialized (needed for module reload)
     self.initializeParameterNode()
+
+    # Set state of cautery visibility button
+
+    self.setCauteryVisibility(self.getCauteryVisibility())
 
   def confirmExit(self):
     msgBox = qt.QMessageBox()
@@ -203,6 +208,28 @@ class LumpNav2Widget(ScriptedLoadableModuleWidget, VTKObservationMixin):
 
   def onNeedleVisibilityToggled(self, toggled):
     self.logic.setNeedleVisibility(toggled)
+
+  def onCauteryVisibilityToggled(self, toggled):
+    self.setCauteryVisibility(toggled)
+
+  def setCauteryVisibility(self, visible):
+    settings = qt.QSettings()
+    settings.setValue('LumpNav2/CauteryVisibility', visible)
+
+    # self.logic.setCauteryModelVisibility(visible)
+    test = self.logic.CAUTERY_MODEL
+    cauteryModel = self._parameterNode.GetNodeReference(self.logic.CAUTERY_MODEL)
+    cauteryModel.SetDisplayVisibility(visible)
+
+    self.ui.cauteryVisibilityButton.checked = visible
+    if visible:
+      self.ui.cauteryVisibilityButton.text = "Hide cautery model"
+    else:
+      self.ui.cauteryVisibilityButton.text = "Show cautery model"
+
+  def getCauteryVisibility(self):
+    test = slicer.util.settingsValue('LumpNav2/CauteryVisibility', False, converter=slicer.util.toBool)
+    return test
 
   def onToolsCollapsed(self, collapsed):
     if collapsed == False:
@@ -466,6 +493,14 @@ class LumpNav2Logic(ScriptedLoadableModuleLogic):
 
     needleModel = parameterNode.GetNodeReference(self.NEEDLE_MODEL)
     needleModel.SetDisplayVisibility(visible)
+
+  """
+  def setCauteryModelVisibility(self, visible):
+    parameterNode = self.getParameterNode()
+
+    cauteryModel = parameterNode.GetNodeReference(self.CAUTERY_MODEL)
+    cauteryModel.SetDisplayVisibility(visible)
+  """
 
   def process(self, inputVolume, outputVolume, imageThreshold, invert=False, showResult=True):
     """
