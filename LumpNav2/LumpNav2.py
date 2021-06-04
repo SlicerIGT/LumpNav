@@ -216,8 +216,6 @@ class LumpNav2Widget(ScriptedLoadableModuleWidget, VTKObservationMixin):
     settings = qt.QSettings()
     settings.setValue('LumpNav2/CauteryVisibility', visible)
 
-    # self.logic.setCauteryModelVisibility(visible)
-    test = self.logic.CAUTERY_MODEL
     cauteryModel = self._parameterNode.GetNodeReference(self.logic.CAUTERY_MODEL)
     cauteryModel.SetDisplayVisibility(visible)
 
@@ -228,8 +226,7 @@ class LumpNav2Widget(ScriptedLoadableModuleWidget, VTKObservationMixin):
       self.ui.cauteryVisibilityButton.text = "Show cautery model"
 
   def getCauteryVisibility(self):
-    test = slicer.util.settingsValue('LumpNav2/CauteryVisibility', False, converter=slicer.util.toBool)
-    return test
+    return slicer.util.settingsValue('LumpNav2/CauteryVisibility', False, converter=slicer.util.toBool)
 
   def onToolsCollapsed(self, collapsed):
     if collapsed == False:
@@ -493,14 +490,6 @@ class LumpNav2Logic(ScriptedLoadableModuleLogic):
 
     needleModel = parameterNode.GetNodeReference(self.NEEDLE_MODEL)
     needleModel.SetDisplayVisibility(visible)
-
-  """
-  def setCauteryModelVisibility(self, visible):
-    parameterNode = self.getParameterNode()
-
-    cauteryModel = parameterNode.GetNodeReference(self.CAUTERY_MODEL)
-    cauteryModel.SetDisplayVisibility(visible)
-  """
 
   def process(self, inputVolume, outputVolume, imageThreshold, invert=False, showResult=True):
     """
