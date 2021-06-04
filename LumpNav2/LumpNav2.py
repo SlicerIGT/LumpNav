@@ -191,6 +191,10 @@ class LumpNav2Widget(ScriptedLoadableModuleWidget, VTKObservationMixin):
 
     self.setCauteryVisibility(self.getCauteryVisibility())
 
+    # Add custom layouts
+
+    self.logic.addCustomLayouts()
+
   def confirmExit(self):
     msgBox = qt.QMessageBox()
     msgBox.setStyleSheet(slicer.util.mainWindow().styleSheet)
@@ -311,6 +315,9 @@ class LumpNav2Widget(ScriptedLoadableModuleWidget, VTKObservationMixin):
     slicer.util.setApplicationLogoVisible(False)
     slicer.util.setModuleHelpSectionVisible(False)
     slicer.util.setModulePanelTitleVisible(False)
+
+    layoutManager = slicer.app.layoutManager()
+    layoutManager.setLayout(self.logic.LAYOUT_2D3D)
 
   def exit(self):
     """
@@ -462,6 +469,11 @@ class LumpNav2Logic(ScriptedLoadableModuleLogic):
   CAUTERY_MODEL = "CauteryModel"
   CAUTERY_MODEL_FILENAME = "CauteryModel.stl"
 
+  # Layout codes
+
+  LAYOUT_2D3D = 501
+
+
   def __init__(self):
     """
     Called when the logic class is instantiated. Can be used for initializing member variables.
@@ -479,6 +491,29 @@ class LumpNav2Logic(ScriptedLoadableModuleLogic):
 
     if not parameterNode.GetParameter(self.NEEDLE_MODEL_VISIBLE):
       parameterNode.SetParameter(self.NEEDLE_MODEL_VISIBLE, "true")
+
+  def addCustomLayouts(self):
+    layout2D3D =\
+    """
+    <layout type="horizontal" split="true">
+      <item>
+        <view class="vtkMRMLViewNode" singletontag="1">
+          <property name="viewlabel" action="default">1</property>
+        </view>
+      </item>
+      <item>
+        <view class="vtkMRMLSliceNode" singletontag="Red">
+          <property name="orientation" action="default">Axial</property>
+          <property name="viewlabel" action="default">R</property>
+          <property name="viewcolor" action="default">#F34A33</property>
+        </view>
+      </item>
+    </layout>
+    """
+
+    layoutManager = slicer.app.layoutManager()
+    if not layoutManager.layoutLogic().GetLayoutNode().SetLayoutDescription(self.LAYOUT_2D3D, layout2D3D):
+      layoutManager.layoutLogic().GetLayoutNode().AddLayoutDescription(self.LAYOUT_2D3D, layout2D3D)
 
   def setNeedleVisibility(self, visible):
     parameterNode = self.getParameterNode()
