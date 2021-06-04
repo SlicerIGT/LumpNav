@@ -41,8 +41,3 @@ ctkCollapsibleButton
    border-radius: 8px;
    padding: 8px;
 }
-
-ctkCollapsibleButton:hover
-{
-   border: 2px solid white;
-}
