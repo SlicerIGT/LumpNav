@@ -2,7 +2,7 @@ QWidget
 {
   background-color: #2E4052;
   color: #FFFFFF;
-  font-size: 15pt;
+  font-size: 16pt;
 }
 
 QWidget:focus {
@@ -12,24 +12,37 @@ QWidget:focus {
 QPushButton
 {
   color: #000000;
-  background-color: #A997DF;
-  border: 1px solid black;
-  border-radius: 5px;
-  padding: 6px;
+  background-color: #BDD9BF;
+  border: 2px solid black;
+  border-radius: 8px;
+  padding: 8px;
 }
 
 QPushButton:checked
 {
-  background-color: #917ad6;
-  border: 1px solid yellow;
+  border: 2px solid #FFC857;
+  background-color: #7cb380;
 }
 
 QPushButton:pressed
 {
-  background-color: #8167d0;
+  background-color: #557A69;
 }
 
 QPushButton:hover
 {
-  border: 1px solid cyan;
+  border: 2px solid cyan;
+}
+
+ctkCollapsibleButton
+{
+   background-color: #0b1014;
+   border: 2px solid #2E4052;
+   border-radius: 8px;
+   padding: 8px;
+}
+
+ctkCollapsibleButton:hover
+{
+   border: 2px solid white;
 }
