@@ -184,6 +184,8 @@ class LumpNav2Widget(ScriptedLoadableModuleWidget, VTKObservationMixin):
     self.ui.needleVisibilityButton.connect('toggled(bool)', self.onNeedleVisibilityToggled)
     self.ui.cauteryVisibilityButton.connect('toggled(bool)', self.onCauteryVisibilityToggled)
 
+    self.ui.threeDViewButton.connect('toggled(bool)', self.on3DViewsToggled)
+
     # Make sure parameter node is initialized (needed for module reload)
     self.initializeParameterNode()
 
@@ -236,16 +238,28 @@ class LumpNav2Widget(ScriptedLoadableModuleWidget, VTKObservationMixin):
     if collapsed == False:
       self.ui.contouringCollapsibleButton.collapsed = True
       self.ui.navigationCollapsibleButton.collapsed = True
+      slicer.app.layoutManager().setLayout(self.logic.LAYOUT_2D3D)
 
   def onContouringCollapsed(self, collapsed):
     if collapsed == False:
       self.ui.toolsCollapsibleButton.collapsed = True
       self.ui.navigationCollapsibleButton.collapsed = True
+      slicer.app.layoutManager().setLayout(6)
 
   def onNavigationCollapsed(self, collapsed):
     if collapsed == False:
       self.ui.toolsCollapsibleButton.collapsed = True
       self.ui.contouringCollapsibleButton.collapsed = True
+      self.on3DViewsToggled(False)
+
+  def on3DViewsToggled(self, toggled):
+    self.ui.threeDViewButton.checked = toggled
+    if toggled:
+      self.ui.threeDViewButton.text = "Triple 3D View"
+      slicer.app.layoutManager().setLayout(self.logic.LAYOUT_DUAL3D)
+    else:
+      self.ui.threeDViewButton.text = "Dual 3D View"
+      slicer.app.layoutManager().setLayout(self.logic.LAYOUT_TRIPLE3D)
 
   def onStartPlusClicked(self, toggled):
     plusServerNode = self._parameterNode.GetNodeReference(self.logic.PLUS_SERVER_NODE)
@@ -472,7 +486,8 @@ class LumpNav2Logic(ScriptedLoadableModuleLogic):
   # Layout codes
 
   LAYOUT_2D3D = 501
-
+  LAYOUT_TRIPLE3D = 502
+  LAYOUT_DUAL3D = 503
 
   def __init__(self):
     """
@@ -496,12 +511,12 @@ class LumpNav2Logic(ScriptedLoadableModuleLogic):
     layout2D3D =\
     """
     <layout type="horizontal" split="true">
-      <item>
+      <item splitSize="500">
         <view class="vtkMRMLViewNode" singletontag="1">
           <property name="viewlabel" action="default">1</property>
         </view>
       </item>
-      <item>
+      <item splitSize="500">
         <view class="vtkMRMLSliceNode" singletontag="Red">
           <property name="orientation" action="default">Axial</property>
           <property name="viewlabel" action="default">R</property>
@@ -514,6 +529,55 @@ class LumpNav2Logic(ScriptedLoadableModuleLogic):
     layoutManager = slicer.app.layoutManager()
     if not layoutManager.layoutLogic().GetLayoutNode().SetLayoutDescription(self.LAYOUT_2D3D, layout2D3D):
       layoutManager.layoutLogic().GetLayoutNode().AddLayoutDescription(self.LAYOUT_2D3D, layout2D3D)
+
+    layoutTriple3D =\
+    """
+    <layout type="vertical" split="true">
+      <item splitSize="500">
+        <layout type="horizontal">
+          <item splitSize="500">
+            <view class="vtkMRMLViewNode" singletontag="1">
+              <property name="viewLabel" action="default">1</property>
+            </view>
+          </item>
+          <item splitSize="500">
+            <view class="vtkMRMLViewNode" singletontag="2" type="secondary">
+              <property name="viewLabel" action="default">2</property>
+            </view>
+          </item>
+        </layout>  
+      </item>
+      <item splitSize="500">
+        <view class="vtkMRMLViewNode" singletontag="3" type="tertiary">
+          <property name="viewLabel" action="default">3</property>
+        </view>
+      </item>
+    </layout>
+    """
+
+    layoutManager = slicer.app.layoutManager()
+    if not layoutManager.layoutLogic().GetLayoutNode().SetLayoutDescription(self.LAYOUT_TRIPLE3D, layoutTriple3D):
+      layoutManager.layoutLogic().GetLayoutNode().AddLayoutDescription(self.LAYOUT_TRIPLE3D, layoutTriple3D)
+
+    layoutDual3D = \
+      """
+      <layout type="horizontal" split="true">
+        <item splitSize="500">
+          <view class="vtkMRMLViewNode" singletontag="1">
+            <property name="viewLabel" action="default">1</property>
+          </view>
+        </item>
+        <item splitSize="500">
+          <view class="vtkMRMLViewNode" singletontag="2" type="secondary">
+            <property name="viewLabel" action="default">2</property>
+          </view>
+        </item>
+      </layout>
+      """
+
+    layoutManager = slicer.app.layoutManager()
+    if not layoutManager.layoutLogic().GetLayoutNode().SetLayoutDescription(self.LAYOUT_DUAL3D, layoutDual3D):
+      layoutManager.layoutLogic().GetLayoutNode().AddLayoutDescription(self.LAYOUT_DUAL3D, layoutDual3D)
 
   def setNeedleVisibility(self, visible):
     parameterNode = self.getParameterNode()

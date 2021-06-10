@@ -123,6 +123,16 @@
         </item>
        </layout>
       </item>
+      <item>
+       <widget class="QPushButton" name="threeDViewButton">
+        <property name="text">
+         <string>3D Views</string>
+        </property>
+        <property name="checkable">
+         <bool>true</bool>
+        </property>
+       </widget>
+      </item>
      </layout>
     </widget>
    </item>
@@ -132,10 +142,10 @@
       <string>Advanced</string>
      </property>
      <property name="checked">
-      <bool>true</bool>
+      <bool>false</bool>
      </property>
      <property name="collapsed">
-      <bool>false</bool>
+      <bool>true</bool>
      </property>
      <layout class="QVBoxLayout" name="verticalLayout_5">
       <item>
