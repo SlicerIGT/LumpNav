@@ -133,6 +133,9 @@ class LumpNav2Widget(ScriptedLoadableModuleWidget, VTKObservationMixin):
     self.logic = None
     self._parameterNode = None
     self._updatingGUIFromParameterNode = False
+    self._updatingGUIFromMRML = False
+    self.observedNeedleModel = None
+    self.observedCauteryModel = None
 
   def setup(self):
     """
@@ -170,10 +173,12 @@ class LumpNav2Widget(ScriptedLoadableModuleWidget, VTKObservationMixin):
     # Connections
 
     # These connections ensure that we update parameter node when scene is closed
+
     self.addObserver(slicer.mrmlScene, slicer.mrmlScene.StartCloseEvent, self.onSceneStartClose)
     self.addObserver(slicer.mrmlScene, slicer.mrmlScene.EndCloseEvent, self.onSceneEndClose)
 
     # Buttons
+
     self.ui.customUiButton.connect('toggled(bool)', self.onCustomUiClicked)
     self.ui.startPlusButton.connect('toggled(bool)', self.onStartPlusClicked)
 
@@ -181,7 +186,11 @@ class LumpNav2Widget(ScriptedLoadableModuleWidget, VTKObservationMixin):
     self.ui.contouringCollapsibleButton.connect('contentsCollapsed(bool)', self.onContouringCollapsed)
     self.ui.navigationCollapsibleButton.connect('contentsCollapsed(bool)', self.onNavigationCollapsed)
 
+    needleVisibilitySetting = slicer.util.settingsValue(self.logic.NEEDLE_VISIBILITY_SETTING, True, converter=slicer.util.toBool)
+    self.ui.needleVisibilityButton.checked = needleVisibilitySetting
     self.ui.needleVisibilityButton.connect('toggled(bool)', self.onNeedleVisibilityToggled)
+    cauteryVisible = slicer.util.settingsValue(self.logic.CAUTERY_VISIBILITY_SETTING, True, converter=slicer.util.toBool)
+    self.ui.cauteryVisibilityButton.checked = cauteryVisible
     self.ui.cauteryVisibilityButton.connect('toggled(bool)', self.onCauteryVisibilityToggled)
 
     self.ui.threeDViewButton.connect('toggled(bool)', self.on3DViewsToggled)
@@ -333,12 +342,21 @@ class LumpNav2Widget(ScriptedLoadableModuleWidget, VTKObservationMixin):
     layoutManager = slicer.app.layoutManager()
     layoutManager.setLayout(self.logic.LAYOUT_2D3D)
 
+    self.updateGUIFromParameterNode()
+    self.updateGUIFromMRML()
+
   def exit(self):
     """
     Called each time the user opens a different module.
     """
     # Do not react to parameter node changes (GUI wlil be updated when the user enters into the module)
     self.removeObserver(self._parameterNode, vtk.vtkCommand.ModifiedEvent, self.updateGUIFromParameterNode)
+
+    self.removeObserver(self.observedCauteryModel, slicer.vtkMRMLDisplayableNode.DisplayModifiedEvent, self.updateGUIFromMRML)
+    self.observedCauteryModel = None
+
+    self.removeObserver(self.observedNeedleModel, slicer.vtkMRMLDisplayableNode.DisplayModifiedEvent, self.updateGUIFromMRML)
+    self.observedNeedleModel = None
 
     slicer.util.setDataProbeVisible(True)
     slicer.util.setApplicationLogoVisible(True)
@@ -356,6 +374,8 @@ class LumpNav2Widget(ScriptedLoadableModuleWidget, VTKObservationMixin):
     """
     Called just after the scene is closed.
     """
+    print("onSceneEndClose") #todo delete
+
     # If this module is shown while the scene is closed then recreate a new parameter node immediately
     if self.parent.isEntered:
       self.initializeParameterNode()
@@ -409,23 +429,56 @@ class LumpNav2Widget(ScriptedLoadableModuleWidget, VTKObservationMixin):
     # Make sure GUI changes do not call updateParameterNodeFromGUI (it could cause infinite loop)
     self._updatingGUIFromParameterNode = True
 
-    # Model visibility control
+    # Read parameter nodes and update GUI accordingly
+    # ...
 
-    needleModelVisibleStr = self._parameterNode.GetParameter(self.logic.NEEDLE_MODEL_VISIBLE)
-    if needleModelVisibleStr.lower() == 'true':
-      needleModelVisible = True
-    else:
-      needleModelVisible = False
+    # If new MRML nodes are referenced, update observers
 
-    if needleModelVisible:
+    currentNeedleModel = self._parameterNode.GetNodeReference(self.logic.NEEDLE_MODEL)
+    if currentNeedleModel != self.observedNeedleModel:
+      self.removeObserver(self.observedNeedleModel, slicer.vtkMRMLDisplayableNode.DisplayModifiedEvent, self.updateGUIFromMRML)
+      self.observedNeedleModel = currentNeedleModel
+      if self.observedNeedleModel:
+        self.addObserver(self.observedNeedleModel, slicer.vtkMRMLDisplayableNode.DisplayModifiedEvent, self.updateGUIFromMRML)
+    
+    currentCauteryModel = self._parameterNode.GetNodeReference(self.logic.CAUTERY_MODEL)
+    if currentCauteryModel != self.observedCauteryModel:
+      self.removeObserver(self.observedCauteryModel, slicer.vtkMRMLDisplayableNode.DisplayModifiedEvent, self.updateGUIFromMRML)
+      self.observedCauteryModel = currentCauteryModel
+      if self.observedCauteryModel:
+        self.addObserver(self.observedCauteryModel, slicer.vtkMRMLDisplayableNode.DisplayModifiedEvent, self.updateGUIFromMRML)
+
+    # All the GUI updates are done
+
+    self._updatingGUIFromParameterNode = False
+
+
+  def updateGUIFromMRML(self, caller=None, event=None):
+    """
+    Updates the GUI from MRML nodes in the scene (except parameter node).
+    """
+    if self._updatingGUIFromMRML:
+      return
+
+    self._updatingGUIFromMRML = True
+
+    needleModel = self._parameterNode.GetNodeReference(self.logic.NEEDLE_MODEL)
+    if needleModel.GetDisplayVisibility():
       self.ui.needleVisibilityButton.checked = True
       self.ui.needleVisibilityButton.text = "Hide needle model"
     else:
       self.ui.needleVisibilityButton.checked = False
       self.ui.needleVisibilityButton.text = "Show needle model"
 
-    # All the GUI updates are done
-    self._updatingGUIFromParameterNode = False
+    cauteryModel = self._parameterNode.GetNodeReference(self.logic.CAUTERY_MODEL)
+    if cauteryModel.GetDisplayVisibility():
+      self.ui.cauteryVisibilityButton.checked = True
+      self.ui.cauteryVisibilityButton.text = "Hide cautery model"
+    else:
+      self.ui.cauteryVisibilityButton.checked = False
+      self.ui.cauteryVisibilityButton.text = "Show needle model"
+
+    self._updatingGUIFromMRML = False
 
   def updateParameterNodeFromGUI(self, caller=None, event=None):
     """
@@ -451,7 +504,7 @@ class LumpNav2Widget(ScriptedLoadableModuleWidget, VTKObservationMixin):
 # LumpNav2Logic
 #
 
-class LumpNav2Logic(ScriptedLoadableModuleLogic):
+class LumpNav2Logic(ScriptedLoadableModuleLogic, VTKObservationMixin):
   """This class should implement all the actual
   computation done by your module.  The interface
   should be such that other python code can import
@@ -476,11 +529,12 @@ class LumpNav2Logic(ScriptedLoadableModuleLogic):
   PLUS_SERVER_NODE = "PlusServer"
   PLUS_SERVER_LAUNCHER_NODE = "PlusServerLauncher"
 
-  # Model names
+  # Model names and settings
 
   NEEDLE_MODEL = "NeedleModel"
-  NEEDLE_MODEL_VISIBLE = "NeedleModelVisibile"
+  NEEDLE_VISIBILITY_SETTING = "LumpNav2/NeedleVisible"
   CAUTERY_MODEL = "CauteryModel"
+  CAUTERY_VISIBILITY_SETTING = "LumpNav2/CauteryVisible"
   CAUTERY_MODEL_FILENAME = "CauteryModel.stl"
 
   # Layout codes
@@ -494,6 +548,7 @@ class LumpNav2Logic(ScriptedLoadableModuleLogic):
     Called when the logic class is instantiated. Can be used for initializing member variables.
     """
     ScriptedLoadableModuleLogic.__init__(self)
+    VTKObservationMixin.__init__(self)
 
   def setDefaultParameters(self, parameterNode):
     """
@@ -503,9 +558,6 @@ class LumpNav2Logic(ScriptedLoadableModuleLogic):
       parameterNode.SetParameter("Threshold", "100.0")
     if not parameterNode.GetParameter("Invert"):
       parameterNode.SetParameter("Invert", "false")
-
-    if not parameterNode.GetParameter(self.NEEDLE_MODEL_VISIBLE):
-      parameterNode.SetParameter(self.NEEDLE_MODEL_VISIBLE, "true")
 
   def addCustomLayouts(self):
     layout2D3D =\
@@ -580,15 +632,30 @@ class LumpNav2Logic(ScriptedLoadableModuleLogic):
       layoutManager.layoutLogic().GetLayoutNode().AddLayoutDescription(self.LAYOUT_DUAL3D, layoutDual3D)
 
   def setNeedleVisibility(self, visible):
+    """
+    Changes the visibility of the needle model, and saves it as a setting
+    :param bool visible: True to show model
+    :returns: None
+    """
     parameterNode = self.getParameterNode()
-
-    if visible:
-      parameterNode.SetParameter(self.NEEDLE_MODEL_VISIBLE, "true")
-    else:
-      parameterNode.SetParameter(self.NEEDLE_MODEL_VISIBLE, "false")
-
     needleModel = parameterNode.GetNodeReference(self.NEEDLE_MODEL)
-    needleModel.SetDisplayVisibility(visible)
+    if needleModel is not None:
+      needleModel.SetDisplayVisibility(visible)
+      settings = qt.QSettings()
+      settings.setValue(self.NEEDLE_VISIBILITY_SETTING, "True" if visible else "False")
+
+  def setCauteryVisibilty(self, visible):
+    """
+    Changes the visibility of the cautery model, and saves it as a setting
+    :param bool visible: True to show model
+    :returns: None
+    """
+    parameterNode = self.getParameterNode()
+    cauteryModel = parameterNode.GetNodeReference(self.CAUTERY_MODEL)
+    if cauteryModel is not None:
+      cauteryModel.SetDisplayVisibility(visible)
+      settings = qt.QSettings()
+      settings.setValue(self.CAUTERY_VISIBILITY_SETTING, "True" if visible else "False")
 
   def process(self, inputVolume, outputVolume, imageThreshold, invert=False, showResult=True):
     """
@@ -634,6 +701,8 @@ class LumpNav2Logic(ScriptedLoadableModuleLogic):
 
     createModelsLogic = slicer.modules.createmodels.logic()
 
+    # Needle model
+
     needleModel = parameterNode.GetNodeReference(self.NEEDLE_MODEL)
     if needleModel is None:
       needleModel = createModelsLogic.CreateNeedle(60.0, 1.0, 2.0, 0)
@@ -642,8 +711,13 @@ class LumpNav2Logic(ScriptedLoadableModuleLogic):
       needleModel.GetDisplayNode().SliceIntersectionVisibilityOn()
       parameterNode.SetNodeReferenceID(self.NEEDLE_MODEL, needleModel.GetID())
 
+    needleVisible = slicer.util.settingsValue(self.NEEDLE_VISIBILITY_SETTING, True, converter=slicer.util.toBool)
+    needleModel.SetDisplayVisibility(needleVisible)
+
     needleTipToNeedle = parameterNode.GetNodeReference(self.NEEDLETIP_TO_NEEDLE)
     needleModel.SetAndObserveTransformNodeID(needleTipToNeedle.GetID())
+
+    # Cautery model
 
     moduleDir = os.path.dirname(slicer.modules.lumpnav2.path)
     cauteryModelFullpath = os.path.join(moduleDir, "Resources", self.CAUTERY_MODEL_FILENAME)
@@ -654,9 +728,12 @@ class LumpNav2Logic(ScriptedLoadableModuleLogic):
       cauteryModel.GetDisplayNode().SetColor(1.0, 1.0, 0.0)
       cauteryModel.SetName(self.CAUTERY_MODEL)
       parameterNode.SetNodeReferenceID(self.CAUTERY_MODEL, cauteryModel.GetID())
-    
+
     cauteryTipToCautery = parameterNode.GetNodeReference(self.CAUTERYTIP_TO_CAUTERY)
     cauteryModel.SetAndObserveTransformNodeID(cauteryTipToCautery.GetID())
+
+    cauteryVisible = slicer.util.settingsValue(self.CAUTERY_VISIBILITY_SETTING, True, converter=slicer.util.toBool)
+    cauteryModel.SetDisplayVisibility(cauteryVisible)
 
     self.setupPlusServer()
 
