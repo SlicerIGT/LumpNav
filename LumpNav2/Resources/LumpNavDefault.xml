@@ -5,20 +5,22 @@
       Id="TrackerDevice"
       Type="OptiTrack"
       ToolReferenceFrame="Tracker"
-      ProjectFile="Childrens_2020.ttp"
+      ProjectFile="e:\LumpNav\LumpNav2\Resources\LumpNavDefault.ttp"
       AttachToRunningMotive="FALSE"
 	    AcquisitionRate="50"
       MotiveDataDescriptionsUpdateTimeSec="1.0">
       <DataSources>
-        <DataSource Type="Tool" Id="Stylus" />
+        <DataSource Type="Tool" Id="Needle" />
         <DataSource Type="Tool" Id="Probe" />
 		    <DataSource Type="Tool" Id="Reference" />
+        <DataSource Type="Tool" Id="Cautery" />
       </DataSources>
       <OutputChannels>
         <OutputChannel Id="TrackerStream">
-          <DataSource Type="Tool" Id="Stylus" />
+          <DataSource Type="Tool" Id="Needle" />
           <DataSource Type="Tool" Id="Probe" />
 		      <DataSource Type="Tool" Id="Reference" />
+          <DataSource Type="Tool" Id="Cautery" />
         </OutputChannel>
       </OutputChannels>
     </Device>
@@ -60,43 +62,24 @@
   </DataCollection>
   
   <CoordinateDefinitions>
-  <Transform From="Image" To="Probe"
-      Matrix="
-0.192094 0.0166529 -0.00607693 -21.4378 
--0.00632452 0.00260241 -0.192789 -59.4777 
--0.0165605 0.192173 0.00313736 98.3391 
-0 0 0 1
-" />
-
-<!--
-0.192094 0.0166529 -0.00607693 -21.4378 
--0.00632452 0.00260241 -0.192789 -59.4777 
--0.0165605 0.192173 0.00313736 98.3391 
-0 0 0 1 
-
-Old:
--0.18979    0.0144609  -0.00271881  75.0676 
--0.00268632 0.000529805 0.19034    -61.5944 
-0.0144669   0.189809   -0.000324151 91.2345 
-0 0 0 1 
--->
-
-  <Transform
-            From="Image"
-            To="TransdPixel"
-            Matrix="
-                1 0 0 -256
-                0 1 0 0
-                0 0 1 0
-                0 0 0 1" />
-    <Transform
-            From="TransdPixel"
-            To="Transd"
-            Matrix="
-                0.19027 0 0 0
-                0 0.19027 0 0
-                0 0 0.19027 0
-                0 0 0 1" />
+  <!-- The next three transforms define probe calibration at a certain depth.
+       Updates for all other depths will be computed in Slicer by updating ImageToTransd. -->
+  <Transform From="Image" To="Probe" Matrix="
+    0.192094    0.0166529  -0.00607693 -21.4378 
+    -0.00632452 0.00260241 -0.192789   -59.4777 
+    -0.0165605  0.192173    0.00313736  98.3391 
+    0 0 0 1
+    " />
+  <Transform From="Image" To="TransdPixel" Matrix="
+    1 0 0 -256
+    0 1 0 0
+    0 0 1 0
+    0 0 0 1" />
+  <Transform From="TransdPixel" To="Transd" Matrix="
+    0.19027  0 0 0
+    0 0.19027  0 0
+    0 0 0.19027  0
+    0 0 0        1" />
   </CoordinateDefinitions>
 
   <PlusOpenIGTLinkServer
@@ -111,13 +94,19 @@ Old:
         <Message Type="TRANSFORM" />
       </MessageTypes>
       <TransformNames>
+        <!-- The following transforms are to check if these markers are visible to the camera -->
         <Transform Name="ProbeToTracker" />
         <Transform Name="ReferenceToTracker" />
+        <Transform Name="NeedleToTracker" />
         <Transform Name="TransdToReference" />
-        <Transform Name="StylusToProbe" />
-		    <Transform Name="StylusToReference" />
-		    <Transform Name="ImageToReference" />
+        
+        <Transform Name="NeedleToProbe" />    <!-- For Image to Probe calibration with needle as stylus -->
+        <Transform Name="CauteryToNeedle" />  <!-- For cautery calibration in sterile field -->
+        
+		    <Transform Name="NeedleToReference" />
+		    <Transform Name="ImageToReference" /> <!-- Only for debugging! -->
         <Transform Name="ProbeToReference" />
+        <Transform Name="CauteryToReference" />
       </TransformNames>
       <ImageNames>
         <Image Name="Image" EmbeddedTransformToFrame="Image" />

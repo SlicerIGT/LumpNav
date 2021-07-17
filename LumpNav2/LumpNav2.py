@@ -1,7 +1,9 @@
 import os
-import unittest
-import logging
+import time
+
 import vtk, qt, ctk, slicer
+
+import logging
 from slicer.ScriptedLoadableModule import *
 from slicer.util import VTKObservationMixin
 
@@ -124,6 +126,16 @@ class LumpNav2Widget(ScriptedLoadableModuleWidget, VTKObservationMixin):
   https://github.com/Slicer/Slicer/blob/master/Base/Python/slicer/ScriptedLoadableModule.py
   """
 
+  # Variables to store widget state
+
+  PIVOT_CALIBRATION = 0
+  SPIN_CALIBRATION = 1
+  PIVOT_CALIBRATION_TIME_SEC = 5.0
+  CAUTERY_CALIBRATION_THRESHOLD_SETTING = "LumpNav2/CauteryCalibrationTresholdMm"
+  CAUTERY_CALIBRATION_THRESHOLD_DEFAULT = 1.0
+  NEEDLE_CALIBRATION_THRESHOLD_SETTING = "LumpNav2/NeedleCalibrationTresholdMm"
+  NEEDLE_CALIBRATION_THRESHOLD_DEFAULT = 1.0
+
   def __init__(self, parent=None):
     """
     Called when the user opens the module the first time and the widget is initialized.
@@ -136,6 +148,16 @@ class LumpNav2Widget(ScriptedLoadableModuleWidget, VTKObservationMixin):
     self._updatingGUIFromMRML = False
     self.observedNeedleModel = None
     self.observedCauteryModel = None
+
+    # Timer for pivot calibration controls
+
+    self.pivotCalibrationLogic = slicer.modules.pivotcalibration.logic()
+    self.pivotCalibrationStopTime = 0
+    self.pivotSamplingTimer = qt.QTimer()
+    self.pivotSamplingTimer.setInterval(500)
+    self.pivotSamplingTimer.setSingleShot(True)
+    self.pivotCalibrationMode = self.PIVOT_CALIBRATION  # Default value, but it is always set when starting pivot calibration
+    self.pivotCalibrationResultNode = None
 
   def setup(self):
     """
@@ -166,6 +188,20 @@ class LumpNav2Widget(ScriptedLoadableModuleWidget, VTKObservationMixin):
     self.eventFilter = LumpNavEventFilter(self)
     slicer.util.mainWindow().installEventFilter(self.eventFilter)
 
+    # Check settings and set default values if settings not found
+
+    cauteryCalibrationThresholdMm = slicer.util.settingsValue(self.CAUTERY_CALIBRATION_THRESHOLD_SETTING, "")
+    if cauteryCalibrationThresholdMm == "":
+      settings = qt.QSettings()
+      settings.setValue(self.CAUTERY_CALIBRATION_THRESHOLD_SETTING, str(self.CAUTERY_CALIBRATION_THRESHOLD_DEFAULT))
+
+    needleCalibrationThresholdMm = slicer.util.settingsValue(self.NEEDLE_CALIBRATION_THRESHOLD_SETTING, "")
+    if needleCalibrationThresholdMm == "":
+      settings = qt.QSettings()
+      settings.setValue(self.NEEDLE_CALIBRATION_THRESHOLD_SETTING, str(self.NEEDLE_CALIBRATION_THRESHOLD_DEFAULT))
+
+    self.logic.setCauteryVisibilty(True)  # Begin with visible cautery, regardless of saved user settings
+
     # Set state of custom UI button
 
     self.setCustomStyle(not self.getSlicerInterfaceVisible())
@@ -177,7 +213,7 @@ class LumpNav2Widget(ScriptedLoadableModuleWidget, VTKObservationMixin):
     self.addObserver(slicer.mrmlScene, slicer.mrmlScene.StartCloseEvent, self.onSceneStartClose)
     self.addObserver(slicer.mrmlScene, slicer.mrmlScene.EndCloseEvent, self.onSceneEndClose)
 
-    # Buttons
+    # QT connections
 
     self.ui.customUiButton.connect('toggled(bool)', self.onCustomUiClicked)
     self.ui.startPlusButton.connect('toggled(bool)', self.onStartPlusClicked)
@@ -186,25 +222,91 @@ class LumpNav2Widget(ScriptedLoadableModuleWidget, VTKObservationMixin):
     self.ui.contouringCollapsibleButton.connect('contentsCollapsed(bool)', self.onContouringCollapsed)
     self.ui.navigationCollapsibleButton.connect('contentsCollapsed(bool)', self.onNavigationCollapsed)
 
+    self.ui.cauteryCalibrationButton.connect('clicked()', self.onCauteryCalibrationButton)
+
     needleVisibilitySetting = slicer.util.settingsValue(self.logic.NEEDLE_VISIBILITY_SETTING, True, converter=slicer.util.toBool)
     self.ui.needleVisibilityButton.checked = needleVisibilitySetting
     self.ui.needleVisibilityButton.connect('toggled(bool)', self.onNeedleVisibilityToggled)
+
     cauteryVisible = slicer.util.settingsValue(self.logic.CAUTERY_VISIBILITY_SETTING, True, converter=slicer.util.toBool)
     self.ui.cauteryVisibilityButton.checked = cauteryVisible
     self.ui.cauteryVisibilityButton.connect('toggled(bool)', self.onCauteryVisibilityToggled)
 
     self.ui.threeDViewButton.connect('toggled(bool)', self.on3DViewsToggled)
 
-    # Make sure parameter node is initialized (needed for module reload)
-    self.initializeParameterNode()
+    self.pivotSamplingTimer.connect('timeout()', self.onPivotSamplingTimeout)
 
-    # Set state of cautery visibility button
-
-    self.setCauteryVisibility(self.getCauteryVisibility())
+    self.initializeParameterNode() # Make sure parameter node is initialized (needed for module reload)
 
     # Add custom layouts
 
     self.logic.addCustomLayouts()
+
+  def onCauteryCalibrationButton(self):
+    logging.info('onCauteryCalibrationButton')
+    cauteryToNeedle = self._parameterNode.GetNodeReference(self.logic.CAUTERY_TO_NEEDLE)
+    cauteryTipToCautery = self._parameterNode.GetNodeReference(self.logic.CAUTERYTIP_TO_CAUTERY)
+    self.startPivotCalibration(cauteryToNeedle, cauteryTipToCautery)
+
+  def startPivotCalibration(self, toolToReferenceTransformNode, toolTipToToolTransformNode):
+    self.pivotCalibrationMode = self.PIVOT_CALIBRATION
+    self.ui.cauteryCalibrationButton.setEnabled(False)
+    self.pivotCalibrationResultNode =  toolTipToToolTransformNode
+    self.pivotCalibrationLogic.SetAndObserveTransformNode( toolToReferenceTransformNode );
+    self.pivotCalibrationStopTime=time.time() + self.PIVOT_CALIBRATION_TIME_SEC
+    self.pivotCalibrationLogic.SetRecordingState(True)
+    self.onPivotSamplingTimeout()
+
+  def onPivotSamplingTimeout(self):
+    remainingTime = self.pivotCalibrationStopTime - time.time()
+    self.ui.cauteryCalibrationLabel.setText("Calibrating for {0:.0f} more seconds".format(remainingTime))
+    if time.time() < self.pivotCalibrationStopTime:
+      self.pivotSamplingTimer.start()  # continue
+    else:
+      self.onStopPivotCalibration()  # calibration completed
+
+  def onStopPivotCalibration(self):
+    self.pivotCalibrationLogic.SetRecordingState(False)
+    self.ui.cauteryCalibrationButton.setEnabled(True)
+
+    if self.pivotCalibrationMode == self.PIVOT_CALIBRATION:
+      calibrationSuccess = self.pivotCalibrationLogic.ComputePivotCalibration()
+    else:
+      calibrationSuccess = self.pivotCalibrationLogic.ComputeSpinCalibration()
+
+    #todo: check if this is cautery or needle calibration and use different thresholds
+    calibrationThresholdStr = slicer.util.settingsValue(
+      self.CAUTERY_CALIBRATION_THRESHOLD_SETTING, self.CAUTERY_CALIBRATION_THRESHOLD_DEFAULT)
+    calibrationThreshold = float(calibrationThresholdStr)
+
+    if not calibrationSuccess:
+      self.ui.cauteryCalibrationLabel.setText("Calibration failed: " + self.pivotCalibrationLogic.GetErrorText())
+      self.pivotCalibrationLogic.ClearToolToReferenceMatrices()
+      return
+
+    # Warning if RMSE is too high, but still use calibration
+
+    if self.pivotCalibrationLogic.GetPivotRMSE() >= calibrationThreshold:
+      self.ui.cauteryCalibrationLabel.setText("Warning: RMSE = {0:.2f} mm".format(self.pivotCalibrationLogic.GetPivotRMSE()))
+    else:
+      self.ui.cauteryCalibrationLabel.setText("Success, RMSE = {:.2f} mm".format(self.pivotCalibrationLogic.GetPivotRMSE()))
+
+    tooltipToToolMatrix = vtk.vtkMatrix4x4()
+    self.pivotCalibrationLogic.GetToolTipToToolMatrix(tooltipToToolMatrix)
+    self.pivotCalibrationLogic.ClearToolToReferenceMatrices()
+    self.pivotCalibrationResultNode.SetMatrixTransformToParent(tooltipToToolMatrix)
+
+    # Save calibration result so this calibration will be loaded in the next session automatically
+
+    pivotCalibrationResultName = self.pivotCalibrationResultNode.GetName()
+    pivotCalibrationFileWithPath = self.resourcePath(pivotCalibrationResultName + ".h5")
+    slicer.util.saveNode(self.pivotCalibrationResultNode, pivotCalibrationFileWithPath)
+
+    if self.pivotCalibrationMode == self.PIVOT_CALIBRATION:
+      logging.info("Pivot calibration completed. Tool: {0}. RMSE = {1:.2f} mm".format(
+        self.pivotCalibrationResultNode.GetName(), self.pivotCalibrationLogic.GetPivotRMSE()))
+    else:
+      logging.info("Spin calibration completed.")
 
   def confirmExit(self):
     msgBox = qt.QMessageBox()
@@ -222,26 +324,25 @@ class LumpNav2Widget(ScriptedLoadableModuleWidget, VTKObservationMixin):
       return False
 
   def onNeedleVisibilityToggled(self, toggled):
+    logging.info("onNeedleVisibilityToggled({})".format(toggled))
     self.logic.setNeedleVisibility(toggled)
 
   def onCauteryVisibilityToggled(self, toggled):
+    logging.info("onCauteryVisibilityToggled({})".format(toggled))
     self.setCauteryVisibility(toggled)
 
   def setCauteryVisibility(self, visible):
     settings = qt.QSettings()
-    settings.setValue('LumpNav2/CauteryVisibility', visible)
+    settings.setValue(self.logic.CAUTERY_VISIBILITY_SETTING, visible)
+    if self._parameterNode is not None:
+      cauteryModel = self._parameterNode.GetNodeReference(self.logic.CAUTERY_MODEL)
+      if cauteryModel is not None:
+        cauteryModel.SetDisplayVisibility(visible)
 
-    cauteryModel = self._parameterNode.GetNodeReference(self.logic.CAUTERY_MODEL)
-    cauteryModel.SetDisplayVisibility(visible)
-
-    self.ui.cauteryVisibilityButton.checked = visible
-    if visible:
-      self.ui.cauteryVisibilityButton.text = "Hide cautery model"
-    else:
-      self.ui.cauteryVisibilityButton.text = "Show cautery model"
+    self.updateGUIFromMRML()
 
   def getCauteryVisibility(self):
-    return slicer.util.settingsValue('LumpNav2/CauteryVisibility', False, converter=slicer.util.toBool)
+    return slicer.util.settingsValue(self.logic.CAUTERY_VISIBILITY_SETTING, False, converter=slicer.util.toBool)
 
   def onToolsCollapsed(self, collapsed):
     if collapsed == False:
@@ -460,23 +561,28 @@ class LumpNav2Widget(ScriptedLoadableModuleWidget, VTKObservationMixin):
     if self._updatingGUIFromMRML:
       return
 
+    if self._parameterNode is None:
+      return
+
     self._updatingGUIFromMRML = True
 
     needleModel = self._parameterNode.GetNodeReference(self.logic.NEEDLE_MODEL)
-    if needleModel.GetDisplayVisibility():
-      self.ui.needleVisibilityButton.checked = True
-      self.ui.needleVisibilityButton.text = "Hide needle model"
-    else:
-      self.ui.needleVisibilityButton.checked = False
-      self.ui.needleVisibilityButton.text = "Show needle model"
+    if needleModel is not None:
+      if needleModel.GetDisplayVisibility():
+        self.ui.needleVisibilityButton.checked = True
+        self.ui.needleVisibilityButton.text = "Hide needle model"
+      else:
+        self.ui.needleVisibilityButton.checked = False
+        self.ui.needleVisibilityButton.text = "Show needle model"
 
     cauteryModel = self._parameterNode.GetNodeReference(self.logic.CAUTERY_MODEL)
-    if cauteryModel.GetDisplayVisibility():
-      self.ui.cauteryVisibilityButton.checked = True
-      self.ui.cauteryVisibilityButton.text = "Hide cautery model"
-    else:
-      self.ui.cauteryVisibilityButton.checked = False
-      self.ui.cauteryVisibilityButton.text = "Show needle model"
+    if cauteryModel is not None:
+      if cauteryModel.GetDisplayVisibility():
+        self.ui.cauteryVisibilityButton.checked = True
+        self.ui.cauteryVisibilityButton.text = "Hide cautery model"
+      else:
+        self.ui.cauteryVisibilityButton.checked = False
+        self.ui.cauteryVisibilityButton.text = "Show cautery model"
 
     self._updatingGUIFromMRML = False
 
@@ -520,11 +626,13 @@ class LumpNav2Logic(ScriptedLoadableModuleLogic, VTKObservationMixin):
   NEEDLE_TO_REFERENCE = "NeedleToReference"
   NEEDLETIP_TO_NEEDLE = "NeedleTipToNeedle"
   CAUTERY_TO_REFERENCE = "CauteryToReference"
+  CAUTERY_TO_NEEDLE = "CauteryToNeedle"
   CAUTERYTIP_TO_CAUTERY = "CauteryTipToCautery"
 
   # OpenIGTLink PLUS connection
 
-  CONFIG_FILE = "Childrens_2020.xml"
+  CONFIG_FILE_SETTING = "LumpNav2/PlusConfigFile"
+  CONFIG_FILE_DEFAULT = "LumpNavDefault.xml"  # Default config file if the user doesn't set another.
   CONFIG_TEXT_NODE = "ConfigTextNode"
   PLUS_SERVER_NODE = "PlusServer"
   PLUS_SERVER_LAUNCHER_NODE = "PlusServerLauncher"
@@ -549,6 +657,15 @@ class LumpNav2Logic(ScriptedLoadableModuleLogic, VTKObservationMixin):
     """
     ScriptedLoadableModuleLogic.__init__(self)
     VTKObservationMixin.__init__(self)
+
+  def resourcePath(self, filename):
+    """
+    Returns the full path to the given resource file.
+    :param filename: str, resource file name
+    :returns: str, full path to file specified
+    """
+    moduleDir = os.path.dirname(slicer.util.modulePath(self.moduleName))
+    return os.path.join(moduleDir, "Resources", filename)
 
   def setDefaultParameters(self, parameterNode):
     """
@@ -654,40 +771,8 @@ class LumpNav2Logic(ScriptedLoadableModuleLogic, VTKObservationMixin):
     cauteryModel = parameterNode.GetNodeReference(self.CAUTERY_MODEL)
     if cauteryModel is not None:
       cauteryModel.SetDisplayVisibility(visible)
-      settings = qt.QSettings()
-      settings.setValue(self.CAUTERY_VISIBILITY_SETTING, "True" if visible else "False")
-
-  def process(self, inputVolume, outputVolume, imageThreshold, invert=False, showResult=True):
-    """
-    Run the processing algorithm.
-    Can be used without GUI widget.
-    :param inputVolume: volume to be thresholded
-    :param outputVolume: thresholding result
-    :param imageThreshold: values above/below this threshold will be set to 0
-    :param invert: if True then values above the threshold will be set to 0, otherwise values below are set to 0
-    :param showResult: show output volume in slice viewers
-    """
-
-    if not inputVolume or not outputVolume:
-      raise ValueError("Input or output volume is invalid")
-
-    import time
-    startTime = time.time()
-    logging.info('Processing started')
-
-    # Compute the thresholded output volume using the "Threshold Scalar Volume" CLI module
-    cliParams = {
-      'InputVolume': inputVolume.GetID(),
-      'OutputVolume': outputVolume.GetID(),
-      'ThresholdValue' : imageThreshold,
-      'ThresholdType' : 'Above' if invert else 'Below'
-      }
-    cliNode = slicer.cli.run(slicer.modules.thresholdscalarvolume, None, cliParams, wait_for_completion=True, update_display=showResult)
-    # We don't need the CLI module node anymore, remove it to not clutter the scene with it
-    slicer.mrmlScene.RemoveNode(cliNode)
-
-    stopTime = time.time()
-    logging.info('Processing completed in {0:.2f} seconds'.format(stopTime-startTime))
+    else:
+      logging.warning("setCauteryVisibilty() called but no cautery model found")
 
   def setup(self):
     """
@@ -719,12 +804,9 @@ class LumpNav2Logic(ScriptedLoadableModuleLogic, VTKObservationMixin):
 
     # Cautery model
 
-    moduleDir = os.path.dirname(slicer.modules.lumpnav2.path)
-    cauteryModelFullpath = os.path.join(moduleDir, "Resources", self.CAUTERY_MODEL_FILENAME)
-
     cauteryModel = parameterNode.GetNodeReference(self.CAUTERY_MODEL)
     if cauteryModel is None:
-      cauteryModel = slicer.util.loadModel(cauteryModelFullpath)
+      cauteryModel = slicer.util.loadModel(self.resourcePath(self.CAUTERY_MODEL_FILENAME))
       cauteryModel.GetDisplayNode().SetColor(1.0, 1.0, 0.0)
       cauteryModel.SetName(self.CAUTERY_MODEL)
       parameterNode.SetNodeReferenceID(self.CAUTERY_MODEL, cauteryModel.GetID())
@@ -766,9 +848,21 @@ class LumpNav2Logic(ScriptedLoadableModuleLogic, VTKObservationMixin):
       parameterNode.SetNodeReferenceID(self.CAUTERY_TO_REFERENCE, cauteryToReference.GetID())
     cauteryToReference.SetAndObserveTransformNodeID(referenceToRas.GetID())
 
+    cauteryToNeedle = parameterNode.GetNodeReference(self.CAUTERY_TO_NEEDLE)
+    if cauteryToNeedle is None:
+      cauteryToNeedle = slicer.mrmlScene.AddNewNodeByClass("vtkMRMLLinearTransformNode", self.CAUTERY_TO_NEEDLE)
+      parameterNode.SetNodeReferenceID(self.CAUTERY_TO_NEEDLE, cauteryToNeedle.GetID())
+    cauteryToNeedle.SetAndObserveTransformNodeID(None)  # This is only for cautery pivot calibration
+
     cauteryTipToCautery = parameterNode.GetNodeReference(self.CAUTERYTIP_TO_CAUTERY)
     if cauteryTipToCautery is None:
-      cauteryTipToCautery = slicer.mrmlScene.AddNewNodeByClass("vtkMRMLLinearTransformNode", self.CAUTERYTIP_TO_CAUTERY)
+      try:
+        cauteryTipToCauteryFileWithPath = self.resourcePath(self.CAUTERYTIP_TO_CAUTERY + ".h5")
+        logging.info("Loading cautery calibration from file: {}".format(cauteryTipToCauteryFileWithPath))
+        cauteryTipToCautery = slicer.util.loadTransform(cauteryTipToCauteryFileWithPath)
+      except:
+        logging.info("Creating cautery calibration file, because none was found as: {}".format(cauteryTipToCauteryFileWithPath))
+        cauteryTipToCautery = slicer.mrmlScene.AddNewNodeByClass("vtkMRMLLinearTransformNode", self.CAUTERYTIP_TO_CAUTERY)
       parameterNode.SetNodeReferenceID(self.CAUTERYTIP_TO_CAUTERY, cauteryTipToCautery.GetID())
     cauteryTipToCautery.SetAndObserveTransformNodeID(cauteryToReference.GetID())
 
@@ -778,8 +872,15 @@ class LumpNav2Logic(ScriptedLoadableModuleLogic, VTKObservationMixin):
     """
     parameterNode = self.getParameterNode()
 
-    moduleDir = os.path.dirname(slicer.modules.lumpnav2.path)
-    configFullpath = os.path.join(moduleDir, "Resources", self.CONFIG_FILE)
+    # Check if config file is specified in settings. Set and use default if not.
+
+    configFullpath = slicer.util.settingsValue(self.CONFIG_FILE_SETTING, '')
+    if configFullpath == '':
+      configFullpath = self.resourcePath(self.CONFIG_FILE_DEFAULT)
+      settings = qt.QSettings()
+      settings.setValue(self.CONFIG_FILE_SETTING, configFullpath)
+
+    # Make sure text node for config file exists
 
     configTextNode = parameterNode.GetNodeReference(self.CONFIG_TEXT_NODE)
     if configTextNode is None:
@@ -793,6 +894,8 @@ class LumpNav2Logic(ScriptedLoadableModuleLogic, VTKObservationMixin):
     configTextStorageNode.SaveWithSceneOff()
     configTextStorageNode.SetFileName(configFullpath)
     configTextStorageNode.ReadData(configTextNode)
+
+    # Make sure PLUS server and launcher exist, and launcher references server
 
     plusServerNode = parameterNode.GetNodeReference(self.PLUS_SERVER_NODE)
     if not plusServerNode:
@@ -808,6 +911,7 @@ class LumpNav2Logic(ScriptedLoadableModuleLogic, VTKObservationMixin):
 
     if plusServerLauncherNode.GetNodeReferenceID('plusServerRef') != plusServerNode.GetID():
       plusServerLauncherNode.AddAndObserveServerNode(plusServerNode)
+
 
 
 #
@@ -864,16 +968,6 @@ class LumpNav2Test(ScriptedLoadableModuleTest):
 
     logic = LumpNav2Logic()
 
-    # Test algorithm with non-inverted threshold
-    logic.process(inputVolume, outputVolume, threshold, True)
-    outputScalarRange = outputVolume.GetImageData().GetScalarRange()
-    self.assertEqual(outputScalarRange[0], inputScalarRange[0])
-    self.assertEqual(outputScalarRange[1], threshold)
-
-    # Test algorithm with inverted threshold
-    logic.process(inputVolume, outputVolume, threshold, False)
-    outputScalarRange = outputVolume.GetImageData().GetScalarRange()
-    self.assertEqual(outputScalarRange[0], inputScalarRange[0])
-    self.assertEqual(outputScalarRange[1], inputScalarRange[1])
 
     self.delayDisplay('Test passed')
+

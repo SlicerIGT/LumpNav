@@ -18,9 +18,26 @@
      </property>
      <layout class="QVBoxLayout" name="verticalLayout_2">
       <item>
-       <widget class="QPushButton" name="pushButton">
+       <widget class="QPushButton" name="cauteryCalibrationButton">
         <property name="text">
          <string>Start cautery calibration</string>
+        </property>
+       </widget>
+      </item>
+      <item>
+       <widget class="QLabel" name="cauteryCalibrationLabel">
+        <property name="text">
+         <string>Cautery calibration loaded</string>
+        </property>
+       </widget>
+      </item>
+      <item>
+       <widget class="QPushButton" name="previousCauteryCalibrationButton">
+        <property name="enabled">
+         <bool>false</bool>
+        </property>
+        <property name="text">
+         <string>Undo last cautery calibration</string>
         </property>
        </widget>
       </item>
