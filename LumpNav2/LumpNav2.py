@@ -1,6 +1,7 @@
 import os
 import time
 
+import numpy as np
 import vtk, qt, ctk, slicer
 
 import logging
@@ -628,6 +629,13 @@ class LumpNav2Logic(ScriptedLoadableModuleLogic, VTKObservationMixin):
   CAUTERY_TO_REFERENCE = "CauteryToReference"
   CAUTERY_TO_NEEDLE = "CauteryToNeedle"
   CAUTERYTIP_TO_CAUTERY = "CauteryTipToCautery"
+  TRANSD_TO_REFERENCE = "TransdToReference"
+  IMAGE_TO_TRANSD = "ImageToTransd"
+
+  # Ultrasound image
+
+  IMAGE_IMAGE = "Image_Image"
+  DEFAULT_US_DEPTH = 90
 
   # OpenIGTLink PLUS connection
 
@@ -657,6 +665,11 @@ class LumpNav2Logic(ScriptedLoadableModuleLogic, VTKObservationMixin):
     """
     ScriptedLoadableModuleLogic.__init__(self)
     VTKObservationMixin.__init__(self)
+
+    # Telemed C5 probe geometry
+
+    self.scaling_Intercept = 0.01663333
+    self.scaling_Slope = 0.00192667
 
   def resourcePath(self, filename):
     """
@@ -825,34 +838,20 @@ class LumpNav2Logic(ScriptedLoadableModuleLogic, VTKObservationMixin):
     """
     parameterNode = self.getParameterNode()
 
-    referenceToRas = parameterNode.GetNodeReference(self.REFERENCE_TO_RAS)
-    if referenceToRas is None:
-      referenceToRas = slicer.mrmlScene.AddNewNodeByClass("vtkMRMLLinearTransformNode", self.REFERENCE_TO_RAS)
-      parameterNode.SetNodeReferenceID(self.REFERENCE_TO_RAS, referenceToRas.GetID())
+    # ReferenceToRas puts everything in a rough anatomical reference (right, anterior, superior).
+    # Translation is not relevant for ReferenceToRas, and rotation is fine even with +/- 30 deg error.
 
-    needleToReference = parameterNode.GetNodeReference(self.NEEDLE_TO_REFERENCE)
-    if needleToReference is None:
-      needleToReference = slicer.mrmlScene.AddNewNodeByClass("vtkMRMLLinearTransformNode", self.NEEDLE_TO_REFERENCE)
-      parameterNode.SetNodeReferenceID(self.NEEDLE_TO_REFERENCE, needleToReference.GetID())
-    needleToReference.SetAndObserveTransformNodeID(referenceToRas.GetID())
+    referenceToRas = self.addLinearTransformToScene(self.REFERENCE_TO_RAS)
 
-    needleTipToNeedle = parameterNode.GetNodeReference(self.NEEDLETIP_TO_NEEDLE)
-    if needleTipToNeedle is None:
-      needleTipToNeedle = slicer.mrmlScene.AddNewNodeByClass("vtkMRMLLinearTransformNode", self.NEEDLETIP_TO_NEEDLE)
-      parameterNode.SetNodeReferenceID(self.NEEDLETIP_TO_NEEDLE, needleTipToNeedle.GetID())
-    needleTipToNeedle.SetAndObserveTransformNodeID(needleToReference.GetID())
+    # Needle tracking
 
-    cauteryToReference = parameterNode.GetNodeReference(self.CAUTERY_TO_REFERENCE)
-    if cauteryToReference is None:
-      cauteryToReference = slicer.mrmlScene.AddNewNodeByClass("vtkMRMLLinearTransformNode", self.CAUTERY_TO_REFERENCE)
-      parameterNode.SetNodeReferenceID(self.CAUTERY_TO_REFERENCE, cauteryToReference.GetID())
-    cauteryToReference.SetAndObserveTransformNodeID(referenceToRas.GetID())
+    needleToReference = self.addLinearTransformToScene(self.NEEDLE_TO_REFERENCE, parentTransform=referenceToRas)
+    self.addLinearTransformToScene(self.NEEDLETIP_TO_NEEDLE, parentTransform=needleToReference)
 
-    cauteryToNeedle = parameterNode.GetNodeReference(self.CAUTERY_TO_NEEDLE)
-    if cauteryToNeedle is None:
-      cauteryToNeedle = slicer.mrmlScene.AddNewNodeByClass("vtkMRMLLinearTransformNode", self.CAUTERY_TO_NEEDLE)
-      parameterNode.SetNodeReferenceID(self.CAUTERY_TO_NEEDLE, cauteryToNeedle.GetID())
-    cauteryToNeedle.SetAndObserveTransformNodeID(None)  # This is only for cautery pivot calibration
+    # Cautery tracking
+
+    cauteryToReference = self.addLinearTransformToScene(self.CAUTERY_TO_REFERENCE, parentTransform=referenceToRas)
+    self.addLinearTransformToScene(self.CAUTERY_TO_NEEDLE)  # For cautery calibration
 
     cauteryTipToCautery = parameterNode.GetNodeReference(self.CAUTERYTIP_TO_CAUTERY)
     if cauteryTipToCautery is None:
@@ -865,6 +864,61 @@ class LumpNav2Logic(ScriptedLoadableModuleLogic, VTKObservationMixin):
         cauteryTipToCautery = slicer.mrmlScene.AddNewNodeByClass("vtkMRMLLinearTransformNode", self.CAUTERYTIP_TO_CAUTERY)
       parameterNode.SetNodeReferenceID(self.CAUTERYTIP_TO_CAUTERY, cauteryTipToCautery.GetID())
     cauteryTipToCautery.SetAndObserveTransformNodeID(cauteryToReference.GetID())
+
+    # Ultrasound image tracking
+
+    transdToReference = self.addLinearTransformToScene(self.TRANSD_TO_REFERENCE, parentTransform=referenceToRas)
+    imageToTransd = self.addLinearTransformToScene(self.IMAGE_TO_TRANSD, parentTransform=transdToReference)
+    self.updateImageToTransdFromDepth(self.DEFAULT_US_DEPTH)
+
+    imageImage = parameterNode.GetNodeReference(self.IMAGE_IMAGE)
+    if imageImage is None:
+      imageImage = slicer.mrmlScene.AddNewNodeByClass("vtkMRMLScalarVolumeNode", self.IMAGE_IMAGE)
+      imageImage.CreateDefaultDisplayNodes()
+      imageArray = np.zeros((512, 512, 1), dtype="uint8")
+      slicer.util.updateVolumeFromArray(imageImage, imageArray)
+    imageImage.SetAndObserveTransformNodeID(imageToTransd.GetID())
+
+  def updateImageToTransdFromDepth(self, depthMm):
+    """
+    Computes ImageToTransd for a specified ultrasound depth setting (millimeters), and updates the ImageToTransd
+    transform node in the current MRML scene.
+    """
+
+    imageToTransdPixel = vtk.vtkTransform()
+    imageToTransdPixel.Translate(-255.5, 0, 0)
+
+    pxToMm = self.scaling_Intercept + self.scaling_Slope * depthMm
+
+    transdPixelToTransd = vtk.vtkTransform()
+    transdPixelToTransd.Scale(pxToMm, pxToMm, pxToMm)
+
+    imageToTransd = vtk.vtkTransform()
+    imageToTransd.Concatenate(transdPixelToTransd)
+    imageToTransd.Concatenate(imageToTransdPixel)
+    imageToTransd.Update()
+
+    parameterNode = self.getParameterNode()
+    imageToTransdNode = parameterNode.GetNodeReference(self.IMAGE_TO_TRANSD)
+    imageToTransdNode.SetAndObserveTransformToParent(imageToTransd)
+
+  def addLinearTransformToScene(self, transformName, parentTransform=None):
+    """
+    Makes sure there is a transform with specified name, and it is referenced in parameter node by its name.
+    :param transformName: str, name and reference of the transform.
+    :param parentTransform: vtkMRMLLinearTransformNode, optional parent tranform
+    :returns: vtkMRMLLinearTransformNode, the existing or newly created transform named trasnformName
+    """
+    parameterNode = self.getParameterNode()
+    transform = parameterNode.GetNodeReference(transformName)
+    if transform is None:
+      transform = slicer.mrmlScene.AddNewNodeByClass("vtkMRMLLinearTransformNode", transformName)
+      parameterNode.SetNodeReferenceID(transformName, transform.GetID())
+    if parentTransform is not None:
+      transform.SetAndObserveTransformNodeID(parentTransform.GetID())
+    else:
+      transform.SetAndObserveTransformNodeID(None)
+    return transform
 
   def setupPlusServer(self):
     """

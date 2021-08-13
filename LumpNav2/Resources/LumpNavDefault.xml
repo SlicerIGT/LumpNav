@@ -1,6 +1,6 @@
 <PlusConfiguration version="2.5" PlusRevision="Plus-2.7.0.e4d528e1 - Win32">
   <DataCollection StartupDelaySec="1.0">
-    <DeviceSet Name="Childrens 2020 - passive flat markers, Telemed C5 - original" Description="OptiTrack Trio and Telemed ultrasound." />
+    <DeviceSet Name="OptiTrack, Telemed C5 - LumpNav test" Description="OptiTrack and Telemed ultrasound." />
     <Device
       Id="TrackerDevice"
       Type="OptiTrack"
@@ -98,7 +98,8 @@
         <Transform Name="ProbeToTracker" />
         <Transform Name="ReferenceToTracker" />
         <Transform Name="NeedleToTracker" />
-        <Transform Name="TransdToReference" />
+        
+        <Transform Name="TransdToReference" /> <!-- Depth-independent (mm to mm) ultrasound image tracking -->
         
         <Transform Name="NeedleToProbe" />    <!-- For Image to Probe calibration with needle as stylus -->
         <Transform Name="CauteryToNeedle" />  <!-- For cautery calibration in sterile field -->
