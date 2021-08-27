@@ -137,6 +137,7 @@ class LumpNav2Widget(ScriptedLoadableModuleWidget, VTKObservationMixin):
   NEEDLE_CALIBRATION_THRESHOLD_SETTING = "LumpNav2/NeedleCalibrationTresholdMm"
   NEEDLE_CALIBRATION_THRESHOLD_DEFAULT = 1.0
 
+
   def __init__(self, parent=None):
     """
     Called when the user opens the module the first time and the widget is initialized.
@@ -229,6 +230,9 @@ class LumpNav2Widget(ScriptedLoadableModuleWidget, VTKObservationMixin):
     self.ui.needleVisibilityButton.checked = needleVisibilitySetting
     self.ui.needleVisibilityButton.connect('toggled(bool)', self.onNeedleVisibilityToggled)
 
+    self.ui.trackingSequenceBrowserButton.connect('toggled(bool)', self.onTrackingSequenceBrowser)
+    self.ui.ultrasoundSequenceBrowserButton.connect('toggled(bool)', self.onUltrasoundSequenceBrowser)
+    
     cauteryVisible = slicer.util.settingsValue(self.logic.CAUTERY_VISIBILITY_SETTING, True, converter=slicer.util.toBool)
     self.ui.cauteryVisibilityButton.checked = cauteryVisible
     self.ui.cauteryVisibilityButton.connect('toggled(bool)', self.onCauteryVisibilityToggled)
@@ -383,6 +387,15 @@ class LumpNav2Widget(ScriptedLoadableModuleWidget, VTKObservationMixin):
 
   def onCustomUiClicked(self, checked):
     self.setCustomStyle(checked)
+
+  def onTrackingSequenceBrowser(self, toggled):
+    logging.info("onTrackingSequenceBrowserToggled({})".format(toggled))
+    self.logic.setTrackingSequenceBrowser(toggled)
+
+  def onUltrasoundSequenceBrowser(self, toggled):
+    print("test")
+    logging.info("onUltrasoundSequenceBrowserToggled({})".format(toggled))
+    self.logic.setUltrasoundSequenceBrowser(toggled)
 
   def setCustomStyle(self, visible):
     """
@@ -632,6 +645,7 @@ class LumpNav2Logic(ScriptedLoadableModuleLogic, VTKObservationMixin):
   TRANSD_TO_REFERENCE = "TransdToReference"
   IMAGE_TO_TRANSD = "ImageToTransd"
 
+
   # Ultrasound image
 
   IMAGE_IMAGE = "Image_Image"
@@ -659,6 +673,11 @@ class LumpNav2Logic(ScriptedLoadableModuleLogic, VTKObservationMixin):
   LAYOUT_TRIPLE3D = 502
   LAYOUT_DUAL3D = 503
 
+  # Sequence names
+
+  TRACKING_SEQUENCE_BROWSER = "TrackingSequenceBrowswer"
+  ULTRASOUND_SEQUENCE_BROWSER = "UltrasoundSequenceBrowswer"
+  
   def __init__(self):
     """
     Called when the logic class is instantiated. Can be used for initializing member variables.
@@ -966,6 +985,50 @@ class LumpNav2Logic(ScriptedLoadableModuleLogic, VTKObservationMixin):
     if plusServerLauncherNode.GetNodeReferenceID('plusServerRef') != plusServerNode.GetID():
       plusServerLauncherNode.AddAndObserveServerNode(plusServerNode)
 
+  #def sequenceBrowserSetUp(self):
+  def setTrackingSequenceBrowser(self, visible):
+    #add sequences to LumpNav2
+    sequenceLogic = slicer.modules.sequences.logic()
+    sequenceBrowser = slicer.mrmlScene.AddNewNodeByClass("vtkMRMLSequenceBrowserNode", self.TRACKING_SEQUENCE_BROWSER)
+    parameterNode = self.getParameterNode()
+    cauteryToReference = parameterNode.GetNodeReference(self.CAUTERY_TO_REFERENCE)
+    sequenceNode = sequenceLogic.AddSynchronizedNode(None, cauteryToReference, sequenceBrowser)
+    sequenceBrowser.SetRecording(sequenceNode, True)
+    sequenceBrowser.SetPlayback(sequenceNode, True)
+
+    sequenceBrowser.SetRecordingActive(True) # Actually start recording
+
+  def setTrackingSequenceBrowser(self, visible):
+    if visible == True:
+      #add sequences to LumpNav2
+      sequenceLogic = slicer.modules.sequences.logic()
+      sequenceBrowser = slicer.mrmlScene.AddNewNodeByClass("vtkMRMLSequenceBrowserNode", self.TRACKING_SEQUENCE_BROWSER)
+      parameterNode = self.getParameterNode()
+      cauteryToReference = parameterNode.GetNodeReference(self.CAUTERY_TO_REFERENCE)
+      sequenceNode = sequenceLogic.AddSynchronizedNode(None, cauteryToReference, sequenceBrowser)
+      sequenceBrowser.SetRecording(sequenceNode, "True")
+      sequenceBrowser.SetPlayback(sequenceNode, "True")
+      sequenceBrowser.SetRecordingActive("True")
+      print("active")
+      sequenceBrowser.SetRecording(sequenceNode, "False")
+      sequenceBrowser.SetRecording(sequenceNode, "False")
+      print("inactive")
+      #slicer.vtkMRMLSequenceBrowserNode().SetRecordingActive("True") # Actually start recording
+    
+    else:
+      sequenceBrowser.SetRecordingActive("False")
+  def setUltrasoundSequenceBrowser(self, visible):
+
+    #add sequences to LumpNav2
+    sequenceLogic = slicer.modules.sequences.logic()
+    sequenceBrowser = slicer.mrmlScene.AddNewNodeByClass("vtkMRMLSequenceBrowserNode", self.TRACKING_SEQUENCE_BROWSER)
+    parameterNode = self.getParameterNode()
+    cauteryToReference = parameterNode.GetNodeReference(self.CAUTERY_TO_REFERENCE)
+    sequenceNode = sequenceLogic.AddSynchronizedNode(None, cauteryToReference, sequenceBrowser)
+    sequenceBrowser.SetRecording(sequenceNode, True)
+    sequenceBrowser.SetPlayback(sequenceNode, True)
+
+    sequenceBrowser.SetRecordingActive(True) # Actually start recording
 
 
 #

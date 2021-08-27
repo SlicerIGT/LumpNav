@@ -1,7 +1,7 @@
 <?xml version="1.0" encoding="UTF-8"?>
 <ui version="4.0">
- <class>LumpNav2</class>
- <widget class="qMRMLWidget" name="LumpNav2">
+ <class>LumpNan</class>
+ <widget class="qMRMLWidget" name="LumpNan">
   <property name="geometry">
    <rect>
     <x>0</x>
@@ -165,6 +165,29 @@
       <bool>true</bool>
      </property>
      <layout class="QVBoxLayout" name="verticalLayout_5">
+      <item>
+       <widget class="QPushButton" name="ultrasoundSequenceBrowserButton">
+        <property name="text">
+         <string>Record Ultrasound</string>
+        </property>
+        <property name="checkable">
+         <bool>true</bool>
+        </property>
+       </widget>
+      </item>
+      <item>
+       <widget class="QPushButton" name="trackingSequenceBrowserButton">
+        <property name="text">
+         <string>Record Tracking</string>
+        </property>
+        <property name="checkable">
+         <bool>true</bool>
+        </property>
+        <property name="checked">
+         <bool>false</bool>
+        </property>
+       </widget>
+      </item>
       <item>
        <widget class="QPushButton" name="needleVisibilityButton">
         <property name="text">
