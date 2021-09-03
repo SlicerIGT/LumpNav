@@ -968,7 +968,9 @@ class LumpNav2Logic(ScriptedLoadableModuleLogic, VTKObservationMixin):
     parameterNode = self.getParameterNode()
     transform = parameterNode.GetNodeReference(transformName)
     if transform is None:
-      transform = slicer.mrmlScene.AddNewNodeByClass("vtkMRMLLinearTransformNode", transformName)
+      transform = slicer.mrmlScene.GetFirstNodeByName(transformName)
+      if transform is None:
+        transform = slicer.mrmlScene.AddNewNodeByClass("vtkMRMLLinearTransformNode", transformName)
       parameterNode.SetNodeReferenceID(transformName, transform.GetID())
     if parentTransform is not None:
       transform.SetAndObserveTransformNodeID(parentTransform.GetID())
