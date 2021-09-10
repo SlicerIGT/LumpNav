@@ -150,6 +150,7 @@ class LumpNav2Widget(ScriptedLoadableModuleWidget, VTKObservationMixin):
     self._updatingGUIFromMRML = False
     self.observedNeedleModel = None
     self.observedCauteryModel = None
+    self.observedTrackingSeqBrNode = None
 
     # Timer for pivot calibration controls
 
@@ -563,6 +564,13 @@ class LumpNav2Widget(ScriptedLoadableModuleWidget, VTKObservationMixin):
       if self.observedCauteryModel:
         self.addObserver(self.observedCauteryModel, slicer.vtkMRMLDisplayableNode.DisplayModifiedEvent, self.updateGUIFromMRML)
 
+    currentTrackingSeqBrNode = self._parameterNode.GetNodeReference(self.logic.TRACKING_SEQUENCE_BROWSER)
+    if currentTrackingSeqBrNode != self.observedTrackingSeqBrNode:
+      self.removeObserver(self.observedTrackingSeqBrNode, vtk.vtkCommand.ModifiedEvent, self.updateGUIFromMRML)
+      self.observedTrackingSeqBrNode = currentTrackingSeqBrNode
+      if self.observedTrackingSeqBrNode is not None:
+        self.addObserver(self.observedTrackingSeqBrNode, vtk.vtkCommand.ModifiedEvent, self.updateGUIFromMRML)
+
     # All the GUI updates are done
 
     self._updatingGUIFromParameterNode = False
@@ -597,6 +605,10 @@ class LumpNav2Widget(ScriptedLoadableModuleWidget, VTKObservationMixin):
       else:
         self.ui.cauteryVisibilityButton.checked = False
         self.ui.cauteryVisibilityButton.text = "Show cautery model"
+
+    trackingSqBr = self._parameterNode.GetNodeReference(self.logic.TRACKING_SEQUENCE_BROWSER)
+    if trackingSqBr is not None:
+      self.ui.trackingSequenceBrowserButton.checked = trackingSqBr.GetRecordingActive()
 
     self._updatingGUIFromMRML = False
 
@@ -675,8 +687,8 @@ class LumpNav2Logic(ScriptedLoadableModuleLogic, VTKObservationMixin):
 
   # Sequence names
 
-  TRACKING_SEQUENCE_BROWSER = "TrackingSequenceBrowswer"
-  ULTRASOUND_SEQUENCE_BROWSER = "UltrasoundSequenceBrowswer"
+  TRACKING_SEQUENCE_BROWSER = "TrackingSequenceBrowser"
+  ULTRASOUND_SEQUENCE_BROWSER = "UltrasoundSequenceBrowser"
   
   def __init__(self):
     """
@@ -851,42 +863,44 @@ class LumpNav2Logic(ScriptedLoadableModuleLogic, VTKObservationMixin):
 
     self.setupPlusServer()
 
-    #TODO: Add functions
-
-    
     sequenceLogic = slicer.modules.sequences.logic()
     parameterNode = self.getParameterNode()
     sequenceBrowserTracking = parameterNode.GetNodeReference(self.TRACKING_SEQUENCE_BROWSER)
     
     if sequenceBrowserTracking is None:
       sequenceBrowserTracking = slicer.mrmlScene.AddNewNodeByClass("vtkMRMLSequenceBrowserNode", self.TRACKING_SEQUENCE_BROWSER)
+      parameterNode.SetNodeReferenceID(self.TRACKING_SEQUENCE_BROWSER, sequenceBrowserTracking.GetID())
 
     cauteryToReference = parameterNode.GetNodeReference(self.CAUTERY_TO_REFERENCE)
     sequenceNode = sequenceLogic.AddSynchronizedNode(None, cauteryToReference, sequenceBrowserTracking)
+    sequenceBrowserTracking.SetRecording(sequenceNode, True)
+    sequenceBrowserTracking.SetPlayback(sequenceNode, True)
     needleToReference = parameterNode.GetNodeReference(self.NEEDLE_TO_REFERENCE)
     sequenceNode = sequenceLogic.AddSynchronizedNode(None, needleToReference, sequenceBrowserTracking)
+    sequenceBrowserTracking.SetRecording(sequenceNode, True)
+    sequenceBrowserTracking.SetPlayback(sequenceNode, True)
     needleTipToNeedle = parameterNode.GetNodeReference(self.NEEDLETIP_TO_NEEDLE)
     sequenceNode = sequenceLogic.AddSynchronizedNode(None, needleTipToNeedle, sequenceBrowserTracking)
+    sequenceBrowserTracking.SetRecording(sequenceNode, True)
+    sequenceBrowserTracking.SetPlayback(sequenceNode, True)
     cauteryTipToCautery = parameterNode.GetNodeReference(self.CAUTERYTIP_TO_CAUTERY)
     sequenceNode = sequenceLogic.AddSynchronizedNode(None, cauteryTipToCautery, sequenceBrowserTracking)
-
-    #TODO: add save changes checkbox, otherwise it will not replay and save info.
-    
     sequenceBrowserTracking.SetRecording(sequenceNode, True)
     sequenceBrowserTracking.SetPlayback(sequenceNode, True)
 
-    sequenceBrowserTracking.SetRecordingActive(True) # Actually start recording   
+    sequenceBrowserTracking.SetRecordingActive(True) # Actually start recording
 
     sequenceBrowserUltrasound = parameterNode.GetNodeReference(self.ULTRASOUND_SEQUENCE_BROWSER)
     
     if sequenceBrowserUltrasound is None:
-      sequenceBrowserUltrasound = slicer.mrmlScene.AddNewNodeByClass("vtkMRMLSequenceBrowserNode", self.TRACKING_SEQUENCE_BROWSER)
+      sequenceBrowserUltrasound = slicer.mrmlScene.AddNewNodeByClass("vtkMRMLSequenceBrowserNode", self.ULTRASOUND_SEQUENCE_BROWSER)
+      parameterNode.SetNodeReferenceID(self.ULTRASOUND_SEQUENCE_BROWSER, sequenceBrowserUltrasound.GetID())
     
     Image_Image = parameterNode.GetNodeReference(self.IMAGE_IMAGE)
     sequenceNode = sequenceLogic.AddSynchronizedNode(None, Image_Image, sequenceBrowserUltrasound)
     sequenceBrowserUltrasound.SetRecording(sequenceNode, True)
     sequenceBrowserUltrasound.SetPlayback(sequenceNode, True)
-    sequenceBrowserUltrasound.SetRecordingActive(True)
+    sequenceBrowserUltrasound.SetRecordingActive(False)
 
   def setupTransformHierarchy(self):
     """
@@ -1025,12 +1039,11 @@ class LumpNav2Logic(ScriptedLoadableModuleLogic, VTKObservationMixin):
       plusServerLauncherNode.AddAndObserveServerNode(plusServerNode)
 
   #def sequenceBrowserSetUp(self):
-  def setTrackingSequenceBrowser(self, visible):
-
+  def setTrackingSequenceBrowser(self, recording):
     sequenceLogic = slicer.modules.sequences.logic()
     parameterNode = self.getParameterNode()
     sequenceBrowserTracking = parameterNode.GetNodeReference(self.TRACKING_SEQUENCE_BROWSER)
-    sequenceBrowserTracking.SetRecordingActive(False) #stop
+    sequenceBrowserTracking.SetRecordingActive(recording) #stop
 
   def setUltrasoundSequenceBrowser(self, visible):
 
