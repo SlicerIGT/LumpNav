@@ -826,6 +826,31 @@ class LumpNav2Logic(ScriptedLoadableModuleLogic, VTKObservationMixin):
 
     self.setupTransformHierarchy()
 
+    # Show ultrasound in 2D view
+
+    layoutManager = slicer.app.layoutManager()
+    # Show ultrasound in red view.
+    redSlice = layoutManager.sliceWidget('Red')
+    controller = redSlice.sliceController()
+    controller.setSliceVisible(True)
+    redSliceLogic = redSlice.sliceLogic()
+    image_Image = parameterNode.GetNodeReference(self.IMAGE_IMAGE)
+    redSliceLogic.GetSliceCompositeNode().SetBackgroundVolumeID(image_Image.GetID())
+    # Set up volume reslice driver.
+    resliceLogic = slicer.modules.volumereslicedriver.logic()
+    if resliceLogic:
+      redNode = slicer.mrmlScene.GetNodeByID('vtkMRMLSliceNodeRed')
+      # Typically the image is zoomed in, therefore it is faster if the original resolution is used
+      # on the 3D slice (and also we can show the full image and not the shape and size of the 2D view)
+      redNode.SetSliceResolutionMode(slicer.vtkMRMLSliceNode.SliceResolutionMatchVolumes)
+      resliceLogic.SetDriverForSlice(image_Image.GetID(), redNode)
+      resliceLogic.SetModeForSlice(6, redNode)  # Transverse mode, default for PLUS ultrasound.
+      resliceLogic.SetFlipForSlice(False, redNode)
+      resliceLogic.SetRotationForSlice(180, redNode)
+      redSliceLogic.FitSliceToAll()
+    else:
+      logging.warning('Logic not found for Volume Reslice Driver')
+
     # Create models
 
     createModelsLogic = slicer.modules.createmodels.logic()
@@ -947,6 +972,7 @@ class LumpNav2Logic(ScriptedLoadableModuleLogic, VTKObservationMixin):
       imageImage.CreateDefaultDisplayNodes()
       imageArray = np.zeros((512, 512, 1), dtype="uint8")
       slicer.util.updateVolumeFromArray(imageImage, imageArray)
+      parameterNode.SetNodeReferenceID(self.IMAGE_IMAGE, imageImage.GetID())
     imageImage.SetAndObserveTransformNodeID(imageToTransd.GetID())
 
   def updateImageToTransdFromDepth(self, depthMm):
