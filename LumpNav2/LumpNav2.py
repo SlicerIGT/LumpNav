@@ -151,6 +151,7 @@ class LumpNav2Widget(ScriptedLoadableModuleWidget, VTKObservationMixin):
     self.observedNeedleModel = None
     self.observedCauteryModel = None
     self.observedTrackingSeqBrNode = None
+    self.observedUltrasoundSeqBrNode = None
 
     # Timer for pivot calibration controls
 
@@ -394,7 +395,6 @@ class LumpNav2Widget(ScriptedLoadableModuleWidget, VTKObservationMixin):
     self.logic.setTrackingSequenceBrowser(toggled)
 
   def onUltrasoundSequenceBrowser(self, toggled):
-    print("test")
     logging.info("onUltrasoundSequenceBrowserToggled({})".format(toggled))
     self.logic.setUltrasoundSequenceBrowser(toggled)
 
@@ -571,6 +571,13 @@ class LumpNav2Widget(ScriptedLoadableModuleWidget, VTKObservationMixin):
       if self.observedTrackingSeqBrNode is not None:
         self.addObserver(self.observedTrackingSeqBrNode, vtk.vtkCommand.ModifiedEvent, self.updateGUIFromMRML)
 
+    currentUltrasoundSeqBrNode = self._parameterNode.GetNodeReference(self.logic.ULTRASOUND_SEQUENCE_BROWSER)
+    if currentUltrasoundSeqBrNode != self.observedUltrasoundSeqBrNode:
+      self.removeObserver(self.observedUltrasoundSeqBrNode, vtk.vtkCommand.ModifiedEvent, self.updateGUIFromMRML)
+      self.observedUltrasoundSeqBrNode = currentUltrasoundSeqBrNode
+      if self.observedUltrasoundSeqBrNode is not None:
+        self.addObserver(self.observedUltrasoundSeqBrNode, vtk.vtkCommand.ModifiedEvent, self.updateGUIFromMRML)
+
     # All the GUI updates are done
 
     self._updatingGUIFromParameterNode = False
@@ -609,6 +616,10 @@ class LumpNav2Widget(ScriptedLoadableModuleWidget, VTKObservationMixin):
     trackingSqBr = self._parameterNode.GetNodeReference(self.logic.TRACKING_SEQUENCE_BROWSER)
     if trackingSqBr is not None:
       self.ui.trackingSequenceBrowserButton.checked = trackingSqBr.GetRecordingActive()
+
+    ultrasoundSqBr = self._parameterNode.GetNodeReference(self.logic.ULTRASOUND_SEQUENCE_BROWSER)
+    if ultrasoundSqBr is not None:
+      self.ui.ultrasoundSequenceBrowserButton.checked = ultrasoundSqBr.GetRecordingActive()
 
     self._updatingGUIFromMRML = False
 
@@ -660,7 +671,7 @@ class LumpNav2Logic(ScriptedLoadableModuleLogic, VTKObservationMixin):
 
   # Ultrasound image
 
-  IMAGE_IMAGE = "Image_Image"
+  IMAGE_IMAGE = "image_Image"
   DEFAULT_US_DEPTH = 90
 
   # OpenIGTLink PLUS connection
@@ -921,11 +932,11 @@ class LumpNav2Logic(ScriptedLoadableModuleLogic, VTKObservationMixin):
       sequenceBrowserUltrasound = slicer.mrmlScene.AddNewNodeByClass("vtkMRMLSequenceBrowserNode", self.ULTRASOUND_SEQUENCE_BROWSER)
       parameterNode.SetNodeReferenceID(self.ULTRASOUND_SEQUENCE_BROWSER, sequenceBrowserUltrasound.GetID())
     
-    Image_Image = parameterNode.GetNodeReference(self.IMAGE_IMAGE)
-    sequenceNode = sequenceLogic.AddSynchronizedNode(None, Image_Image, sequenceBrowserUltrasound)
+    image_Image = parameterNode.GetNodeReference(self.IMAGE_IMAGE)
+    sequenceNode = sequenceLogic.AddSynchronizedNode(None, image_Image, sequenceBrowserUltrasound)
     sequenceBrowserUltrasound.SetRecording(sequenceNode, True)
     sequenceBrowserUltrasound.SetPlayback(sequenceNode, True)
-    sequenceBrowserUltrasound.SetRecordingActive(False)
+    sequenceBrowserUltrasound.SetRecordingActive(True)
 
   def setupTransformHierarchy(self):
     """
@@ -1066,17 +1077,18 @@ class LumpNav2Logic(ScriptedLoadableModuleLogic, VTKObservationMixin):
 
   #def sequenceBrowserSetUp(self):
   def setTrackingSequenceBrowser(self, recording):
+    
     sequenceLogic = slicer.modules.sequences.logic()
     parameterNode = self.getParameterNode()
     sequenceBrowserTracking = parameterNode.GetNodeReference(self.TRACKING_SEQUENCE_BROWSER)
     sequenceBrowserTracking.SetRecordingActive(recording) #stop
 
-  def setUltrasoundSequenceBrowser(self, visible):
+  def setUltrasoundSequenceBrowser(self, recording):
 
     sequenceLogic = slicer.modules.sequences.logic()
     parameterNode = self.getParameterNode()
     sequenceBrowserUltrasound = parameterNode.GetNodeReference(self.ULTRASOUND_SEQUENCE_BROWSER)
-    sequenceBrowserUltrasound.SetRecordingActive(False) #stop
+    sequenceBrowserUltrasound.SetRecordingActive(recording) #stop
 
 
 #
