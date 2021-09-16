@@ -936,7 +936,7 @@ class LumpNav2Logic(ScriptedLoadableModuleLogic, VTKObservationMixin):
     sequenceNode = sequenceLogic.AddSynchronizedNode(None, image_Image, sequenceBrowserUltrasound)
     sequenceBrowserUltrasound.SetRecording(sequenceNode, True)
     sequenceBrowserUltrasound.SetPlayback(sequenceNode, True)
-    sequenceBrowserUltrasound.SetRecordingActive(True)
+    sequenceBrowserUltrasound.SetRecordingActive(False)
 
   def setupTransformHierarchy(self):
     """
