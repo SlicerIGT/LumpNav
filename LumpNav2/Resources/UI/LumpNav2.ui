@@ -1,7 +1,7 @@
 <?xml version="1.0" encoding="UTF-8"?>
 <ui version="4.0">
- <class>LumpNan</class>
- <widget class="qMRMLWidget" name="LumpNan">
+ <class>LumpNav</class>
+ <widget class="qMRMLWidget" name="LumpNav">
   <property name="geometry">
    <rect>
     <x>0</x>
@@ -9,6 +9,9 @@
     <width>356</width>
     <height>560</height>
    </rect>
+  </property>
+  <property name="cursor">
+   <cursorShape>UpArrowCursor</cursorShape>
   </property>
   <layout class="QVBoxLayout" name="verticalLayout">
    <item>
@@ -93,22 +96,82 @@
      </property>
      <layout class="QVBoxLayout" name="verticalLayout_3">
       <item>
+       <widget class="ctkSliderWidget" name="brightnessSliderWidget">
+        <property name="pageStep">
+         <double>9.000000000000000</double>
+        </property>
+        <property name="maximum">
+         <double>255.000000000000000</double>
+        </property>
+       </widget>
+      </item>
+      <item>
+       <layout class="QHBoxLayout" name="horizontalLayout_4"/>
+      </item>
+      <item>
+       <widget class="QPushButton" name="deleteAllPointsButton">
+        <property name="text">
+         <string>Delete All Points</string>
+        </property>
+       </widget>
+      </item>
+      <item>
+       <widget class="QPushButton" name="deleteLastPointButton">
+        <property name="text">
+         <string>Delete Last Point</string>
+        </property>
+       </widget>
+      </item>
+      <item>
+       <widget class="QPushButton" name="erasePointsButton">
+        <property name="text">
+         <string>Erase Points</string>
+        </property>
+       </widget>
+      </item>
+      <item>
+       <widget class="QPushButton" name="markPointsButton">
+        <property name="text">
+         <string>Mark Points</string>
+        </property>
+        <property name="checkable">
+         <bool>true</bool>
+        </property>
+       </widget>
+      </item>
+      <item>
        <layout class="QHBoxLayout" name="horizontalLayout_2">
         <item>
-         <widget class="QPushButton" name="pushButton_2">
+         <widget class="QPushButton" name="startRecordingButton">
           <property name="text">
-           <string>Start recording</string>
+           <string>Start ecording</string>
           </property>
          </widget>
         </item>
         <item>
-         <widget class="QPushButton" name="pushButton_3">
+         <widget class="QPushButton" name="freezeButton">
           <property name="text">
            <string>Freeze</string>
           </property>
          </widget>
         </item>
        </layout>
+      </item>
+     </layout>
+    </widget>
+   </item>
+   <item>
+    <widget class="ctkCollapsibleButton" name="contourAdjustmentCollpsibleButton">
+     <property name="text">
+      <string>Contour Adjustment</string>
+     </property>
+     <layout class="QVBoxLayout" name="verticalLayout_6">
+      <item>
+       <widget class="QPushButton" name="pushButton">
+        <property name="text">
+         <string>PushButton</string>
+        </property>
+       </widget>
       </item>
      </layout>
     </widget>
@@ -171,6 +234,9 @@
          <string>Record Ultrasound</string>
         </property>
         <property name="checkable">
+         <bool>true</bool>
+        </property>
+        <property name="checked">
          <bool>true</bool>
         </property>
        </widget>
@@ -258,6 +324,11 @@
    <extends>QWidget</extends>
    <header>ctkCollapsibleButton.h</header>
    <container>1</container>
+  </customwidget>
+  <customwidget>
+   <class>ctkSliderWidget</class>
+   <extends>QWidget</extends>
+   <header>ctkSliderWidget.h</header>
   </customwidget>
   <customwidget>
    <class>qMRMLWidget</class>
