@@ -109,16 +109,25 @@
        <layout class="QHBoxLayout" name="horizontalLayout_4"/>
       </item>
       <item>
-       <widget class="QPushButton" name="deleteAllPointsButton">
+       <widget class="QPushButton" name="deleteAllFiducialsButton">
         <property name="text">
          <string>Delete All Points</string>
         </property>
        </widget>
       </item>
       <item>
-       <widget class="QPushButton" name="deleteLastPointButton">
+       <widget class="QPushButton" name="deleteLastFiducialButton">
+        <property name="enabled">
+         <bool>true</bool>
+        </property>
         <property name="text">
          <string>Delete Last Point</string>
+        </property>
+        <property name="checkable">
+         <bool>false</bool>
+        </property>
+        <property name="checked">
+         <bool>false</bool>
         </property>
        </widget>
       </item>

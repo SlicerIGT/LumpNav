@@ -248,6 +248,8 @@ class LumpNav2Widget(ScriptedLoadableModuleWidget, VTKObservationMixin):
     self.ui.brightnessSliderWidget.connect('valuesChanged(double, double)', self.onBrightnessSliderChanged)
     self.ui.markPointsButton.connect('toggled(bool)', self.onMarkPointsClicked)
     self.ui.threeDViewButton.connect('toggled(bool)', self.on3DViewsToggled)
+    self.ui.deleteLastFiducialButton('clicked()', self.onDeleteLastFiducialClicked)
+    self.ui.deleteAllFiducialsButton('clicked()', self.onDeleteAllFiducialsClicked)
 
     self.pivotSamplingTimer.connect('timeout()', self.onPivotSamplingTimeout)
 
@@ -427,6 +429,14 @@ class LumpNav2Widget(ScriptedLoadableModuleWidget, VTKObservationMixin):
     else:
       # deactivate placement mode
       interactionNode.SetCurrentInteractionMode(interactionNode.ViewTransform)
+
+  def onDeleteLastFiducialClicked(self):
+    logging.debug('onDeleteLastFiducialClicked')
+    self.logic.setDeleteLastFiducialClicked
+
+  def onDeleteAllFiducialsClicked(self):
+    logging.debug('onDeleteAllFiducialsClicked')
+    self.logic.setDeleteAllFiducialsClicked
 
   def setCustomStyle(self, visible):
     """
@@ -1155,11 +1165,120 @@ class LumpNav2Logic(ScriptedLoadableModuleLogic, VTKObservationMixin):
         self.tumorMarkups_NeedleObserver = self.tumorMarkups_Needle.AddObserver(slicer.vtkMRMLMarkupsNode.PointModifiedEvent, self.onTumorMarkupsNodeModified)
       else:
         self.tumorMarkups_NeedleObserver = self.tumorMarkups_Needle.AddObserver(vtk.vtkCommand.ModifiedEvent , self.onTumorMarkupsNodeModified)
+  
+  def setDeleteLastFiducialClicked(self):
+
+    if self.placeButton.isChecked() : # ensures point placed doesn't get logged twice
+      self.placeButton.click()
+    numberOfPoints = self.tumorMarkups_Needle.GetNumberOfFiducials()
+    deleted_coord = [0.0, 0.0, 0.0]
+    self.tumorMarkups_Needle.GetNthFiducialPosition(numberOfPoints-1,deleted_coord)
+    self.tumorMarkups_Needle.RemoveMarkup(numberOfPoints-1)
+    logging.info("Deleted last fiducial at %s", deleted_coord)
+    if numberOfPoints<=1:        
+      self.ui.deleteLastFiducialButton.setEnabled(False)
+      self.ui.deleteAllFiducialsButton.setEnabled(False)
+      self.ui.deleteLastFiducialDuringNavigationButton.setEnabled(False)
+      self.ui.eraseButton.setEnabled(False)
+      self.ui.eraseButton.setChecked(False)
+      sphereSource = vtk.vtkSphereSource()
+      sphereSource.SetRadius(0.001)
+      self.tumorModel_Needle.SetPolyDataConnection(sphereSource.GetOutputPort())
+      self.tumorModel_Needle.Modified()
+
+  def setDeleteAllFiducialsClicked(self):
+    self.tumorMarkups_Needle.RemoveAllMarkups()
+    logging.info("Deleted all fiducials")
+    self.deleteLastFiducialButton.setEnabled(False)
+    self.deleteAllFiducialsButton.setEnabled(False)
+    self.deleteLastFiducialDuringNavigationButton.setEnabled(False)
+    self.eraseButton.setEnabled(False)
+    self.eraseButton.setChecked(False)
+    sphereSource = vtk.vtkSphereSource()
+    sphereSource.SetRadius(0.001)
+    self.tumorModel_Needle.SetPolyDataConnection(sphereSource.GetOutputPort())
+    self.tumorModel_Needle.Modified()
 
   #TODO: Wrong class placement - should be in widget
   def onTumorMarkupsNodeModified(self, observer, eventid):
     logging.debug("onTumorMarkupsNodeModified")
-    self.createTumorFromMarkups()
+    self.logic.createTumorFromMarkups()
+
+  def createTumorFromMarkups(self):
+    logging.debug('createTumorFromMarkups')
+    #self.tumorMarkups_Needle.SetDisplayVisibility(0)
+    # Create polydata point set from markup points
+    points = vtk.vtkPoints()
+    cellArray = vtk.vtkCellArray()
+    numberOfPoints = self.tumorMarkups_Needle.GetNumberOfFiducials()
+
+    if numberOfPoints>0:
+        self.deleteLastFiducialButton.setEnabled(True)
+        self.deleteAllFiducialsButton.setEnabled(True)
+        self.deleteLastFiducialDuringNavigationButton.setEnabled(True)
+        self.eraseButton.setEnabled(True)
+
+    # Surface generation algorithms behave unpredictably when there are not enough points
+    # return if there are very few points
+    if numberOfPoints<1:
+      return
+    
+    points.SetNumberOfPoints(numberOfPoints)
+    new_coord = [0.0, 0.0, 0.0]
+    for i in range(numberOfPoints):
+      self.tumorMarkups_Needle.GetNthFiducialPosition(i,new_coord)
+      points.SetPoint(i, new_coord)
+
+    if self.placeButton.isChecked() :
+      if self.loggingFlag == False : 
+        self.loggingFlag = True
+      else :
+        self.loggingFlag = False
+        self.tumorMarkups_Needle.GetNthFiducialPosition(numberOfPoints-1,new_coord)
+        logging.info("Placed point at position: %s", new_coord)
+    
+    cellArray.InsertNextCell(numberOfPoints)
+    for i in range(numberOfPoints):
+      cellArray.InsertCellPoint(i)
+
+    pointPolyData = vtk.vtkPolyData()
+    pointPolyData.SetLines(cellArray)
+    pointPolyData.SetPoints(points)
+
+    delaunay = vtk.vtkDelaunay3D()
+
+    logging.debug("use glyphs")
+    sphere = vtk.vtkCubeSource()
+    glyph = vtk.vtkGlyph3D()
+    glyph.SetInputData(pointPolyData)
+    glyph.SetSourceConnection(sphere.GetOutputPort())
+    #glyph.SetVectorModeToUseNormal()
+    #glyph.SetScaleModeToScaleByVector()
+    #glyph.SetScaleFactor(0.25)
+    delaunay.SetInputConnection(glyph.GetOutputPort())
+
+    surfaceFilter = vtk.vtkDataSetSurfaceFilter()
+    surfaceFilter.SetInputConnection(delaunay.GetOutputPort())
+
+    smoother = vtk.vtkButterflySubdivisionFilter()
+    smoother.SetInputConnection(surfaceFilter.GetOutputPort())
+    smoother.SetNumberOfSubdivisions(3)
+    smoother.Update()
+
+    delaunaySmooth = vtk.vtkDelaunay3D()
+    delaunaySmooth.SetInputData(smoother.GetOutput())
+    delaunaySmooth.Update()
+
+    smoothSurfaceFilter = vtk.vtkDataSetSurfaceFilter()
+    smoothSurfaceFilter.SetInputConnection(delaunaySmooth.GetOutputPort())
+
+    normals = vtk.vtkPolyDataNormals()
+    normals.SetInputConnection(smoothSurfaceFilter.GetOutputPort())
+    normals.SetFeatureAngle(100.0)
+
+    self.tumorModel_Needle.SetPolyDataConnection(normals.GetOutputPort())
+
+    self.tumorModel_Needle.Modified()
 
 #
 # LumpNav2Test
