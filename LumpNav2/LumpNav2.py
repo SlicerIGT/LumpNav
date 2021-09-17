@@ -12,6 +12,11 @@ from slicer.util import VTKObservationMixin
 # LumpNav2
 #
 
+#Finding where guidelet.py and ultrasound.py are stored:
+#C:\Users\(_NAME_)\AppData\Roaming\NA-MIC\Extensions-28257\SlicerIGT\lib\Slicer-4.10\qt-scripted-modules\Guidelet\GuideletLib\Guidelet.py
+#C:\Users\(_NAME_)\AppData\Roaming\NA-MIC\Extensions-28257\SlicerIGT\lib\Slicer-4.10\qt-scripted-modules\Guidelet\GuideletLib\UltraSound.py
+
+
 class LumpNav2(ScriptedLoadableModule):
   """Uses ScriptedLoadableModule base class, available at:
   https://github.com/Slicer/Slicer/blob/master/Base/Python/slicer/ScriptedLoadableModule.py
@@ -239,6 +244,9 @@ class LumpNav2Widget(ScriptedLoadableModuleWidget, VTKObservationMixin):
     self.ui.cauteryVisibilityButton.checked = cauteryVisible
     self.ui.cauteryVisibilityButton.connect('toggled(bool)', self.onCauteryVisibilityToggled)
 
+    #contour
+    self.ui.brightnessSliderWidget.connect('valuesChanged(double, double)', self.onBrightnessSliderChanged)
+    self.ui.markPointsButton.connect('toggled(bool)', self.onMarkPointsClicked)
     self.ui.threeDViewButton.connect('toggled(bool)', self.on3DViewsToggled)
 
     self.pivotSamplingTimer.connect('timeout()', self.onPivotSamplingTimeout)
@@ -397,6 +405,28 @@ class LumpNav2Widget(ScriptedLoadableModuleWidget, VTKObservationMixin):
   def onUltrasoundSequenceBrowser(self, toggled):
     logging.info("onUltrasoundSequenceBrowserToggled({})".format(toggled))
     self.logic.setUltrasoundSequenceBrowser(toggled)
+
+  #TODO: actually change the brightness
+  def onBrightnessSliderChanged(self):
+    logging.debug('onBrightnessSliderChanged')
+    self.setImageMinMaxLevel(self.brightnessSliderWidget.minimumValue, self.brightnessSliderWidget.maximumValue)
+
+  #TODO: 
+  def onMarkPointsClicked(self, pushed):
+    self.ui.erasePointsButton.setChecked(False)
+    logging.info("Mark Points clicked")
+    logging.debug('onPlaceClicked')
+    interactionNode = slicer.app.applicationLogic().GetInteractionNode()
+    if pushed:
+      # activate placement mode
+      selectionNode = slicer.app.applicationLogic().GetSelectionNode()
+      selectionNode.SetReferenceActivePlaceNodeClassName("vtkMRMLMarkupsFiducialNode")
+      selectionNode.SetActivePlaceNodeID(self.logic.tumorMarkups_Needle.GetID())
+      interactionNode.SetPlaceModePersistence(1)
+      interactionNode.SetCurrentInteractionMode(interactionNode.Place)
+    else:
+      # deactivate placement mode
+      interactionNode.SetCurrentInteractionMode(interactionNode.ViewTransform)
 
   def setCustomStyle(self, visible):
     """
@@ -700,6 +730,8 @@ class LumpNav2Logic(ScriptedLoadableModuleLogic, VTKObservationMixin):
 
   TRACKING_SEQUENCE_BROWSER = "TrackingSequenceBrowser"
   ULTRASOUND_SEQUENCE_BROWSER = "UltrasoundSequenceBrowser"
+
+  TUMOR_MARKUPS_NEEDLE = "TumorMarkups_Needle"
   
   def __init__(self):
     """
@@ -713,6 +745,8 @@ class LumpNav2Logic(ScriptedLoadableModuleLogic, VTKObservationMixin):
     self.scaling_Intercept = 0.01663333
     self.scaling_Slope = 0.00192667
 
+    self.tumorMarkups_Needle = None
+    self.tumorMarkups_NeedleObserver = None
   def resourcePath(self, filename):
     """
     Returns the full path to the given resource file.
@@ -938,6 +972,20 @@ class LumpNav2Logic(ScriptedLoadableModuleLogic, VTKObservationMixin):
     sequenceBrowserUltrasound.SetPlayback(sequenceNode, True)
     sequenceBrowserUltrasound.SetRecordingActive(False)
 
+    #create markups node to save all fiducials in the needle coordinate system.
+    #TODO: Do we need to set paramaterNode.SetNodeReferenceID here? When do we do that again?
+    tumorMarkups_Needle = parameterNode.GetNodeReference(self.TUMOR_MARKUPS_NEEDLE)
+
+    if tumorMarkups_Needle is None:
+      tumorMarkups_Needle = slicer.vtkMRMLMarkupsFiducialNode()
+      tumorMarkups_Needle.SetName("T")
+      slicer.mrmlScene.AddNode(tumorMarkups_Needle)
+      tumorMarkups_Needle.CreateDefaultDisplayNodes()
+      tumorMarkups_Needle.GetDisplayNode().SetTextScale(0)
+    self.setAndObserveTumorMarkupsNode(tumorMarkups_Needle)
+    self.tumorMarkups_Needle.SetAndObserveTransformNodeID(needleToReference.GetID())
+
+
   def setupTransformHierarchy(self):
     """
     Sets up transform nodes in the scene if they don't exist yet.
@@ -1089,7 +1137,29 @@ class LumpNav2Logic(ScriptedLoadableModuleLogic, VTKObservationMixin):
     parameterNode = self.getParameterNode()
     sequenceBrowserUltrasound = parameterNode.GetNodeReference(self.ULTRASOUND_SEQUENCE_BROWSER)
     sequenceBrowserUltrasound.SetRecordingActive(recording) #stop
+  
+  #TODO: is this the place for this? I feel like it should be in widget?
+  def setAndObserveTumorMarkupsNode(self, tumorMarkups_Needle):
+    logging.debug("setAndObserveTumorMarkupsNode")
+    if tumorMarkups_Needle == self.tumorMarkups_Needle and self.tumorMarkups_NeedleObserver:
+      # no change and node is already observed
+      return
+    # Remove observer to old parameter node
+    if self.tumorMarkups_Needle and self.tumorMarkups_NeedleObserver:
+      self.tumorMarkups_Needle.RemoveObserver(self.tumorMarkups_NeedleObserver)
+      self.tumorMarkups_NeedleObserver = None
+    # Set and observe new parameter node
+    self.tumorMarkups_Needle = tumorMarkups_Needle
+    if self.tumorMarkups_Needle:
+      if slicer.app.majorVersion*100+slicer.app.minorVersion >= 411:
+        self.tumorMarkups_NeedleObserver = self.tumorMarkups_Needle.AddObserver(slicer.vtkMRMLMarkupsNode.PointModifiedEvent, self.onTumorMarkupsNodeModified)
+      else:
+        self.tumorMarkups_NeedleObserver = self.tumorMarkups_Needle.AddObserver(vtk.vtkCommand.ModifiedEvent , self.onTumorMarkupsNodeModified)
 
+  #TODO: Wrong class placement - should be in widget
+  def onTumorMarkupsNodeModified(self, observer, eventid):
+    logging.debug("onTumorMarkupsNodeModified")
+    self.createTumorFromMarkups()
 
 #
 # LumpNav2Test
