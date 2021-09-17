@@ -248,8 +248,8 @@ class LumpNav2Widget(ScriptedLoadableModuleWidget, VTKObservationMixin):
     self.ui.brightnessSliderWidget.connect('valuesChanged(double, double)', self.onBrightnessSliderChanged)
     self.ui.markPointsButton.connect('toggled(bool)', self.onMarkPointsClicked)
     self.ui.threeDViewButton.connect('toggled(bool)', self.on3DViewsToggled)
-    self.ui.deleteLastFiducialButton('clicked()', self.onDeleteLastFiducialClicked)
-    self.ui.deleteAllFiducialsButton('clicked()', self.onDeleteAllFiducialsClicked)
+    self.ui.deleteLastFiducialButton.connect('clicked()', self.onDeleteLastFiducialClicked)
+    self.ui.deleteAllFiducialsButton.connect('clicked()', self.onDeleteAllFiducialsClicked)
 
     self.pivotSamplingTimer.connect('timeout()', self.onPivotSamplingTimeout)
 
@@ -729,6 +729,7 @@ class LumpNav2Logic(ScriptedLoadableModuleLogic, VTKObservationMixin):
   CAUTERY_MODEL = "CauteryModel"
   CAUTERY_VISIBILITY_SETTING = "LumpNav2/CauteryVisible"
   CAUTERY_MODEL_FILENAME = "CauteryModel.stl"
+  TUMOR_MODEL = "TumorModel"
 
   # Layout codes
 
@@ -756,7 +757,10 @@ class LumpNav2Logic(ScriptedLoadableModuleLogic, VTKObservationMixin):
     self.scaling_Slope = 0.00192667
 
     self.tumorMarkups_Needle = None
-    self.tumorMarkups_NeedleObserver = None
+    self.tumorMarkupAddedObserverTag = None
+    self.tumorMarkupEndInteractionObserverTag = None
+
+
   def resourcePath(self, filename):
     """
     Returns the full path to the given resource file.
@@ -940,6 +944,13 @@ class LumpNav2Logic(ScriptedLoadableModuleLogic, VTKObservationMixin):
 
     cauteryVisible = slicer.util.settingsValue(self.CAUTERY_VISIBILITY_SETTING, True, converter=slicer.util.toBool)
     cauteryModel.SetDisplayVisibility(cauteryVisible)
+
+    # Create tumor model
+
+    tumorModel = slicer.mrmlScene.AddNewNodeByClass("vtkMRMLModelNode", self.TUMOR_MODEL)
+    parameterNode.SetNodeReferenceID(self.TUMOR_MODEL, tumorModel.GetID())
+
+    # OpenIGTLink connection
 
     self.setupPlusServer()
 
@@ -1148,24 +1159,27 @@ class LumpNav2Logic(ScriptedLoadableModuleLogic, VTKObservationMixin):
     sequenceBrowserUltrasound = parameterNode.GetNodeReference(self.ULTRASOUND_SEQUENCE_BROWSER)
     sequenceBrowserUltrasound.SetRecordingActive(recording) #stop
   
-  #TODO: is this the place for this? I feel like it should be in widget?
   def setAndObserveTumorMarkupsNode(self, tumorMarkups_Needle):
     logging.debug("setAndObserveTumorMarkupsNode")
-    if tumorMarkups_Needle == self.tumorMarkups_Needle and self.tumorMarkups_NeedleObserver:
-      # no change and node is already observed
+
+    if tumorMarkups_Needle == self.tumorMarkups_Needle and self.tumorMarkupAddedObserverTag:  # no change and node is already observed
       return
+
     # Remove observer to old parameter node
-    if self.tumorMarkups_Needle and self.tumorMarkups_NeedleObserver:
-      self.tumorMarkups_Needle.RemoveObserver(self.tumorMarkups_NeedleObserver)
-      self.tumorMarkups_NeedleObserver = None
+    if self.tumorMarkups_Needle and self.tumorMarkupAddedObserverTag:
+      self.tumorMarkups_Needle.RemoveObserver(self.tumorMarkupAddedObserverTag)
+      self.tumorMarkups_Needle.RemoveObserver(self.tumorMarkupEndInteractionObserverTag)
+      self.tumorMarkupAddedObserverTag = None
+      self.tumorMarkupAddedObserverTag = None
+
     # Set and observe new parameter node
     self.tumorMarkups_Needle = tumorMarkups_Needle
     if self.tumorMarkups_Needle:
-      if slicer.app.majorVersion*100+slicer.app.minorVersion >= 411:
-        self.tumorMarkups_NeedleObserver = self.tumorMarkups_Needle.AddObserver(slicer.vtkMRMLMarkupsNode.PointModifiedEvent, self.onTumorMarkupsNodeModified)
-      else:
-        self.tumorMarkups_NeedleObserver = self.tumorMarkups_Needle.AddObserver(vtk.vtkCommand.ModifiedEvent , self.onTumorMarkupsNodeModified)
-  
+      self.tumorMarkupAddedObserverTag = self.tumorMarkups_Needle.AddObserver(slicer.vtkMRMLMarkupsNode.PointPositionDefinedEvent,
+                                                                              self.onTumorMarkupsNodeModified)
+      self.tumorMarkupEndInteractionObserverTag = self.tumorMarkups_Needle.AddObserver(slicer.vtkMRMLMarkupsNode.PointEndInteractionEvent,
+                                                                              self.onTumorMarkupsNodeModified)
+
   def setDeleteLastFiducialClicked(self):
 
     if self.placeButton.isChecked() : # ensures point placed doesn't get logged twice
@@ -1199,10 +1213,9 @@ class LumpNav2Logic(ScriptedLoadableModuleLogic, VTKObservationMixin):
     self.tumorModel_Needle.SetPolyDataConnection(sphereSource.GetOutputPort())
     self.tumorModel_Needle.Modified()
 
-  #TODO: Wrong class placement - should be in widget
   def onTumorMarkupsNodeModified(self, observer, eventid):
     logging.debug("onTumorMarkupsNodeModified")
-    self.logic.createTumorFromMarkups()
+    self.createTumorFromMarkups()
 
   def createTumorFromMarkups(self):
     logging.debug('createTumorFromMarkups')
@@ -1211,12 +1224,6 @@ class LumpNav2Logic(ScriptedLoadableModuleLogic, VTKObservationMixin):
     points = vtk.vtkPoints()
     cellArray = vtk.vtkCellArray()
     numberOfPoints = self.tumorMarkups_Needle.GetNumberOfFiducials()
-
-    if numberOfPoints>0:
-        self.deleteLastFiducialButton.setEnabled(True)
-        self.deleteAllFiducialsButton.setEnabled(True)
-        self.deleteLastFiducialDuringNavigationButton.setEnabled(True)
-        self.eraseButton.setEnabled(True)
 
     # Surface generation algorithms behave unpredictably when there are not enough points
     # return if there are very few points
@@ -1229,13 +1236,8 @@ class LumpNav2Logic(ScriptedLoadableModuleLogic, VTKObservationMixin):
       self.tumorMarkups_Needle.GetNthFiducialPosition(i,new_coord)
       points.SetPoint(i, new_coord)
 
-    if self.placeButton.isChecked() :
-      if self.loggingFlag == False : 
-        self.loggingFlag = True
-      else :
-        self.loggingFlag = False
-        self.tumorMarkups_Needle.GetNthFiducialPosition(numberOfPoints-1,new_coord)
-        logging.info("Placed point at position: %s", new_coord)
+    self.tumorMarkups_Needle.GetNthFiducialPosition(numberOfPoints-1,new_coord)
+    logging.info("Placed point at position: %s", new_coord)
     
     cellArray.InsertNextCell(numberOfPoints)
     for i in range(numberOfPoints):
@@ -1276,9 +1278,10 @@ class LumpNav2Logic(ScriptedLoadableModuleLogic, VTKObservationMixin):
     normals.SetInputConnection(smoothSurfaceFilter.GetOutputPort())
     normals.SetFeatureAngle(100.0)
 
-    self.tumorModel_Needle.SetPolyDataConnection(normals.GetOutputPort())
+    parameterNode = self.getParameterNode()
+    tumorModel_Needle = parameterNode.GetNodeReference(self.TUMOR_MODEL)
+    tumorModel_Needle.SetAndObservePolyData(normals.GetOutput())
 
-    self.tumorModel_Needle.Modified()
 
 #
 # LumpNav2Test
