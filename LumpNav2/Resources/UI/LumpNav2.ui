@@ -132,9 +132,12 @@
        </widget>
       </item>
       <item>
-       <widget class="QPushButton" name="erasePointsButton">
+       <widget class="QPushButton" name="eraseButton">
         <property name="text">
-         <string>Erase Points</string>
+         <string>Select Points to Erase</string>
+        </property>
+        <property name="checkable">
+         <bool>true</bool>
         </property>
        </widget>
       </item>
@@ -153,7 +156,7 @@
         <item>
          <widget class="QPushButton" name="startRecordingButton">
           <property name="text">
-           <string>Start ecording</string>
+           <string>Start recording</string>
           </property>
          </widget>
         </item>
@@ -194,6 +197,13 @@
       <bool>false</bool>
      </property>
      <layout class="QVBoxLayout" name="verticalLayout_4">
+      <item>
+       <widget class="QPushButton" name="deleteLastFiducialDuringNavigationButton">
+        <property name="text">
+         <string>Delete Last Point</string>
+        </property>
+       </widget>
+      </item>
       <item>
        <layout class="QHBoxLayout" name="horizontalLayout_3">
         <item>
