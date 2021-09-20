@@ -250,6 +250,8 @@ class LumpNav2Widget(ScriptedLoadableModuleWidget, VTKObservationMixin):
     self.ui.threeDViewButton.connect('toggled(bool)', self.on3DViewsToggled)
     self.ui.deleteLastFiducialButton.connect('clicked()', self.onDeleteLastFiducialClicked)
     self.ui.deleteAllFiducialsButton.connect('clicked()', self.onDeleteAllFiducialsClicked)
+    self.ui.deleteLastFiducialDuringNavigationButton.connect('clicked()', self.onDeleteLastFiducialClicked)
+    self.ui.eraseButton.connect('toggled(bool)', self.onEraseClicked)
 
     self.pivotSamplingTimer.connect('timeout()', self.onPivotSamplingTimeout)
 
@@ -415,7 +417,7 @@ class LumpNav2Widget(ScriptedLoadableModuleWidget, VTKObservationMixin):
 
   #TODO: 
   def onMarkPointsClicked(self, pushed):
-    self.ui.erasePointsButton.setChecked(False)
+    self.ui.eraseButton.setChecked(False)
     logging.info("Mark Points clicked")
     logging.debug('onPlaceClicked')
     interactionNode = slicer.app.applicationLogic().GetInteractionNode()
@@ -429,14 +431,39 @@ class LumpNav2Widget(ScriptedLoadableModuleWidget, VTKObservationMixin):
     else:
       # deactivate placement mode
       interactionNode.SetCurrentInteractionMode(interactionNode.ViewTransform)
+    numberOfPoints = self.logic.tumorMarkups_Needle.GetNumberOfFiducials()
+    if numberOfPoints>1:
+      self.ui.deleteLastFiducialButton.setEnabled(True)
+      self.ui.deleteAllFiducialsButton.setEnabled(True)
+      self.ui.deleteLastFiducialDuringNavigationButton.setEnabled(True)
+      self.ui.eraseButton.setEnabled(True)
 
   def onDeleteLastFiducialClicked(self):
     logging.debug('onDeleteLastFiducialClicked')
-    self.logic.setDeleteLastFiducialClicked
+    if self.ui.markPointsButton.isChecked() : # ensures point placed doesn't get logged twice
+      self.ui.markPointsButton.click()
+    numberOfPoints = self.logic.tumorMarkups_Needle.GetNumberOfFiducials()
+    if numberOfPoints<=1:
+      self.ui.deleteLastFiducialButton.setEnabled(False)
+      self.ui.deleteAllFiducialsButton.setEnabled(False)
+      self.ui.deleteLastFiducialDuringNavigationButton.setEnabled(False)
+      self.ui.eraseButton.setEnabled(False)
+      self.ui.eraseButton.setChecked(False)
+    self.logic.setDeleteLastFiducialClicked(numberOfPoints)
 
   def onDeleteAllFiducialsClicked(self):
     logging.debug('onDeleteAllFiducialsClicked')
-    self.logic.setDeleteAllFiducialsClicked
+    self.ui.deleteLastFiducialButton.setEnabled(False)
+    self.ui.deleteAllFiducialsButton.setEnabled(False)
+    self.ui.deleteLastFiducialDuringNavigationButton.setEnabled(False)
+    self.ui.eraseButton.setEnabled(False)
+    self.ui.eraseButton.setChecked(False)
+    self.logic.setDeleteAllFiducialsClicked()
+
+  def onEraseClicked(self, pushed):
+    logging.info("Erase Points clicked")
+    self.ui.markPointsButton.setChecked(False)
+    self.logic.setEraseClicked(pushed)
 
   def setCustomStyle(self, visible):
     """
@@ -760,6 +787,16 @@ class LumpNav2Logic(ScriptedLoadableModuleLogic, VTKObservationMixin):
     self.tumorMarkupAddedObserverTag = None
     self.tumorMarkupEndInteractionObserverTag = None
 
+    #Second fiducial node used to erase points #TODO: should we convert this to parameterNode? Also why
+    #are we calling setAndObserveMarkupsNode at the start?
+    self.eraseMarkups_Needle = slicer.vtkMRMLMarkupsFiducialNode()
+    slicer.mrmlScene.AddNode(self.eraseMarkups_Needle)
+    self.eraseMarkups_Needle.CreateDefaultDisplayNodes() 
+    self.eraseMarkups_NeedleObserver = None
+    self.setAndObserveErasedMarkupsNode(self.eraseMarkups_Needle)
+
+    #TODO: "temporary solution to double function call problem" what does that mean?
+    self.eraserFlag = True
 
   def resourcePath(self, filename):
     """
@@ -1006,6 +1043,10 @@ class LumpNav2Logic(ScriptedLoadableModuleLogic, VTKObservationMixin):
     self.setAndObserveTumorMarkupsNode(tumorMarkups_Needle)
     self.tumorMarkups_Needle.SetAndObserveTransformNodeID(needleToReference.GetID())
 
+    #TODO: convert this to above methodology?
+    parameterNode = self.getParameterNode()
+    needleToReferece = parameterNode.GetNodeReference(self.NEEDLE_TO_REFERENCE)
+    self.eraseMarkups_Needle.SetAndObserveTransformNodeID(needleToReference.GetID())
 
   def setupTransformHierarchy(self):
     """
@@ -1180,38 +1221,66 @@ class LumpNav2Logic(ScriptedLoadableModuleLogic, VTKObservationMixin):
       self.tumorMarkupEndInteractionObserverTag = self.tumorMarkups_Needle.AddObserver(slicer.vtkMRMLMarkupsNode.PointEndInteractionEvent,
                                                                               self.onTumorMarkupsNodeModified)
 
-  def setDeleteLastFiducialClicked(self):
-
-    if self.placeButton.isChecked() : # ensures point placed doesn't get logged twice
-      self.placeButton.click()
-    numberOfPoints = self.tumorMarkups_Needle.GetNumberOfFiducials()
+  def setDeleteLastFiducialClicked(self, numberOfPoints):
     deleted_coord = [0.0, 0.0, 0.0]
     self.tumorMarkups_Needle.GetNthFiducialPosition(numberOfPoints-1,deleted_coord)
     self.tumorMarkups_Needle.RemoveMarkup(numberOfPoints-1)
     logging.info("Deleted last fiducial at %s", deleted_coord)
-    if numberOfPoints<=1:        
-      self.ui.deleteLastFiducialButton.setEnabled(False)
-      self.ui.deleteAllFiducialsButton.setEnabled(False)
-      self.ui.deleteLastFiducialDuringNavigationButton.setEnabled(False)
-      self.ui.eraseButton.setEnabled(False)
-      self.ui.eraseButton.setChecked(False)
+    if numberOfPoints<=1:
       sphereSource = vtk.vtkSphereSource()
       sphereSource.SetRadius(0.001)
-      self.tumorModel_Needle.SetPolyDataConnection(sphereSource.GetOutputPort())
-      self.tumorModel_Needle.Modified()
+      parameterNode = self.getParameterNode()
+      #TODO: Is the TumorModel in the needle coordinate system? Is this right?
+      tumorModel_Needle = parameterNode.GetNodeReference(self.TUMOR_MODEL)
+      tumorModel_Needle.SetPolyDataConnection(sphereSource.GetOutputPort())
+      tumorModel_Needle.Modified()
 
   def setDeleteAllFiducialsClicked(self):
     self.tumorMarkups_Needle.RemoveAllMarkups()
     logging.info("Deleted all fiducials")
-    self.deleteLastFiducialButton.setEnabled(False)
-    self.deleteAllFiducialsButton.setEnabled(False)
-    self.deleteLastFiducialDuringNavigationButton.setEnabled(False)
-    self.eraseButton.setEnabled(False)
-    self.eraseButton.setChecked(False)
+    
     sphereSource = vtk.vtkSphereSource()
     sphereSource.SetRadius(0.001)
-    self.tumorModel_Needle.SetPolyDataConnection(sphereSource.GetOutputPort())
-    self.tumorModel_Needle.Modified()
+    parameterNode = self.getParameterNode()
+    tumorModel_Needle = parameterNode.GetNodeReference(self.TUMOR_MODEL)
+    tumorModel_Needle.SetPolyDataConnection(sphereSource.GetOutputPort())
+    tumorModel_Needle.Modified()
+
+  def setAndObserveErasedMarkupsNode(self, eraseMarkups_Needle):
+    logging.debug("setAndObserveErasedMarkupsNode")
+    if eraseMarkups_Needle == self.eraseMarkups_Needle and self.eraseMarkups_NeedleObserver:
+      # no change and node is already observed
+      return
+    # Remove observer to old parameter node
+    if self.eraseMarkups_Needle and self.eraseMarkups_NeedleObserver:
+      self.eraseMarkups_Needle.RemoveObserver(self.eraseMarkups_NeedleObserver)
+      self.eraseMarkups_NeedleObserver = None
+    # Set and observe new parameter node
+    self.eraseMarkups_Needle = eraseMarkups_Needle
+    if self.eraseMarkups_Needle:
+      if slicer.app.majorVersion*100+slicer.app.minorVersion >= 411:
+        self.eraseMarkups_NeedleObserver = self.eraseMarkups_Needle.AddObserver(slicer.vtkMRMLMarkupsNode.PointModifiedEvent, self.onEraserClicked)
+      else:
+        self.eraseMarkups_NeedleObserver = self.eraseMarkups_Needle.AddObserver(vtk.vtkCommand.ModifiedEvent , self.onEraserClicked)
+
+
+  def setEraseClicked(self, pushed):
+    logging.debug('setEraseClicked')
+    interactionNode = slicer.app.applicationLogic().GetInteractionNode()
+    if pushed:
+      # activate placement mode
+      selectionNode = slicer.app.applicationLogic().GetSelectionNode()
+      selectionNode.SetReferenceActivePlaceNodeClassName("vtkMRMLMarkupsFiducialNode")
+      selectionNode.SetActivePlaceNodeID(self.eraseMarkups_Needle.GetID())
+      interactionNode.SetPlaceModePersistence(1)
+      interactionNode.SetCurrentInteractionMode(interactionNode.Place)
+    else:
+      # deactivate placement mode
+      interactionNode.SetCurrentInteractionMode(interactionNode.ViewTransform)
+  
+  def onEraserClicked(self, observer, eventid) :
+    logging.debug("onEraserClicked")
+    self.removeFiducialPoint()
 
   def onTumorMarkupsNodeModified(self, observer, eventid):
     logging.debug("onTumorMarkupsNodeModified")
@@ -1242,7 +1311,6 @@ class LumpNav2Logic(ScriptedLoadableModuleLogic, VTKObservationMixin):
     cellArray.InsertNextCell(numberOfPoints)
     for i in range(numberOfPoints):
       cellArray.InsertCellPoint(i)
-
     pointPolyData = vtk.vtkPolyData()
     pointPolyData.SetLines(cellArray)
     pointPolyData.SetPoints(points)
@@ -1258,7 +1326,8 @@ class LumpNav2Logic(ScriptedLoadableModuleLogic, VTKObservationMixin):
     #glyph.SetScaleModeToScaleByVector()
     #glyph.SetScaleFactor(0.25)
     delaunay.SetInputConnection(glyph.GetOutputPort())
-
+    #print("delaunay")
+    #print(delaunay)
     surfaceFilter = vtk.vtkDataSetSurfaceFilter()
     surfaceFilter.SetInputConnection(delaunay.GetOutputPort())
 
@@ -1266,23 +1335,84 @@ class LumpNav2Logic(ScriptedLoadableModuleLogic, VTKObservationMixin):
     smoother.SetInputConnection(surfaceFilter.GetOutputPort())
     smoother.SetNumberOfSubdivisions(3)
     smoother.Update()
-
+    
     delaunaySmooth = vtk.vtkDelaunay3D()
     delaunaySmooth.SetInputData(smoother.GetOutput())
     delaunaySmooth.Update()
-
+    #print("delaySmooth")
+    #print(delaunaySmooth)
     smoothSurfaceFilter = vtk.vtkDataSetSurfaceFilter()
     smoothSurfaceFilter.SetInputConnection(delaunaySmooth.GetOutputPort())
-
+    #print("smoothSurface")
+    #print(smoothSurfaceFilter)
     normals = vtk.vtkPolyDataNormals()
     normals.SetInputConnection(smoothSurfaceFilter.GetOutputPort())
     normals.SetFeatureAngle(100.0)
-
+    #print("normals")
+    #print(normals)
     parameterNode = self.getParameterNode()
     tumorModel_Needle = parameterNode.GetNodeReference(self.TUMOR_MODEL)
     tumorModel_Needle.SetAndObservePolyData(normals.GetOutput())
+  
+  def removeFiducialPoint(self):
+
+    self.eraseMarkups_Needle.SetDisplayVisibility(0)
+    if self.eraserFlag == False :
+      self.eraserFlag = True
+      return
+    self.eraserFlag = False
+    numberOfPoints = self.tumorMarkups_Needle.GetNumberOfFiducials()
+    fiducialPosition = [0.0,0.0,0.0]
+    if numberOfPoints == 1 :
+      #self.deleteLastFiducialButton.setEnabled(False)
+      #self.deleteAllFiducialsButton.setEnabled(False)
+      #self.deleteLastFiducialDuringNavigationButton.setEnabled(False)
+      #self.eraseButton.setEnabled(False)
+      #self.eraseButton.setChecked(False)
+      self.tumorMarkups_Needle.GetNthFiducialPosition(0,fiducialPosition)
+      logging.info("Used eraser to remove point at %s", fiducialPosition)
+      self.tumorMarkups_Needle.RemoveMarkup(0)
+      sphereSource = vtk.vtkSphereSource()
+      sphereSource.SetRadius(0.001)
+      #TODO: TumorModel_Needle
+      parameterNode = getParameterNode()
+      tumorModel_Needle = parameterNode.GetNodeReference(self.TUMOR_MODEL)
+      self.tumorModel_Needle.SetPolyDataConnection(sphereSource.GetOutputPort())
+      self.tumorModel_Needle.Modified()
+    elif numberOfPoints > 1 : 
+      numberOfErasedPoints = self.eraseMarkups_Needle.GetNumberOfFiducials()
+      mostRecentPoint = [0.0,0.0,0.0]
+      self.eraseMarkups_Needle.GetNthFiducialPosition(numberOfErasedPoints-1, mostRecentPoint)
+      closestPoint = self.returnClosestPoint(self.tumorMarkups_Needle, mostRecentPoint)
+      tumorMarkups_Needle = parameterNode.GetNodeReference(self.TUMOR_MARKUPS_NEEDLE)
+      self.tumorMarkups_Needle.RemoveMarkup(closestPoint)
+      self.tumorModel_Needle.Modified()
 
 
+  # returns closest marked point to where eraser fiducial was placed
+  def returnClosestPoint(self, fiducialNode, erasePoint) :
+    closestIndex = 0
+    numberOfPoints = fiducialNode.GetNumberOfFiducials()
+    closestPosition = [0.0,0.0,0.0]
+    fiducialNode.GetNthFiducialPosition(0, closestPosition)
+    distanceToClosest = self.returnDistance(closestPosition, erasePoint)
+    fiducialPosition = [0.0,0.0,0.0]
+    for fiducialIndex in range(1, numberOfPoints) :
+      fiducialNode.GetNthFiducialPosition(fiducialIndex, fiducialPosition)
+      distanceToPoint = self.returnDistance(fiducialPosition, erasePoint)
+      if distanceToPoint < distanceToClosest :
+        closestIndex = fiducialIndex
+        distanceToClosest = distanceToPoint
+    fiducialNode.GetNthFiducialPosition(closestIndex, fiducialPosition)
+    logging.info("Used eraser to remove point at %s", fiducialPosition)
+    return closestIndex
+  
+  def returnDistance(self, point1, point2) :
+    import numpy as np
+    tumorFiducialPoint = np.array(point1)
+    eraserPoint = np.array(point2)
+    distance = np.linalg.norm(tumorFiducialPoint-eraserPoint)
+    return distance
 #
 # LumpNav2Test
 #
