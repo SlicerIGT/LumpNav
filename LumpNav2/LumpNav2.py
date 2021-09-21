@@ -631,6 +631,7 @@ class LumpNav2Widget(ScriptedLoadableModuleWidget, VTKObservationMixin):
       if self.observedCauteryModel:
         self.addObserver(self.observedCauteryModel, slicer.vtkMRMLDisplayableNode.DisplayModifiedEvent, self.updateGUIFromMRML)
 
+    # TODO: Do we need to add one of these for tumorModel_Needle and tumorMarkups_Needle?
     currentTrackingSeqBrNode = self._parameterNode.GetNodeReference(self.logic.TRACKING_SEQUENCE_BROWSER)
     if currentTrackingSeqBrNode != self.observedTrackingSeqBrNode:
       self.removeObserver(self.observedTrackingSeqBrNode, vtk.vtkCommand.ModifiedEvent, self.updateGUIFromMRML)
@@ -984,9 +985,41 @@ class LumpNav2Logic(ScriptedLoadableModuleLogic, VTKObservationMixin):
 
     # Create tumor model
 
-    tumorModel = slicer.mrmlScene.AddNewNodeByClass("vtkMRMLModelNode", self.TUMOR_MODEL)
-    parameterNode.SetNodeReferenceID(self.TUMOR_MODEL, tumorModel.GetID())
+    #tumorModel = slicer.mrmlScene.AddNewNodeByClass("vtkMRMLModelNode", self.TUMOR_MODEL)
+    #parameterNode.SetNodeReferenceID(self.TUMOR_MODEL, tumorModel.GetID())
 
+    #TODO: two lines below: is self.TUMOR_MODEL in the needle coordinate system? When do we include the _Needle?
+    #TODO: Line below is not the right way to grab the node, right?
+    tumorModel_Needle = slicer.util.getFirstNodeByName(self.TUMOR_MODEL, className='vtkMRMLModelNode')
+    if tumorModel_Needle is None:
+      tumorModel_Needle = slicer.vtkMRMLModelNode()
+      tumorModel_Needle.SetName("TumorModel")
+      sphereSource = vtk.vtkSphereSource()
+      sphereSource.SetRadius(0.001)
+      tumorModel_Needle.SetPolyDataConnection(sphereSource.GetOutputPort())
+      slicer.mrmlScene.AddNode(tumorModel_Needle)
+      # Add display node
+      modelDisplayNode = slicer.vtkMRMLModelDisplayNode()
+      modelDisplayNode.SetColor(0,1,0) # Green
+      modelDisplayNode.BackfaceCullingOff()
+      modelDisplayNode.SliceIntersectionVisibilityOn()
+      modelDisplayNode.SetSliceIntersectionThickness(4)
+      modelDisplayNode.SetOpacity(0.3) # Between 0-1, 1 being opaque
+      slicer.mrmlScene.AddNode(modelDisplayNode)
+      #TODO: what does the line below this do?
+      tumorModel_Needle.SetAndObserveDisplayNodeID(modelDisplayNode.GetID())
+      parameterNode.SetNodeReferenceID(self.TUMOR_MODEL, tumorModel_Needle.GetID())
+
+    #TODO: Line below is not the right way to grab the node?
+    tumorMarkups_Needle = slicer.util.getFirstNodeByName(self.TUMOR_MARKUPS_NEEDLE, className='vtkMRMLMarkupsFiducialNode')
+    if tumorMarkups_Needle is None:
+      tumorMarkups_Needle = slicer.vtkMRMLMarkupsFiducialNode()
+      tumorMarkups_Needle.SetName(self.TUMOR_MARKUPS_NEEDLE)
+      slicer.mrmlScene.AddNode(tumorMarkups_Needle)
+      tumorMarkups_Needle.CreateDefaultDisplayNodes()
+      tumorMarkups_Needle.GetDisplayNode().SetTextScale(0)
+    self.setAndObserveTumorMarkupsNode(tumorMarkups_Needle)
+    parameterNode.SetNodeReferenceID(self.TUMOR_MARKUPS_NEEDLE, tumorMarkups_Needle.GetID())
     # OpenIGTLink connection
 
     self.setupPlusServer()
@@ -1375,18 +1408,19 @@ class LumpNav2Logic(ScriptedLoadableModuleLogic, VTKObservationMixin):
       sphereSource = vtk.vtkSphereSource()
       sphereSource.SetRadius(0.001)
       #TODO: TumorModel_Needle
-      parameterNode = getParameterNode()
+      parameterNode = self.getParameterNode()
       tumorModel_Needle = parameterNode.GetNodeReference(self.TUMOR_MODEL)
-      self.tumorModel_Needle.SetPolyDataConnection(sphereSource.GetOutputPort())
-      self.tumorModel_Needle.Modified()
+      tumorModel_Needle.SetPolyDataConnection(sphereSource.GetOutputPort())
+      tumorModel_Needle.Modified()
     elif numberOfPoints > 1 : 
       numberOfErasedPoints = self.eraseMarkups_Needle.GetNumberOfFiducials()
       mostRecentPoint = [0.0,0.0,0.0]
       self.eraseMarkups_Needle.GetNthFiducialPosition(numberOfErasedPoints-1, mostRecentPoint)
       closestPoint = self.returnClosestPoint(self.tumorMarkups_Needle, mostRecentPoint)
+      parameterNode = self.getParameterNode()
       tumorMarkups_Needle = parameterNode.GetNodeReference(self.TUMOR_MARKUPS_NEEDLE)
-      self.tumorMarkups_Needle.RemoveMarkup(closestPoint)
-      self.tumorModel_Needle.Modified()
+      tumorMarkups_Needle.RemoveMarkup(closestPoint)
+      tumorMarkups_Needle.Modified()
 
 
   # returns closest marked point to where eraser fiducial was placed
