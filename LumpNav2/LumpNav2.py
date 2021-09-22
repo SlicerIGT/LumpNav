@@ -251,7 +251,7 @@ class LumpNav2Widget(ScriptedLoadableModuleWidget, VTKObservationMixin):
     self.ui.deleteLastFiducialButton.connect('clicked()', self.onDeleteLastFiducialClicked)
     self.ui.deleteAllFiducialsButton.connect('clicked()', self.onDeleteAllFiducialsClicked)
     self.ui.deleteLastFiducialDuringNavigationButton.connect('clicked()', self.onDeleteLastFiducialClicked)
-    self.ui.eraseButton.connect('toggled(bool)', self.onEraseClicked)
+    self.ui.selectPointsToEraseButton.connect('clicked(bool)', self.onSelectPointsToEraseClicked)
 
     self.pivotSamplingTimer.connect('timeout()', self.onPivotSamplingTimeout)
 
@@ -417,7 +417,7 @@ class LumpNav2Widget(ScriptedLoadableModuleWidget, VTKObservationMixin):
 
   #TODO: 
   def onMarkPointsClicked(self, pushed):
-    self.ui.eraseButton.setChecked(False)
+    self.ui.selectPointsToEraseButton.setChecked(False)
     logging.info("Mark Points clicked")
     logging.debug('onPlaceClicked')
     interactionNode = slicer.app.applicationLogic().GetInteractionNode()
@@ -436,7 +436,7 @@ class LumpNav2Widget(ScriptedLoadableModuleWidget, VTKObservationMixin):
       self.ui.deleteLastFiducialButton.setEnabled(True)
       self.ui.deleteAllFiducialsButton.setEnabled(True)
       self.ui.deleteLastFiducialDuringNavigationButton.setEnabled(True)
-      self.ui.eraseButton.setEnabled(True)
+      self.ui.selectPointsToEraseButton.setEnabled(True)
 
   def onDeleteLastFiducialClicked(self):
     logging.debug('onDeleteLastFiducialClicked')
@@ -447,8 +447,8 @@ class LumpNav2Widget(ScriptedLoadableModuleWidget, VTKObservationMixin):
       self.ui.deleteLastFiducialButton.setEnabled(False)
       self.ui.deleteAllFiducialsButton.setEnabled(False)
       self.ui.deleteLastFiducialDuringNavigationButton.setEnabled(False)
-      self.ui.eraseButton.setEnabled(False)
-      self.ui.eraseButton.setChecked(False)
+      self.ui.selectPointsToEraseButton.setEnabled(False)
+      self.ui.selectPointsToEraseButton.setChecked(False)
     self.logic.setDeleteLastFiducialClicked(numberOfPoints)
 
   def onDeleteAllFiducialsClicked(self):
@@ -456,14 +456,14 @@ class LumpNav2Widget(ScriptedLoadableModuleWidget, VTKObservationMixin):
     self.ui.deleteLastFiducialButton.setEnabled(False)
     self.ui.deleteAllFiducialsButton.setEnabled(False)
     self.ui.deleteLastFiducialDuringNavigationButton.setEnabled(False)
-    self.ui.eraseButton.setEnabled(False)
-    self.ui.eraseButton.setChecked(False)
+    self.ui.selectPointsToEraseButton.setEnabled(False)
+    self.ui.selectPointsToEraseButton.setChecked(False)
     self.logic.setDeleteAllFiducialsClicked()
 
-  def onEraseClicked(self, pushed):
+  def onSelectPointsToEraseClicked(self, pushed):
     logging.info("Erase Points clicked")
     self.ui.markPointsButton.setChecked(False)
-    self.logic.setEraseClicked(pushed)
+    self.logic.setSelectPointsToEraseClicked(pushed)
 
   def setCustomStyle(self, visible):
     """
@@ -1285,20 +1285,20 @@ class LumpNav2Logic(ScriptedLoadableModuleLogic, VTKObservationMixin):
       # no change and node is already observed
       return
     # Remove observer to old parameter node
+    #TODO: Should these be self?
     if self.eraseMarkups_Needle and self.eraseMarkups_NeedleObserver:
       self.eraseMarkups_Needle.RemoveObserver(self.eraseMarkups_NeedleObserver)
       self.eraseMarkups_NeedleObserver = None
     # Set and observe new parameter node
     self.eraseMarkups_Needle = eraseMarkups_Needle
     if self.eraseMarkups_Needle:
-      if slicer.app.majorVersion*100+slicer.app.minorVersion >= 411:
-        self.eraseMarkups_NeedleObserver = self.eraseMarkups_Needle.AddObserver(slicer.vtkMRMLMarkupsNode.PointModifiedEvent, self.onEraserClicked)
-      else:
-        self.eraseMarkups_NeedleObserver = self.eraseMarkups_Needle.AddObserver(vtk.vtkCommand.ModifiedEvent , self.onEraserClicked)
+      #TODO: I believe we are observing the wrong event. I think this is cursor moving on screen, not clicks (PointModifiedEvent)
+      #PointAddedEvent requires double clicked
+      #PointPositionDefinedEvent required clicking exactly on point
+      self.eraseMarkups_NeedleObserver = self.eraseMarkups_Needle.AddObserver(slicer.vtkMRMLMarkupsNode.PointAddedEvent, self.onEraserClicked)
 
-
-  def setEraseClicked(self, pushed):
-    logging.debug('setEraseClicked')
+  def setSelectPointsToEraseClicked(self, pushed):
+    logging.debug('setSelectPointsToEraseClicked')
     interactionNode = slicer.app.applicationLogic().GetInteractionNode()
     if pushed:
       # activate placement mode
@@ -1400,8 +1400,8 @@ class LumpNav2Logic(ScriptedLoadableModuleLogic, VTKObservationMixin):
       #self.deleteLastFiducialButton.setEnabled(False)
       #self.deleteAllFiducialsButton.setEnabled(False)
       #self.deleteLastFiducialDuringNavigationButton.setEnabled(False)
-      #self.eraseButton.setEnabled(False)
-      #self.eraseButton.setChecked(False)
+      #self.selectPointsToEraseButton.setEnabled(False)
+      #self.selectPointsToEraseButton.setChecked(False)
       self.tumorMarkups_Needle.GetNthFiducialPosition(0,fiducialPosition)
       logging.info("Used eraser to remove point at %s", fiducialPosition)
       self.tumorMarkups_Needle.RemoveMarkup(0)
