@@ -1297,8 +1297,8 @@ class LumpNav2Logic(ScriptedLoadableModuleLogic, VTKObservationMixin):
       #PointPositionDefinedEvent required clicking exactly on point
       #LockModifiedEvent adds fiducials somehow?!?
       #DisplayModifiedEvent erases point when entering scene with cursor & when double clicking
-      self.eraseMarkups_NeedleObserver = self.eraseMarkups_Needle.AddObserver(slicer.vtkMRMLMarkupsNode.PointAddedEvent, self.onEraserClicked)
-
+      self.eraseMarkups_NeedleObserver = self.eraseMarkups_Needle.AddObserver(slicer.vtkMRMLMarkupsNode.PointPositionDefinedEvent, self.onEraserClicked)
+      #TODO: Lock points when placed
   def setSelectPointsToEraseClicked(self, pushed):
     logging.debug('setSelectPointsToEraseClicked')
     interactionNode = slicer.app.applicationLogic().GetInteractionNode()
