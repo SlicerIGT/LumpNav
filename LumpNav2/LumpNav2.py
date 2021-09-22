@@ -1363,6 +1363,7 @@ class LumpNav2Logic(ScriptedLoadableModuleLogic, VTKObservationMixin):
     delaunay.SetInputConnection(glyph.GetOutputPort())
     #print("delaunay")
     #print(delaunay)
+    delaunay.Update()
     surfaceFilter = vtk.vtkDataSetSurfaceFilter()
     surfaceFilter.SetInputConnection(delaunay.GetOutputPort())
 
@@ -1385,6 +1386,7 @@ class LumpNav2Logic(ScriptedLoadableModuleLogic, VTKObservationMixin):
     normals.SetFeatureAngle(100.0)
     #print("normals")
     #print(normals)
+    normals.Update()
     parameterNode = self.getParameterNode()
     tumorModel_Needle = parameterNode.GetNodeReference(self.TUMOR_MODEL)
     tumorModel_Needle.SetAndObservePolyData(normals.GetOutput())
