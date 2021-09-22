@@ -132,7 +132,7 @@
        </widget>
       </item>
       <item>
-       <widget class="QPushButton" name="eraseButton">
+       <widget class="QPushButton" name="selectPointsToEraseButton">
         <property name="text">
          <string>Select Points to Erase</string>
         </property>
