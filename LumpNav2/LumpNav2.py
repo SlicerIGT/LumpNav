@@ -1293,8 +1293,10 @@ class LumpNav2Logic(ScriptedLoadableModuleLogic, VTKObservationMixin):
     self.eraseMarkups_Needle = eraseMarkups_Needle
     if self.eraseMarkups_Needle:
       #TODO: I believe we are observing the wrong event. I think this is cursor moving on screen, not clicks (PointModifiedEvent)
-      #PointAddedEvent requires double clicked
+      #PointAddedEvent requires double/tripple click
       #PointPositionDefinedEvent required clicking exactly on point
+      #LockModifiedEvent adds fiducials somehow?!?
+      #DisplayModifiedEvent erases point when entering scene with cursor & when double clicking
       self.eraseMarkups_NeedleObserver = self.eraseMarkups_Needle.AddObserver(slicer.vtkMRMLMarkupsNode.PointAddedEvent, self.onEraserClicked)
 
   def setSelectPointsToEraseClicked(self, pushed):
