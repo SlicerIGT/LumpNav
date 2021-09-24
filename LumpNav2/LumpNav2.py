@@ -244,7 +244,9 @@ class LumpNav2Widget(ScriptedLoadableModuleWidget, VTKObservationMixin):
     self.ui.cauteryVisibilityButton.checked = cauteryVisible
     self.ui.cauteryVisibilityButton.connect('toggled(bool)', self.onCauteryVisibilityToggled)
 
-    #contour
+    self.ui.displayDistanceButton.connect('toggled(bool)', self.onDisplayDistanceClicked)
+
+    #contouring
     self.ui.brightnessSliderWidget.connect('valuesChanged(double, double)', self.onBrightnessSliderChanged)
     self.ui.markPointsButton.connect('toggled(bool)', self.onMarkPointsClicked)
     self.ui.threeDViewButton.connect('toggled(bool)', self.on3DViewsToggled)
@@ -252,7 +254,7 @@ class LumpNav2Widget(ScriptedLoadableModuleWidget, VTKObservationMixin):
     self.ui.deleteAllFiducialsButton.connect('clicked()', self.onDeleteAllFiducialsClicked)
     self.ui.deleteLastFiducialDuringNavigationButton.connect('clicked()', self.onDeleteLastFiducialClicked)
     self.ui.selectPointsToEraseButton.connect('clicked(bool)', self.onSelectPointsToEraseClicked)
-
+    self.ui.markPointCauteryTipButton.connect('clicked()', self.onMarkPointCauteryTipClicked)
     self.pivotSamplingTimer.connect('timeout()', self.onPivotSamplingTimeout)
 
     self.initializeParameterNode() # Make sure parameter node is initialized (needed for module reload)
@@ -464,6 +466,13 @@ class LumpNav2Widget(ScriptedLoadableModuleWidget, VTKObservationMixin):
     logging.info("Erase Points clicked")
     self.ui.markPointsButton.setChecked(False)
     self.logic.setSelectPointsToEraseClicked(pushed)
+
+  def onMarkPointCauteryTipClicked(self):
+    logging.info("Mark point at cautery tip clicked")
+  
+  def onDisplayDistanceClicked(self, toggled):
+    logging.info("onDisplayDistanceClicked")
+    self.logic.setDisplayDistanceClicked(toggled)
 
   def setCustomStyle(self, visible):
     """
@@ -765,6 +774,8 @@ class LumpNav2Logic(ScriptedLoadableModuleLogic, VTKObservationMixin):
   LAYOUT_TRIPLE3D = 502
   LAYOUT_DUAL3D = 503
 
+  DISTANCE_TEXT_SCALE = '3'
+
   # Sequence names
 
   TRACKING_SEQUENCE_BROWSER = "TrackingSequenceBrowser"
@@ -799,6 +810,8 @@ class LumpNav2Logic(ScriptedLoadableModuleLogic, VTKObservationMixin):
     #TODO: "temporary solution to double function call problem" what does that mean?
     self.eraserFlag = True
 
+    self.hideDistance = True
+  
   def resourcePath(self, filename):
     """
     Returns the full path to the given resource file.
@@ -816,6 +829,9 @@ class LumpNav2Logic(ScriptedLoadableModuleLogic, VTKObservationMixin):
       parameterNode.SetParameter("Threshold", "100.0")
     if not parameterNode.GetParameter("Invert"):
       parameterNode.SetParameter("Invert", "false")
+
+    parameterNode = self.getParameterNode()
+    parameterNode.SetAttribute("TipToSurfaceDistanceTextScale", "3")
 
   def addCustomLayouts(self):
     layout2D3D =\
@@ -919,6 +935,7 @@ class LumpNav2Logic(ScriptedLoadableModuleLogic, VTKObservationMixin):
     """
     Sets up the Slicer scene. Creates nodes if they are missing.
     """
+
     parameterNode = self.getParameterNode()
 
     self.setupTransformHierarchy()
@@ -1077,10 +1094,40 @@ class LumpNav2Logic(ScriptedLoadableModuleLogic, VTKObservationMixin):
     self.tumorMarkups_Needle.SetAndObserveTransformNodeID(needleToReference.GetID())
 
     #TODO: convert this to above methodology?
-    parameterNode = self.getParameterNode()
     needleToReferece = parameterNode.GetNodeReference(self.NEEDLE_TO_REFERENCE)
     self.eraseMarkups_Needle.SetAndObserveTransformNodeID(needleToReference.GetID())
 
+    # Set up breach warning node
+    logging.debug('Set up breach warning')
+    self.breachWarningNode = slicer.util.getFirstNodeByName('LumpNavBreachWarning')
+
+    if not self.breachWarningNode:
+      self.breachWarningNode = slicer.mrmlScene.CreateNodeByClass('vtkMRMLBreachWarningNode')
+      self.breachWarningNode.UnRegister(None) # Python variable already holds a reference to it
+      self.breachWarningNode.SetName("LumpNavBreachWarning")
+      slicer.mrmlScene.AddNode(self.breachWarningNode)
+      self.breachWarningNode.SetPlayWarningSound(True)
+      self.breachWarningNode.SetWarningColor(1,0,0)
+      tumorModel_Needle = parameterNode.GetNodeReference(self.TUMOR_MODEL)
+      self.breachWarningNode.SetOriginalColor(tumorModel_Needle.GetDisplayNode().GetColor())
+      cauteryTipToCautery = parameterNode.GetNodeReference(self.CAUTERYTIP_TO_CAUTERY)
+      self.breachWarningNode.SetAndObserveToolTransformNodeId(cauteryTipToCautery.GetID())
+      self.breachWarningNode.SetAndObserveWatchedModelNodeID(tumorModel_Needle.GetID())
+      self.breachWarningNodeObserver = self.breachWarningNode.AddObserver(vtk.vtkCommand.ModifiedEvent, self.onBreachWarningNodeChanged)
+      breachWarningLogic = slicer.modules.breachwarning.logic()
+      # Line properties can only be set after the line is creaed (made visible at least once)
+      breachWarningLogic.SetLineToClosestPointVisibility(True, self.breachWarningNode)
+      #TODO: fix TipToSurfaceDistanceTextScale settings
+      #print(bool(parameterNode.GetParameter('TipToSurfaceDistanceTextScale')))
+      distanceTextScale = '3'#parameterNode.GetParameter('TipToSurfaceDistanceTextScale')
+      #TODO: distance text scale is none
+      if not distanceTextScale:
+        print("distanceTextScale:", distanceTextScale)
+        breachWarningLogic.SetLineToClosestPointTextScale( float(distanceTextScale), self.breachWarningNode)
+        breachWarningLogic.SetLineToClosestPointColor(0,0,1, self.breachWarningNode)
+        breachWarningLogic.SetLineToClosestPointVisibility(False, self.breachWarningNode)
+      
+    
   def setupTransformHierarchy(self):
     """
     Sets up transform nodes in the scene if they don't exist yet.
@@ -1299,6 +1346,7 @@ class LumpNav2Logic(ScriptedLoadableModuleLogic, VTKObservationMixin):
       #DisplayModifiedEvent erases point when entering scene with cursor & when double clicking
       self.eraseMarkups_NeedleObserver = self.eraseMarkups_Needle.AddObserver(slicer.vtkMRMLMarkupsNode.PointPositionDefinedEvent, self.onEraserClicked)
       #TODO: Lock points when placed
+  
   def setSelectPointsToEraseClicked(self, pushed):
     logging.debug('setSelectPointsToEraseClicked')
     interactionNode = slicer.app.applicationLogic().GetInteractionNode()
@@ -1451,6 +1499,41 @@ class LumpNav2Logic(ScriptedLoadableModuleLogic, VTKObservationMixin):
     eraserPoint = np.array(point2)
     distance = np.linalg.norm(tumorFiducialPoint-eraserPoint)
     return distance
+  
+  def onBreachWarningNodeChanged(self, observer, eventid) :
+    self.showDistanceToTumor()
+  
+  def showDistanceToTumor(self) :
+    if self.hideDistance : 
+      return
+    for i in range (0,3) : # There will always be three threeD views mapped in layout when the navigation panel is toggled
+      view = slicer.app.layoutManager().threeDWidget(i).threeDView()
+      distanceToTumor = self.breachWarningNode.GetClosestDistanceToModelFromToolTip()
+      if distanceToTumor > 10 : # Only show distance with 2 decimal places if the cautery is within 10mm of the tumor boundary
+        view.setCornerAnnotationText("{0:.1f}mm".format(self.breachWarningNode.GetClosestDistanceToModelFromToolTip()))
+      else :
+        view.setCornerAnnotationText("{0:.2f}mm".format(self.breachWarningNode.GetClosestDistanceToModelFromToolTip()))
+
+  def setDisplayDistanceClicked(self) :
+    logging.debug("setDisplayDistanceClicked")
+    logging.info("Display Distance to Tumor button clicked")
+    if self.hideDistance == False :
+      self.hideDistance = True
+      for i in range (0,3) : # Clear all text
+        view = slicer.app.layoutManager().threeDWidget(i).threeDView()
+        view.cornerAnnotation().ClearAllTexts()
+      return
+    self.hideDistance = False
+    distanceTextProperty = vtk.vtkTextProperty()
+    distanceTextProperty.BoldOn()
+    for i in range(0,3):
+      view = slicer.app.layoutManager().threeDWidget(i).threeDView()
+      view.cornerAnnotation().UpperLeft
+      view.cornerAnnotation().SetNonlinearFontScaleFactor(0.9)
+      view.cornerAnnotation().SetMaximumFontSize(35)
+      view.cornerAnnotation().SetTextProperty(distanceTextProperty)
+
+
 #
 # LumpNav2Test
 #
