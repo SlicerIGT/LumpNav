@@ -92,7 +92,7 @@
       <string>Tumor contouring</string>
      </property>
      <property name="checked">
-      <bool>false</bool>
+      <bool>true</bool>
      </property>
      <layout class="QVBoxLayout" name="verticalLayout_3">
       <item>
@@ -106,50 +106,55 @@
        </widget>
       </item>
       <item>
-       <layout class="QHBoxLayout" name="horizontalLayout_4"/>
+       <layout class="QHBoxLayout" name="horizontalLayout_4">
+        <item>
+         <widget class="QPushButton" name="deleteLastFiducialButton">
+          <property name="enabled">
+           <bool>true</bool>
+          </property>
+          <property name="text">
+           <string>Delete Last Point</string>
+          </property>
+          <property name="checkable">
+           <bool>false</bool>
+          </property>
+          <property name="checked">
+           <bool>false</bool>
+          </property>
+         </widget>
+        </item>
+        <item>
+         <widget class="QPushButton" name="deleteAllFiducialsButton">
+          <property name="text">
+           <string>Delete All Points</string>
+          </property>
+         </widget>
+        </item>
+       </layout>
       </item>
       <item>
-       <widget class="QPushButton" name="deleteAllFiducialsButton">
-        <property name="text">
-         <string>Delete All Points</string>
-        </property>
-       </widget>
-      </item>
-      <item>
-       <widget class="QPushButton" name="deleteLastFiducialButton">
-        <property name="enabled">
-         <bool>true</bool>
-        </property>
-        <property name="text">
-         <string>Delete Last Point</string>
-        </property>
-        <property name="checkable">
-         <bool>false</bool>
-        </property>
-        <property name="checked">
-         <bool>false</bool>
-        </property>
-       </widget>
-      </item>
-      <item>
-       <widget class="QPushButton" name="selectPointsToEraseButton">
-        <property name="text">
-         <string>Select Points to Erase</string>
-        </property>
-        <property name="checkable">
-         <bool>true</bool>
-        </property>
-       </widget>
-      </item>
-      <item>
-       <widget class="QPushButton" name="markPointsButton">
-        <property name="text">
-         <string>Mark Points</string>
-        </property>
-        <property name="checkable">
-         <bool>true</bool>
-        </property>
-       </widget>
+       <layout class="QHBoxLayout" name="horizontalLayout_5">
+        <item>
+         <widget class="QPushButton" name="markPointsButton">
+          <property name="text">
+           <string>Mark Points</string>
+          </property>
+          <property name="checkable">
+           <bool>true</bool>
+          </property>
+         </widget>
+        </item>
+        <item>
+         <widget class="QPushButton" name="selectPointsToEraseButton">
+          <property name="text">
+           <string>Select Points to Erase</string>
+          </property>
+          <property name="checkable">
+           <bool>true</bool>
+          </property>
+         </widget>
+        </item>
+       </layout>
       </item>
       <item>
        <layout class="QHBoxLayout" name="horizontalLayout_2">
@@ -173,28 +178,12 @@
     </widget>
    </item>
    <item>
-    <widget class="ctkCollapsibleButton" name="contourAdjustmentCollpsibleButton">
-     <property name="text">
-      <string>Contour Adjustment</string>
-     </property>
-     <layout class="QVBoxLayout" name="verticalLayout_6">
-      <item>
-       <widget class="QPushButton" name="pushButton">
-        <property name="text">
-         <string>PushButton</string>
-        </property>
-       </widget>
-      </item>
-     </layout>
-    </widget>
-   </item>
-   <item>
     <widget class="ctkCollapsibleButton" name="navigationCollapsibleButton">
      <property name="text">
       <string>Navigation</string>
      </property>
      <property name="checked">
-      <bool>false</bool>
+      <bool>true</bool>
      </property>
      <layout class="QVBoxLayout" name="verticalLayout_4">
       <item>
@@ -230,6 +219,35 @@
         <property name="checkable">
          <bool>true</bool>
         </property>
+       </widget>
+      </item>
+      <item>
+       <widget class="QPushButton" name="displayDistanceButton">
+        <property name="text">
+         <string>Display distance to tumor</string>
+        </property>
+        <property name="checkable">
+         <bool>true</bool>
+        </property>
+       </widget>
+      </item>
+      <item>
+       <widget class="ctkCollapsibleButton" name="contourAdjustmentCollpsibleButton">
+        <property name="text">
+         <string>Contour Adjustment</string>
+        </property>
+        <property name="checked">
+         <bool>false</bool>
+        </property>
+        <layout class="QVBoxLayout" name="verticalLayout_6">
+         <item>
+          <widget class="QPushButton" name="markPointCauteryTipButton">
+           <property name="text">
+            <string>Mark point at cautery tip</string>
+           </property>
+          </widget>
+         </item>
+        </layout>
        </widget>
       </item>
      </layout>
