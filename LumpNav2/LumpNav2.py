@@ -244,6 +244,10 @@ class LumpNav2Widget(ScriptedLoadableModuleWidget, VTKObservationMixin):
     cauteryVisible = slicer.util.settingsValue(self.logic.CAUTERY_VISIBILITY_SETTING, True, converter=slicer.util.toBool)
     self.ui.cauteryVisibilityButton.checked = cauteryVisible
     self.ui.cauteryVisibilityButton.connect('toggled(bool)', self.onCauteryVisibilityToggled)
+    warningSoundEnabled = slicer.util.settingsValue(self.logic.WARNING_SOUND_SETTING, True, converter=slicer.util.toBool)
+    self.ui.warningSoundButton.checked = warningSoundEnabled
+    self.ui.warningSoundButton.connect('toggled(bool)', self.onWarningSoundToggled)
+
     self.ui.displayDistanceButton.connect('toggled(bool)', self.onDisplayDistanceClicked)
     self.ui.exitButton.connect('clicked()', self.onExitButtonClicked)
     self.ui.saveSceneButton.connect('clicked()', self.onSaveSceneClicked)
@@ -418,6 +422,10 @@ class LumpNav2Widget(ScriptedLoadableModuleWidget, VTKObservationMixin):
         cauteryModel.SetDisplayVisibility(visible)
 
     self.updateGUIFromMRML()
+
+  def onWarningSoundToggled(self, toggled):
+    logging.info("onWarningSoundToggled({})".format(toggled))
+    self.logic.setWarningSound(toggled)
 
   def getCauteryVisibility(self):
     return slicer.util.settingsValue(self.logic.CAUTERY_VISIBILITY_SETTING, False, converter=slicer.util.toBool)
@@ -1218,6 +1226,7 @@ class LumpNav2Logic(ScriptedLoadableModuleLogic, VTKObservationMixin):
   CAUTERY_MODEL_FILENAME = "CauteryModel.stl"
   TUMOR_MODEL = "TumorModel"
   STICK_MODEL = "StickModel"
+  WARNING_SOUND_SETTING = "LumpNav2/WarningSoundEnabled"
 
   # Layout codes
 
@@ -1400,6 +1409,12 @@ class LumpNav2Logic(ScriptedLoadableModuleLogic, VTKObservationMixin):
       needleModel.SetDisplayVisibility(visible)
       settings = qt.QSettings()
       settings.setValue(self.NEEDLE_VISIBILITY_SETTING, "True" if visible else "False")
+
+  def setWarningSound(self, enabled):
+    if self.breachWarningNode is not None:
+      self.breachWarningNode.SetPlayWarningSound(enabled)
+      settings = qt.QSettings()
+      settings.setValue(self.WARNING_SOUND_SETTING, enabled)
 
   def setCauteryVisibilty(self, visible):
     """
@@ -1639,8 +1654,10 @@ class LumpNav2Logic(ScriptedLoadableModuleLogic, VTKObservationMixin):
     if breachWarningNode is None:
       breachWarningNode = slicer.mrmlScene.AddNewNodeByClass('vtkMRMLBreachWarningNode', self.BREACH_WARNING)
       breachWarningNode.UnRegister(None) # Python variable already holds a reference to it
-      breachWarningNode.SetPlayWarningSound(False)
       breachWarningNode.SetWarningColor(1,0,0) 
+      warningSoundEnabled = slicer.util.settingsValue(self.WARNING_SOUND_SETTING, True, converter=slicer.util.toBool)
+      self.setWarningSound(warningSoundEnabled)
+
       tumorModel_Needle = parameterNode.GetNodeReference(self.TUMOR_MODEL)
       breachWarningNode.SetOriginalColor(tumorModel_Needle.GetDisplayNode().GetColor())
       cauteryTipToCautery = parameterNode.GetNodeReference(self.CAUTERYTIP_TO_CAUTERY)

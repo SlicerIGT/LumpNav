@@ -441,6 +441,19 @@
        </widget>
       </item>
       <item>
+       <widget class="QPushButton" name="warningSoundButton">
+        <property name="text">
+         <string>Disable warning sound</string>
+        </property>
+        <property name="checkable">
+         <bool>true</bool>
+        </property>
+        <property name="checked">
+         <bool>false</bool>
+        </property>
+       </widget>
+      </item>
+      <item>
        <widget class="QPushButton" name="customUiButton">
         <property name="text">
          <string>Custom UI</string>
