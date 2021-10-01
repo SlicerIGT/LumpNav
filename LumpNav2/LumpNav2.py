@@ -498,6 +498,8 @@ class LumpNav2Widget(ScriptedLoadableModuleWidget, VTKObservationMixin):
   def onNormalBrightnessClicked(self):
     logging.info("onNormalBrightnessClicked")
     self.logic.setNormalBrightnessClicked()
+    if toggled:
+      self.logic.setRegionOfInterestNode()
 
   def onBrightBrightnessClicked(self):
     logging.info("onBrightBrightnessClicked")
@@ -1201,6 +1203,7 @@ class LumpNav2Logic(ScriptedLoadableModuleLogic, VTKObservationMixin):
   TRANSD_TO_REFERENCE = "TransdToReference"
   IMAGE_TO_TRANSD = "ImageToTransd"
   CAUTERYCAMERA_TO_CAUTERY = "CauteryCameraToCautery"
+  TRANSD_TO_NEEDLE = "TransdToNeedle"
 
 
   # Ultrasound image
@@ -1227,6 +1230,9 @@ class LumpNav2Logic(ScriptedLoadableModuleLogic, VTKObservationMixin):
   TUMOR_MODEL = "TumorModel"
   STICK_MODEL = "StickModel"
   WARNING_SOUND_SETTING = "LumpNav2/WarningSoundEnabled"
+
+  # Model reconstruction
+  ROI_NODE = "ROI"
 
   # Layout codes
 
@@ -1836,6 +1842,12 @@ class LumpNav2Logic(ScriptedLoadableModuleLogic, VTKObservationMixin):
       parameterNode.SetNodeReferenceID(self.IMAGE_IMAGE, imageImage.GetID())
     imageImage.SetAndObserveTransformNodeID(imageToTransd.GetID())
 
+    # TransdToNeedle to display tumour reconstruction in needle coordinate system
+    # TODO: is this the right way to update TransdToNeedle?
+    transdToNeedle = self.addLinearTransformToScene(self.TRANSD_TO_NEEDLE, parentTransform=needleToReference)
+    parameterNode.SetNodeReferenceID(self.TRANSD_TO_NEEDLE, transdToNeedle.GetID())
+    transdToNeedle.SetAndObserveTransformNodeID(transdToReference.GetID())
+
   def updateImageToTransdFromDepth(self, depthMm):
     """
     Computes ImageToTransd for a specified ultrasound depth setting (millimeters), and updates the ImageToTransd
@@ -1938,6 +1950,26 @@ class LumpNav2Logic(ScriptedLoadableModuleLogic, VTKObservationMixin):
     sequenceBrowserUltrasound = parameterNode.GetNodeReference(self.ULTRASOUND_SEQUENCE_BROWSER)
     sequenceBrowserUltrasound.SetRecordingActive(recording) #stop
 
+  # TODO: are we assuming a useful image will be given when button is pressed?
+  def setRegionOfInterestNode(self):
+    parameterNode = self.getParameterNode()
+    roiNode = parameterNode.GetNodeReference(self.ROI_NODE)
+    if not roiNode:
+      roiNode = slicer.mrmlScene.AddNewNodeByClass("vtkMRMLAnnotationROINode", self.ROI_NODE)
+      parameterNode.SetNodeReferenceID(self.ROI_NODE, roiNode.GetID())
+      roiNode.SetDisplayVisibility(0)
+      # Get center of current slice
+      imageImage = parameterNode.GetNodeReference(self.IMAGE_IMAGE)
+      bounds = [0,0,0,0,0,0]
+      imageImage.GetSliceBounds(bounds, vtk.vtkMatrix4x4())
+      sliceCenter = [(bounds[0] + bounds[1]) / 2, (bounds[2] + bounds[3]) / 2, (bounds[4] + bounds[5]) / 2]
+      roiNode.SetXYZ(sliceCenter)
+      roiNode.SetRadiusXYZ(10, 10, 10)
+      logging.info(f"Added a 10x10x10cm ROI at position: {sliceCenter}")
+      # TODO: do we need to orient ROI to match the image?
+  
+  def setAndObserveTumorMarkupsNode(self, tumorMarkups_Needle):
+    logging.debug("setAndObserveTumorMarkupsNode")
 
   def setDeleteLastFiducialClicked(self, numberOfPoints):
     deleted_coord = [0.0, 0.0, 0.0]
