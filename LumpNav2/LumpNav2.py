@@ -1207,6 +1207,7 @@ class LumpNav2Logic(ScriptedLoadableModuleLogic, VTKObservationMixin):
   IMAGE_TO_TRANSD = "ImageToTransd"
   CAUTERYCAMERA_TO_CAUTERY = "CauteryCameraToCautery"
   TRANSD_TO_NEEDLE = "TransdToNeedle"
+  PREDICTION_TO_TRANSD = "PredictionToTransd"
 
 
   # Ultrasound image
@@ -1966,31 +1967,41 @@ class LumpNav2Logic(ScriptedLoadableModuleLogic, VTKObservationMixin):
     transdToNeedle = parameterNode.GetNodeReference(self.TRANSD_TO_NEEDLE)
     transdToReference = parameterNode.GetNodeReference(self.TRANSD_TO_REFERENCE)
 
-    if toggled:
-      # Move ImageToTransd to TransdToNeedle
-      imageToTransd.SetAndObserveTransformNodeID(transdToNeedle.GetID())
-      self.setRegionOfInterestNode()
-    else:
-      # Move ImageToTransd back
-      imageToTransd.SetAndObserveTransformNodeID(transdToReference.GetID())
-
     # AI tumour reconstruction
     if not toggled and not self.predictionActive:
       return
     if toggled and not self.predictionActive:
       self.setupPredictionProcess()
+
+    # TODO: should a new roi be created each time the button is pressed?
+    # Move ImageToTransd and PredictionToTransd to TransdToNeedle
+    predToTransd = parameterNode.GetNodeReference(self.PREDICTION_TO_TRANSD)
+    if toggled:
+      imageToTransd.SetAndObserveTransformNodeID(transdToNeedle.GetID())
+      predToTransd.SetAndObserveTransformNodeID(transdToNeedle.GetID())
+    # Move back
+    else:
+      imageToTransd.SetAndObserveTransformNodeID(transdToReference.GetID())
+      predToTransd.SetAndObserveTransformNodeID(transdToReference.GetID())
+    self.setRegionOfInterestNode(toggled)
     self.setLivePrediction(toggled)
-    # TODO: remove segmentation display when toggled off?
 
   def setUltrasoundSequenceBrowser(self, recording):
     parameterNode = self.getParameterNode()
     sequenceBrowserUltrasound = parameterNode.GetNodeReference(self.ULTRASOUND_SEQUENCE_BROWSER)
-    sequenceBrowserUltrasound.SetRecordingActive(recording) #stop
+    sequenceBrowserUltrasound.SetRecordingActive(recording)  # stop
 
   # TODO: are we assuming a useful image will be given when button is pressed?
-  def setRegionOfInterestNode(self):
+  def setRegionOfInterestNode(self, toggled):
     parameterNode = self.getParameterNode()
     roiNode = parameterNode.GetNodeReference(self.ROI_NODE)
+
+    if not toggled:
+      return
+    # delete old roi and create new one everytime new process starts
+    if roiNode is not None:
+      slicer.mrmlScene.RemoveNode(roiNode)
+
     if not roiNode:
       roiNode = slicer.mrmlScene.AddNewNodeByClass("vtkMRMLAnnotationROINode", self.ROI_NODE)
       parameterNode.SetNodeReferenceID(self.ROI_NODE, roiNode.GetID())
@@ -2010,23 +2021,44 @@ class LumpNav2Logic(ScriptedLoadableModuleLogic, VTKObservationMixin):
     parameterNode = self.getParameterNode()
     self.segmentationLogic.setModelPath(self.resourcePath(self.AI_MODEL_PATH))
     self.segmentationLogic.setInputImage(parameterNode.GetNodeReference(self.IMAGE_IMAGE))
+
+    # create PredToTransd transform node to track prediction
+    predToTransd = parameterNode.GetNodeReference(self.PREDICTION_TO_TRANSD)
+    if predToTransd is None:
+      transdToReference = parameterNode.GetNodeReference(self.TRANSD_TO_REFERENCE)
+      predToTransd = self.addLinearTransformToScene(self.PREDICTION_TO_TRANSD, transdToReference)
+
+      # get transform of ImageToTransd
+      imageToTransd = parameterNode.GetNodeReference(self.IMAGE_TO_TRANSD)
+      imageToTransdMatrix = vtk.vtkMatrix4x4()
+      imageToTransd.GetMatrixTransformToParent(imageToTransdMatrix)
+      imageToTransdArray = slicer.util.arrayFromVTKMatrix(imageToTransdMatrix)
+      slicer.util.updateTransformMatrixFromArray(predToTransd, imageToTransdArray)
+
+    # set up display node for prediction
     predictionNode = parameterNode.GetNodeReference(self.PREDICTION_VOLUME)
     if predictionNode is None:
       predictionNode = slicer.mrmlScene.AddNewNodeByClass("vtkMRMLScalarVolumeNode", self.PREDICTION_VOLUME)
       parameterNode.SetNodeReferenceID(self.PREDICTION_VOLUME, predictionNode.GetID())
+      predictionNode.SetAndObserveTransformNodeID(predToTransd.GetID())
       predictionNode.CreateDefaultDisplayNodes()
       predictionDisplayNode = predictionNode.GetDisplayNode()
       predictionDisplayNode.SetWindow(110)
       predictionDisplayNode.SetLevel(175)
-      predictionDisplayNode.SetColor(1, 0, 0)  # not working
-      predictionNode.SetAndObserveTransformNodeID(parameterNode.GetNodeReferenceID(self.IMAGE_TO_TRANSD))
-      slicer.util.setSliceViewerLayers(foreground=predictionNode, foregroundOpacity=0.5, fit=True)
+      predictionDisplayNode.SetAndObserveColorNodeID("vtkMRMLColorTableNodeRed")
     self.segmentationLogic.setOutputImage(predictionNode)
 
   def setLivePrediction(self, toggled):
     logging.debug(f"setupPredictionProcess({toggled})")
     self.segmentationLogic.setRealTimePrediction(toggled)
     self.predictionActive = toggled
+    # display prediction in slice view
+    predictionNode = self.getParameterNode().GetNodeReference(self.PREDICTION_VOLUME)
+    if predictionNode is not None:
+      if toggled:
+        slicer.util.setSliceViewerLayers(foreground=predictionNode, foregroundOpacity=0.5, fit=True)
+      else:
+        slicer.util.setSliceViewerLayers(foreground=None)
     # self.setVolumeReconstruction(toggled)
 
   def setVolumeReconstruction(self, toggled):
