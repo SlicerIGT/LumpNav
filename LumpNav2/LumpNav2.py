@@ -399,15 +399,20 @@ class LumpNav2Widget(ScriptedLoadableModuleWidget, VTKObservationMixin):
   def onStartStopRecordingClicked(self, toggled):
     if toggled:
       self.ui.startStopRecordingButton.text = "Stop Recording"
-    #TODO: What am i recording here?
+    #TODO: We dont need this button do we? We are recording in sequences already, right?
     else:
       self.ui.startStopRecordingButton.text = "Start Recording"
 
   def onFreezeUltrasoundClicked(self, toggled):
+    logging.info("onFreezeUltrasoundClicked")
     if toggled:
       self.ui.freezeUltrasoundButton.text = "Un-Freeze"
     else:
       self.ui.freezeUltrasoundButton.text = "Freeze"
+    self.logic.setFreezeUltrasoundClicked()
+
+
+
   def onStartPlusClicked(self, toggled):
     plusServerNode = self._parameterNode.GetNodeReference(self.logic.PLUS_SERVER_NODE)
     if plusServerNode:
@@ -1010,6 +1015,7 @@ class LumpNav2Logic(ScriptedLoadableModuleLogic, VTKObservationMixin):
   CONFIG_TEXT_NODE = "ConfigTextNode"
   PLUS_SERVER_NODE = "PlusServer"
   PLUS_SERVER_LAUNCHER_NODE = "PlusServerLauncher"
+  PLUS_REMOTE_NODE = "PlusRemoteNode"
 
   # Model names and settings
 
@@ -1398,6 +1404,10 @@ class LumpNav2Logic(ScriptedLoadableModuleLogic, VTKObservationMixin):
       parameterNode.SetNodeReferenceID(self.CAUTERYCAMERA_TO_CAUTERY, cauteryCameraToCautery.GetID())
     cauteryCameraToCautery.SetAndObserveTransformNodeID(cauteryToReference.GetID())
 
+    self.usFrozen = False
+
+    
+
   def setupTransformHierarchy(self):
     """
     Sets up transform nodes in the scene if they don't exist yet.
@@ -1605,6 +1615,18 @@ class LumpNav2Logic(ScriptedLoadableModuleLogic, VTKObservationMixin):
     tumorMarkups_Needle = parameterNode.GetNodeReference(self.TUMOR_MARKUPS_NEEDLE)
     tumorMarkups_Needle.AddFiducial(cauteryTipToNeedle.GetElement(0,3), cauteryTipToNeedle.GetElement(1,3), cauteryTipToNeedle.GetElement(2,3))
     logging.info("Tumor point placed at cautery tip, (%s, %s, %s)", cauteryTipToNeedle.GetElement(0,3), cauteryTipToNeedle.GetElement(1,3), cauteryTipToNeedle.GetElement(2,3))
+
+  def setFreezeUltrasoundClicked(self):
+    self.usFrozen = not self.usFrozen
+    parameterNode = self.getParameterNode()
+    plusServerNode = parameterNode.GetNodeReference(self.PLUS_SERVER_NODE)
+    if self.usFrozen:
+      #self.guideletParent.connectorNode.Stop()
+      plusServerNode.StopServer()
+    else:
+      #self.guideletParent.connectorNode.Start()
+      plusServerNode.StartServer()
+
 
   def setAndObserveErasedMarkupsNode(self, eraseMarkups_Needle):
     logging.debug("setAndObserveErasedMarkupsNode")
