@@ -169,16 +169,25 @@
       <item>
        <layout class="QHBoxLayout" name="horizontalLayout_2">
         <item>
-         <widget class="QPushButton" name="startRecordingButton">
+         <widget class="QPushButton" name="startStopRecordingButton">
           <property name="text">
            <string>Start recording</string>
+          </property>
+          <property name="checkable">
+           <bool>true</bool>
+          </property>
+          <property name="checked">
+           <bool>false</bool>
           </property>
          </widget>
         </item>
         <item>
-         <widget class="QPushButton" name="freezeButton">
+         <widget class="QPushButton" name="freezeUltrasoundButton">
           <property name="text">
            <string>Freeze</string>
+          </property>
+          <property name="checkable">
+           <bool>true</bool>
           </property>
          </widget>
         </item>

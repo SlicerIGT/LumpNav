@@ -237,12 +237,13 @@ class LumpNav2Widget(ScriptedLoadableModuleWidget, VTKObservationMixin):
     #contouring
     self.ui.brightnessSliderWidget.connect('valuesChanged(double, double)', self.onBrightnessSliderChanged)
     self.ui.markPointsButton.connect('toggled(bool)', self.onMarkPointsClicked)
-    self.ui.threeDViewButton.connect('toggled(bool)', self.onThreeDViewButton)
     self.ui.deleteLastFiducialButton.connect('clicked()', self.onDeleteLastFiducialClicked)
     self.ui.deleteAllFiducialsButton.connect('clicked()', self.onDeleteAllFiducialsClicked)
     self.ui.deleteLastFiducialDuringNavigationButton.connect('clicked()', self.onDeleteLastFiducialClicked)
     self.ui.selectPointsToEraseButton.connect('clicked(bool)', self.onSelectPointsToEraseClicked)
     self.ui.markPointCauteryTipButton.connect('clicked()', self.onMarkPointCauteryTipClicked)
+    self.ui.startStopRecordingButton.connect('toggled(bool)', self.onStartStopRecordingClicked)
+    self.ui.freezeUltrasoundButton.connect('toggled(bool)', self.onFreezeUltrasoundClicked)
     self.pivotSamplingTimer.connect('timeout()', self.onPivotSamplingTimeout)
     self.initializeParameterNode() # Make sure parameter node is initialized (needed for module reload)
 
@@ -255,6 +256,7 @@ class LumpNav2Widget(ScriptedLoadableModuleWidget, VTKObservationMixin):
     self.ui.bottomAutoCenterCameraButton.connect('clicked()', lambda: self.onAutoCenterButtonClicked('View3') )
     self.ui.increaseDistanceFontSizeButton.connect('clicked()', self.onIncreaseDistanceFontSizeClicked)
     self.ui.decreaseDistanceFontSizeButton.connect('clicked()', self.onDecreaseDistanceFontSizeClicked)
+    self.ui.threeDViewButton.connect('toggled(bool)', self.onThreeDViewButton)
 
     # Add custom layouts
     self.logic.addCustomLayouts()
@@ -394,6 +396,18 @@ class LumpNav2Widget(ScriptedLoadableModuleWidget, VTKObservationMixin):
       self.ui.threeDViewButton.text = "Tripple 3D View"
       slicer.app.layoutManager().setLayout(self.logic.LAYOUT_TRIPLE3D)
 
+  def onStartStopRecordingClicked(self, toggled):
+    if toggled:
+      self.ui.startStopRecordingButton.text = "Stop Recording"
+    #TODO: What am i recording here?
+    else:
+      self.ui.startStopRecordingButton.text = "Start Recording"
+
+  def onFreezeUltrasoundClicked(self, toggled):
+    if toggled:
+      self.ui.freezeUltrasoundButton.text = "Un-Freeze"
+    else:
+      self.ui.freezeUltrasoundButton.text = "Freeze"
   def onStartPlusClicked(self, toggled):
     plusServerNode = self._parameterNode.GetNodeReference(self.logic.PLUS_SERVER_NODE)
     if plusServerNode:
@@ -423,7 +437,6 @@ class LumpNav2Widget(ScriptedLoadableModuleWidget, VTKObservationMixin):
   def onMarkPointsClicked(self, pushed):
     self.ui.selectPointsToEraseButton.setChecked(False)
     logging.info("Mark Points clicked")
-    logging.debug('onPlaceClicked')
     interactionNode = slicer.app.applicationLogic().GetInteractionNode()
     if pushed:
       # activate placement mode
