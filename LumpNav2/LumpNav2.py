@@ -1973,16 +1973,12 @@ class LumpNav2Logic(ScriptedLoadableModuleLogic, VTKObservationMixin):
     if toggled and not self.predictionActive:
       self.setupPredictionProcess()
 
-    # TODO: should a new roi be created each time the button is pressed?
-    # Move ImageToTransd and PredictionToTransd to TransdToNeedle
-    predToTransd = parameterNode.GetNodeReference(self.PREDICTION_TO_TRANSD)
+    # Move ImageToTransd to TransdToNeedle
     if toggled:
       imageToTransd.SetAndObserveTransformNodeID(transdToNeedle.GetID())
-      predToTransd.SetAndObserveTransformNodeID(transdToNeedle.GetID())
-    # Move back
     else:
       imageToTransd.SetAndObserveTransformNodeID(transdToReference.GetID())
-      predToTransd.SetAndObserveTransformNodeID(transdToReference.GetID())
+
     self.setRegionOfInterestNode(toggled)
     self.setLivePrediction(toggled)
 
@@ -1991,7 +1987,6 @@ class LumpNav2Logic(ScriptedLoadableModuleLogic, VTKObservationMixin):
     sequenceBrowserUltrasound = parameterNode.GetNodeReference(self.ULTRASOUND_SEQUENCE_BROWSER)
     sequenceBrowserUltrasound.SetRecordingActive(recording)  # stop
 
-  # TODO: are we assuming a useful image will be given when button is pressed?
   def setRegionOfInterestNode(self, toggled):
     parameterNode = self.getParameterNode()
     roiNode = parameterNode.GetNodeReference(self.ROI_NODE)
@@ -2002,19 +1997,24 @@ class LumpNav2Logic(ScriptedLoadableModuleLogic, VTKObservationMixin):
     if roiNode is not None:
       slicer.mrmlScene.RemoveNode(roiNode)
 
-    if not roiNode:
-      roiNode = slicer.mrmlScene.AddNewNodeByClass("vtkMRMLAnnotationROINode", self.ROI_NODE)
-      parameterNode.SetNodeReferenceID(self.ROI_NODE, roiNode.GetID())
-      roiNode.SetDisplayVisibility(0)
-      # Get center of current slice
-      imageImage = parameterNode.GetNodeReference(self.IMAGE_IMAGE)
-      bounds = [0,0,0,0,0,0]
-      imageImage.GetSliceBounds(bounds, vtk.vtkMatrix4x4())
-      sliceCenter = [(bounds[0] + bounds[1]) / 2, (bounds[2] + bounds[3]) / 2, (bounds[4] + bounds[5]) / 2]
-      roiNode.SetXYZ(sliceCenter)
-      roiNode.SetRadiusXYZ(100, 100, 100)
-      logging.info(f"Added a 10x10x10cm ROI at position: {sliceCenter}")
-      # TODO: do we need to orient ROI to match the image or put it in a coordinate system?
+    # Create new ROI node
+    roiNode = slicer.mrmlScene.AddNewNodeByClass("vtkMRMLAnnotationROINode", self.ROI_NODE)
+    parameterNode.SetNodeReferenceID(self.ROI_NODE, roiNode.GetID())
+    roiNode.SetDisplayVisibility(0)
+
+    # Get needle model transform
+    needleModel = parameterNode.GetNodeReference(self.NEEDLE_MODEL)
+    needleModelTransform = needleModel.GetParentTransformNode()
+    needleModelTransformMatrix = vtk.vtkMatrix4x4()
+    needleModelTransform.GetMatrixTransformToWorld(needleModelTransformMatrix)
+    needleTransformArray = slicer.util.arrayFromVTKMatrix(needleModelTransformMatrix)
+
+    # ROI center is coordinate of needle tip in RAS
+    originRAS = np.array([0, 0, 0, 1])
+    needleTip = tuple(np.matmul(originRAS, needleTransformArray.T)[:3])
+    roiNode.SetXYZ(needleTip)
+    roiNode.SetRadiusXYZ(100, 100, 100)
+    logging.info(f"Added a 10x10x10cm ROI at position: {needleTip}")
 
   def setupPredictionProcess(self):
     logging.debug("setupPredictionProcess")
@@ -2025,15 +2025,8 @@ class LumpNav2Logic(ScriptedLoadableModuleLogic, VTKObservationMixin):
     # create PredToTransd transform node to track prediction
     predToTransd = parameterNode.GetNodeReference(self.PREDICTION_TO_TRANSD)
     if predToTransd is None:
-      transdToReference = parameterNode.GetNodeReference(self.TRANSD_TO_REFERENCE)
-      predToTransd = self.addLinearTransformToScene(self.PREDICTION_TO_TRANSD, transdToReference)
-
-      # get transform of ImageToTransd
-      imageToTransd = parameterNode.GetNodeReference(self.IMAGE_TO_TRANSD)
-      imageToTransdMatrix = vtk.vtkMatrix4x4()
-      imageToTransd.GetMatrixTransformToParent(imageToTransdMatrix)
-      imageToTransdArray = slicer.util.arrayFromVTKMatrix(imageToTransdMatrix)
-      slicer.util.updateTransformMatrixFromArray(predToTransd, imageToTransdArray)
+      predToTransd = self.addLinearTransformToScene(self.PREDICTION_TO_TRANSD)
+      self.segmentationLogic.setOutputTransform(predToTransd)
 
     # set up display node for prediction
     predictionNode = parameterNode.GetNodeReference(self.PREDICTION_VOLUME)
@@ -2063,6 +2056,7 @@ class LumpNav2Logic(ScriptedLoadableModuleLogic, VTKObservationMixin):
 
   def setVolumeReconstruction(self, toggled):
     if toggled:
+      logging.debug(f"setVolumeReconstruction")
       parameterNode = self.getParameterNode()
       volumeReconstructionNode = slicer.mrmlScene.AddNewNodeByClass("vtkMRMLVolumeReconstructionNode")
       volumeReconstructionNode.SetAndObserveInputVolumeNode(parameterNode.GetNodeReference(self.PREDICTION_VOLUME))
