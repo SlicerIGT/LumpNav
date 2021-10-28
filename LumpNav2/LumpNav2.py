@@ -1239,7 +1239,8 @@ class LumpNav2Logic(ScriptedLoadableModuleLogic, VTKObservationMixin):
   ROI_NODE = "ROI"
   AI_MODEL_PATH = "BreastSeg_2021-01-05_model_0.h5"
   PREDICTION_VOLUME = "Prediction"
-  RECONSTRUCTION_VOLUME = "Reconstruction"
+  RECONSTRUCTION_NODE = "ReconstructionNode"
+  RECONSTRUCTION_VOLUME = "ReconstructionVolume"
 
   # Layout codes
 
@@ -1319,7 +1320,6 @@ class LumpNav2Logic(ScriptedLoadableModuleLogic, VTKObservationMixin):
 
 
     # TODO: should this be here?
-    # TODO: should the segmentation logic be instantiated or be imported?
     self.segmentationLogic = slicer.modules.segmentationunet.widgetRepresentation().self().logic
     self.predictionActive = False
 
@@ -1958,6 +1958,7 @@ class LumpNav2Logic(ScriptedLoadableModuleLogic, VTKObservationMixin):
     sequenceBrowserTracking = parameterNode.GetNodeReference(self.TRACKING_SEQUENCE_BROWSER)
     sequenceBrowserTracking.SetRecordingActive(recording) #stop
 
+  # TODO: on first click, image gets stretched and returns to normal once recording is stopped
   def onUltrasoundSequenceBrowserClicked(self, toggled):
     self.setUltrasoundSequenceBrowser(toggled)
 
@@ -1979,7 +1980,6 @@ class LumpNav2Logic(ScriptedLoadableModuleLogic, VTKObservationMixin):
     else:
       imageToTransd.SetAndObserveTransformNodeID(transdToReference.GetID())
 
-    self.setRegionOfInterestNode(toggled)
     self.setLivePrediction(toggled)
 
   def setUltrasoundSequenceBrowser(self, recording):
@@ -2000,21 +2000,15 @@ class LumpNav2Logic(ScriptedLoadableModuleLogic, VTKObservationMixin):
     # Create new ROI node
     roiNode = slicer.mrmlScene.AddNewNodeByClass("vtkMRMLAnnotationROINode", self.ROI_NODE)
     parameterNode.SetNodeReferenceID(self.ROI_NODE, roiNode.GetID())
-    roiNode.SetDisplayVisibility(0)
-
-    # Get needle model transform
-    needleModel = parameterNode.GetNodeReference(self.NEEDLE_MODEL)
-    needleModelTransform = needleModel.GetParentTransformNode()
-    needleModelTransformMatrix = vtk.vtkMatrix4x4()
-    needleModelTransform.GetMatrixTransformToWorld(needleModelTransformMatrix)
-    needleTransformArray = slicer.util.arrayFromVTKMatrix(needleModelTransformMatrix)
-
-    # ROI center is coordinate of needle tip in RAS
-    originRAS = np.array([0, 0, 0, 1])
-    needleTip = tuple(np.matmul(originRAS, needleTransformArray.T)[:3])
-    roiNode.SetXYZ(needleTip)
+    roiNode.SetDisplayVisibility(False)
+    # Get center of current slice
+    imageImage = parameterNode.GetNodeReference(self.IMAGE_IMAGE)
+    bounds = [0, 0, 0, 0, 0, 0]
+    imageImage.GetSliceBounds(bounds, vtk.vtkMatrix4x4())
+    sliceCenter = [(bounds[0] + bounds[1]) / 2, (bounds[2] + bounds[3]) / 2, (bounds[4] + bounds[5]) / 2]
+    roiNode.SetXYZ(sliceCenter)
     roiNode.SetRadiusXYZ(100, 100, 100)
-    logging.info(f"Added a 10x10x10cm ROI at position: {needleTip}")
+    logging.info(f"Added a 10x10x10cm ROI at position: {sliceCenter}")
 
   def setupPredictionProcess(self):
     logging.debug("setupPredictionProcess")
@@ -2043,6 +2037,7 @@ class LumpNav2Logic(ScriptedLoadableModuleLogic, VTKObservationMixin):
 
   def setLivePrediction(self, toggled):
     logging.debug(f"setupPredictionProcess({toggled})")
+    self.setRegionOfInterestNode(toggled)
     self.segmentationLogic.setRealTimePrediction(toggled)
     self.predictionActive = toggled
     # display prediction in slice view
@@ -2052,20 +2047,36 @@ class LumpNav2Logic(ScriptedLoadableModuleLogic, VTKObservationMixin):
         slicer.util.setSliceViewerLayers(foreground=predictionNode, foregroundOpacity=0.5, fit=True)
       else:
         slicer.util.setSliceViewerLayers(foreground=None)
-    # self.setVolumeReconstruction(toggled)
+    self.setVolumeReconstruction(toggled)
 
+  # TODO: reconstruction output is the US image but larger?
+  # TODO: stopping recording crashes slicer
   def setVolumeReconstruction(self, toggled):
+    reconstructionLogic = slicer.modules.volumereconstruction.logic()
+    parameterNode = self.getParameterNode()
     if toggled:
-      logging.debug(f"setVolumeReconstruction")
-      parameterNode = self.getParameterNode()
-      volumeReconstructionNode = slicer.mrmlScene.AddNewNodeByClass("vtkMRMLVolumeReconstructionNode")
-      volumeReconstructionNode.SetAndObserveInputVolumeNode(parameterNode.GetNodeReference(self.PREDICTION_VOLUME))
-      volumeReconstructionNode.SetAndObserveInputROINode(parameterNode.GetNodeReference(self.ROI_NODE))
-      volumeReconstructionLogic = slicer.modules.volumereconstruction.logic()
-      volumeReconstructionLogic.ReconstructVolumeFromSequence(volumeReconstructionNode)
-      reconstructedVolume = volumeReconstructionNode.GetOutputVolumeNode()
-      parameterNode.SetNodeReferenceID(self.RECONSTRUCTION_VOLUME, reconstructedVolume.GetID())
-      slicer.util.setSliceViewerLayers(foreground=reconstructedVolume, fit=True)
+      # Remove pre-existing nodes
+      reconstructionNode = parameterNode.GetNodeReference(self.RECONSTRUCTION_NODE)
+      if reconstructionNode is not None:
+        slicer.mrmlScene.RemoveNode(reconstructionNode)
+      reconstructionVolume = parameterNode.GetNodeReference(self.RECONSTRUCTION_VOLUME)
+      if reconstructionVolume is not None:
+        slicer.mrmlScene.RemoveNode(reconstructionVolume)
+
+      # Start reconstruction
+      logging.info("Starting volume reconstruction")
+      reconstructionNode = slicer.mrmlScene.AddNewNodeByClass("vtkMRMLVolumeReconstructionNode", self.RECONSTRUCTION_NODE)
+      reconstructionNode.SetAndObserveInputVolumeNode(parameterNode.GetNodeReference(self.PREDICTION_VOLUME))
+      reconstructionNode.SetAndObserveInputROINode(parameterNode.GetNodeReference(self.ROI_NODE))
+      # Create volume node for reconstruction output
+      reconstructionVolume = slicer.mrmlScene.AddNewNodeByClass("vtkMRMLScalarVolumeNode", self.RECONSTRUCTION_VOLUME)
+      reconstructionNode.SetAndObserveOutputVolumeNode(reconstructionVolume)
+      reconstructionLogic.StartLiveVolumeReconstruction(reconstructionNode)
+
+    else:
+      logging.info("Stopping volume reconstruction")
+      reconstructionNode = parameterNode.GetNodeReference(self.RECONSTRUCTION_NODE)
+      reconstructionLogic.StopLiveVolumeReconstruction(reconstructionNode)
 
   def setAndObserveTumorMarkupsNode(self, tumorMarkups_Needle):
     logging.debug("setAndObserveTumorMarkupsNode")
