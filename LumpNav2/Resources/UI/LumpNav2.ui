@@ -219,6 +219,19 @@
        </widget>
       </item>
       <item>
+       <widget class="QPushButton" name="toolModelButton">
+        <property name="text">
+         <string>Cautery Model</string>
+        </property>
+        <property name="checkable">
+         <bool>true</bool>
+        </property>
+        <property name="checked">
+         <bool>true</bool>
+        </property>
+       </widget>
+      </item>
+      <item>
        <widget class="QPushButton" name="deleteLastFiducialDuringNavigationButton">
         <property name="text">
          <string>Delete Last Point</string>
@@ -439,6 +452,13 @@
           <widget class="QPushButton" name="markPointCauteryTipButton">
            <property name="text">
             <string>Mark point at cautery tip</string>
+           </property>
+          </widget>
+         </item>
+         <item>
+          <widget class="QPushButton" name="deleteLastFiducialNavigationButton">
+           <property name="text">
+            <string>Delete Last Point</string>
            </property>
           </widget>
          </item>

@@ -239,7 +239,6 @@ class LumpNav2Widget(ScriptedLoadableModuleWidget, VTKObservationMixin):
     self.ui.markPointsButton.connect('toggled(bool)', self.onMarkPointsClicked)
     self.ui.deleteLastFiducialButton.connect('clicked()', self.onDeleteLastFiducialClicked)
     self.ui.deleteAllFiducialsButton.connect('clicked()', self.onDeleteAllFiducialsClicked)
-    self.ui.deleteLastFiducialDuringNavigationButton.connect('clicked()', self.onDeleteLastFiducialClicked)
     self.ui.selectPointsToEraseButton.connect('clicked(bool)', self.onSelectPointsToEraseClicked)
     self.ui.markPointCauteryTipButton.connect('clicked()', self.onMarkPointCauteryTipClicked)
     self.ui.startStopRecordingButton.connect('toggled(bool)', self.onStartStopRecordingClicked)
@@ -256,6 +255,8 @@ class LumpNav2Widget(ScriptedLoadableModuleWidget, VTKObservationMixin):
     self.ui.bottomAutoCenterCameraButton.connect('clicked()', lambda: self.onAutoCenterButtonClicked('View3') )
     self.ui.increaseDistanceFontSizeButton.connect('clicked()', self.onIncreaseDistanceFontSizeClicked)
     self.ui.decreaseDistanceFontSizeButton.connect('clicked()', self.onDecreaseDistanceFontSizeClicked)
+    self.ui.deleteLastFiducialNavigationButton.connect('clicked()', self.onDeleteLastFiducialClicked)
+    self.ui.toolModelButton.connect('toggled(bool)', self.onToolModelClicked)
     self.ui.threeDViewButton.connect('toggled(bool)', self.onThreeDViewButton)
 
     # Add custom layouts
@@ -411,8 +412,6 @@ class LumpNav2Widget(ScriptedLoadableModuleWidget, VTKObservationMixin):
       self.ui.freezeUltrasoundButton.text = "Freeze"
     self.logic.setFreezeUltrasoundClicked()
 
-
-
   def onStartPlusClicked(self, toggled):
     plusServerNode = self._parameterNode.GetNodeReference(self.logic.PLUS_SERVER_NODE)
     if plusServerNode:
@@ -464,6 +463,7 @@ class LumpNav2Widget(ScriptedLoadableModuleWidget, VTKObservationMixin):
     if self.ui.markPointsButton.isChecked() : # ensures point placed doesn't get logged twice
       self.ui.markPointsButton.click()
     self.updateGUIFromParameterNode()
+    numberOfPoints = self.logic.tumorMarkups_Needle.GetNumberOfFiducials()
     self.logic.setDeleteLastFiducialClicked(numberOfPoints)
     self.logic.createTumorFromMarkups() #update tumor contour
 
@@ -571,6 +571,14 @@ class LumpNav2Widget(ScriptedLoadableModuleWidget, VTKObservationMixin):
       fontSize = view.cornerAnnotation().GetMaximumFontSize() - 1
       view.cornerAnnotation().SetMaximumFontSize(fontSize)
       view.forceRender()
+  
+  def onToolModelClicked(self, toggled):
+    logging.info('onToolModelClicked')
+    if toggled:
+      self.ui.toolModelButton.text = "Cautery Model"
+    else:
+      self.ui.toolModelButton.text = "Stick Model"
+    self.logic.setToolModelClicked(toggled)
 
   def enableBullseyeInViewNode(self, viewNode):
     logging.debug("enableBullseyeInViewNode")
@@ -878,13 +886,13 @@ class LumpNav2Widget(ScriptedLoadableModuleWidget, VTKObservationMixin):
     if numberOfPoints>=1:
       self.ui.deleteLastFiducialButton.setEnabled(True)
       self.ui.deleteAllFiducialsButton.setEnabled(True)
-      self.ui.deleteLastFiducialDuringNavigationButton.setEnabled(True)
+      self.ui.deleteLastFiducialNavigationButton.setEnabled(True)
       self.ui.selectPointsToEraseButton.setEnabled(True)
 
     if numberOfPoints<1:
       self.ui.deleteLastFiducialButton.setEnabled(False)
       self.ui.deleteAllFiducialsButton.setEnabled(False)
-      self.ui.deleteLastFiducialDuringNavigationButton.setEnabled(False)
+      self.ui.deleteLastFiducialNavigationButton.setEnabled(False)
       self.ui.selectPointsToEraseButton.setEnabled(False)
       self.ui.selectPointsToEraseButton.setChecked(False)
 
@@ -1025,6 +1033,7 @@ class LumpNav2Logic(ScriptedLoadableModuleLogic, VTKObservationMixin):
   CAUTERY_VISIBILITY_SETTING = "LumpNav2/CauteryVisible"
   CAUTERY_MODEL_FILENAME = "CauteryModel.stl"
   TUMOR_MODEL = "TumorModel"
+  STICK_MODEL = "StickModel"
 
   # Layout codes
 
@@ -1259,6 +1268,19 @@ class LumpNav2Logic(ScriptedLoadableModuleLogic, VTKObservationMixin):
 
     cauteryVisible = slicer.util.settingsValue(self.CAUTERY_VISIBILITY_SETTING, True, converter=slicer.util.toBool)
     cauteryModel.SetDisplayVisibility(cauteryVisible)
+
+    # Stick Model
+
+    stickModel = parameterNode.GetNodeReference(self.STICK_MODEL)
+    if stickModel is None:
+      stickModel = createModelsLogic.CreateNeedle(100,1.0,2.0,0)
+      stickModel.GetDisplayNode().SetColor(1.0, 1.0, 0)
+      stickModel.SetName(self.STICK_MODEL)
+      stickModel.GetDisplayNode().VisibilityOff() #defaul is only cautery model, turn stick model off visibility
+      parameterNode.SetNodeReferenceID(self.STICK_MODEL, stickModel.GetID())
+    
+    stickTipToStick = parameterNode.GetNodeReference(self.CAUTERYTIP_TO_CAUTERY)
+    stickModel.SetAndObserveTransformNodeID(stickTipToStick.GetID())
 
     # Create tumor model
 
@@ -1627,6 +1649,18 @@ class LumpNav2Logic(ScriptedLoadableModuleLogic, VTKObservationMixin):
       #self.guideletParent.connectorNode.Start()
       plusServerNode.StartServer()
 
+  def setToolModelClicked(self, toggled):
+    logging.info("setToolModelClicked")
+    parameterNode = self.getParameterNode()
+    cauteryModel = parameterNode.GetNodeReference(self.CAUTERY_MODEL)
+    stickModel = parameterNode.GetNodeReference(self.STICK_MODEL)
+    settings = qt.QSettings()
+    if toggled:
+      cauteryModel.SetDisplayVisibility(True) #look to function self.logic.setNeedelVisibility, do we need the QSettings lines here? Why do they exist in the function?
+      stickModel.SetDisplayVisibility(False)
+    else:
+      cauteryModel.SetDisplayVisibility(False)
+      stickModel.SetDisplayVisibility(True)
 
   def setAndObserveErasedMarkupsNode(self, eraseMarkups_Needle):
     logging.debug("setAndObserveErasedMarkupsNode")
@@ -1672,7 +1706,7 @@ class LumpNav2Logic(ScriptedLoadableModuleLogic, VTKObservationMixin):
     #if numberOfPoints>1:
     #  self.ui.deleteLastFiducialButton.setEnabled(True)
     #  self.ui.deleteAllFiducialsButton.setEnabled(True)
-    #  self.ui.deleteLastFiducialDuringNavigationButton.setEnabled(True)
+    #  self.ui.deleteLastFiducialNavigationButton.setEnabled(True)
     #  self.ui.selectPointsToEraseButton.setEnabled(True)
     logging.debug("onTumorMarkupsNodeModified")
 
@@ -1762,7 +1796,7 @@ class LumpNav2Logic(ScriptedLoadableModuleLogic, VTKObservationMixin):
     if numberOfPoints == 1 :
       #self.deleteLastFiducialButton.setEnabled(False)
       #self.deleteAllFiducialsButton.setEnabled(False)
-      #self.deleteLastFiducialDuringNavigationButton.setEnabled(False)
+      #self.deleteLastFiducialNavigationButton.setEnabled(False)
       #self.selectPointsToEraseButton.setEnabled(False)
       #self.selectPointsToEraseButton.setChecked(False)
       self.tumorMarkups_Needle.GetNthFiducialPosition(0,fiducialPosition)
