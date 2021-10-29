@@ -316,20 +316,13 @@ class LumpNav2Widget(ScriptedLoadableModuleWidget, VTKObservationMixin):
     slicer.util.showStatusMessage("Saved!", 2000)
 
   def onShowFullScreenClicked(self, toggled):
-    # We hide all toolbars, etc. which is inconvenient as a default startup setting,
-    # therefore disable saving of window setup.
-    settings = qt.QSettings()
-    settings.setValue('MainWindow/RestoreGeometry', 'false')
-
-    #self.showToolbars(False)
-    #self.showModulePanel(False)
-    #self.showMenuBar(False)
-    #self.showPythonConsole(False)
-
-    #self.sliceletDockWidget.show()
-
     mainWindow=slicer.util.mainWindow()
-    mainWindow.showFullScreen()
+    if toggled:
+      mainWindow.showFullScreen()
+      self.ui.showFullScreenButton.text = "Show Normal Screen"
+    else:
+      self.ui.showFullScreenButton.text = "Show Full Screen"
+      mainWindow.showMaximized()
 
   def onStopPivotCalibration(self):
     self.pivotCalibrationLogic.SetRecordingState(False)

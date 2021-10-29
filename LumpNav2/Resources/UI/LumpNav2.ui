@@ -474,10 +474,10 @@
       <string>Advanced</string>
      </property>
      <property name="checked">
-      <bool>true</bool>
+      <bool>false</bool>
      </property>
      <property name="collapsed">
-      <bool>false</bool>
+      <bool>true</bool>
      </property>
      <layout class="QVBoxLayout" name="verticalLayout_5">
       <item>
@@ -490,7 +490,7 @@
       <item>
        <widget class="QPushButton" name="showFullScreenButton">
         <property name="text">
-         <string>Full Screen</string>
+         <string>Show Full Screen</string>
         </property>
         <property name="checkable">
          <bool>true</bool>
