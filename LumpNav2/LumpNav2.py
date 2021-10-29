@@ -233,6 +233,9 @@ class LumpNav2Widget(ScriptedLoadableModuleWidget, VTKObservationMixin):
     self.ui.cauteryVisibilityButton.checked = cauteryVisible
     self.ui.cauteryVisibilityButton.connect('toggled(bool)', self.onCauteryVisibilityToggled)
     self.ui.displayDistanceButton.connect('toggled(bool)', self.onDisplayDistanceClicked)
+    self.ui.exitButton.connect('clicked()', self.onExitButtonClicked)
+    self.ui.showFullScreenButton.connect('toggled(bool)', self.onShowFullScreenClicked)
+    self.ui.saveSceneButton.connect('clicked()', self.onSaveSceneClicked)
 
     #contouring
     self.ui.brightnessSliderWidget.connect('valuesChanged(double, double)', self.onBrightnessSliderChanged)
@@ -287,6 +290,46 @@ class LumpNav2Widget(ScriptedLoadableModuleWidget, VTKObservationMixin):
       self.pivotSamplingTimer.start()  # continue
     else:
       self.onStopPivotCalibration()  # calibration completed
+  
+  def onExitButtonClicked(self):
+    mainwindow = slicer.util.mainWindow()
+    mainwindow.close()
+
+  def onSaveSceneClicked(self):#common
+    #
+    # save the mrml scene to a temp directory, then zip it
+    #
+    qt.QApplication.setOverrideCursor(qt.Qt.WaitCursor)
+    node = self.logic.getParameterNode()
+    sceneSaveDirectory = node.GetParameter('SavedScenesDirectory')
+    sceneSaveDirectory = sceneSaveDirectory + "/" + self.logic.moduleName + "-" + time.strftime("%Y%m%d-%H%M%S")
+    logging.info("Saving scene to: {0}".format(sceneSaveDirectory))
+    if not os.access(sceneSaveDirectory, os.F_OK):
+      os.makedirs(sceneSaveDirectory)
+
+    applicationLogic = slicer.app.applicationLogic()
+    if applicationLogic.SaveSceneToSlicerDataBundleDirectory(sceneSaveDirectory, None):
+      logging.info("Scene saved to: {0}".format(sceneSaveDirectory))
+    else:
+      logging.error("Scene saving failed")
+    qt.QApplication.restoreOverrideCursor()
+    slicer.util.showStatusMessage("Saved!", 2000)
+
+  def onShowFullScreenClicked(self, toggled):
+    # We hide all toolbars, etc. which is inconvenient as a default startup setting,
+    # therefore disable saving of window setup.
+    settings = qt.QSettings()
+    settings.setValue('MainWindow/RestoreGeometry', 'false')
+
+    #self.showToolbars(False)
+    #self.showModulePanel(False)
+    #self.showMenuBar(False)
+    #self.showPythonConsole(False)
+
+    #self.sliceletDockWidget.show()
+
+    mainWindow=slicer.util.mainWindow()
+    mainWindow.showFullScreen()
 
   def onStopPivotCalibration(self):
     self.pivotCalibrationLogic.SetRecordingState(False)
