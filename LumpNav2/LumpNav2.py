@@ -938,7 +938,9 @@ class LumpNav2Widget(ScriptedLoadableModuleWidget, VTKObservationMixin):
     else:
       self.ui.markPointsButton.setChecked(False)
 
-
+    #TODO: Fix navigation views incorrect when switching from another module back to lumpnav
+    #if self.ui.navigationCollapsibleButton.checked = True:
+    #  open proper views
   def updateGUIFromMRML(self, caller=None, event=None):
     """
     Updates the GUI from MRML nodes in the scene (except parameter node).
