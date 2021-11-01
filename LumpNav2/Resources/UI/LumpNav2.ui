@@ -10,9 +10,6 @@
     <height>890</height>
    </rect>
   </property>
-  <property name="cursor">
-   <cursorShape>UpArrowCursor</cursorShape>
-  </property>
   <layout class="QVBoxLayout" name="verticalLayout">
    <item>
     <widget class="ctkCollapsibleButton" name="toolsCollapsibleButton">

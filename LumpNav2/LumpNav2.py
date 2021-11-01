@@ -24,16 +24,15 @@ class LumpNav2(ScriptedLoadableModule):
 
   def __init__(self, parent):
     ScriptedLoadableModule.__init__(self, parent)
-    self.parent.title = "LumpNav2"  # TODO: make this more human readable by adding spaces
-    self.parent.categories = ["IGT"]  # TODO: set categories (folders where the module shows up in the module selector)
+    self.parent.title = "LumpNav2"
+    self.parent.categories = ["IGT"]
     self.parent.dependencies = []  # TODO: add here list of module names that this module requires
-    self.parent.contributors = ["Perk Lab (Queen's University)"]  # TODO: replace with "Firstname Lastname (Organization)"
+    self.parent.contributors = ["Perk Lab (Queen's University)"]
     # TODO: update with short description of the module and a link to online module documentation
     self.parent.helpText = """
 This is an example of scripted loadable module bundled in an extension.
 See more information in <a href="https://github.com/organization/projectname#LumpNav2">module documentation</a>.
 """
-    # TODO: replace with organization, grant and thanks
     self.parent.acknowledgementText = """
 This file was originally developed by Jean-Christophe Fillion-Robin, Kitware Inc., Andras Lasso, PerkLab,
 and Steve Pieper, Isomics, Inc. and was partially funded by NIH grant 3P41RR013218-12S1.
@@ -433,15 +432,16 @@ class LumpNav2Widget(ScriptedLoadableModuleWidget, VTKObservationMixin):
       self.ui.threeDViewButton.text = "Dual 3D View"
       slicer.app.layoutManager().setLayout(self.logic.LAYOUT_DUAL3D)
     else:
-      self.ui.threeDViewButton.text = "Tripple 3D View"
+      self.ui.threeDViewButton.text = "Triple 3D View"
       slicer.app.layoutManager().setLayout(self.logic.LAYOUT_TRIPLE3D)
 
   def onStartStopRecordingClicked(self, toggled):
     if toggled:
       self.ui.startStopRecordingButton.text = "Stop Recording"
-    #TODO: We dont need this button do we? We are recording in sequences already, right?
+      #TODO: Call start image recording using logic
     else:
       self.ui.startStopRecordingButton.text = "Start Recording"
+      # TODO: Call stop image recording using logic
 
   def onFreezeUltrasoundClicked(self, toggled):
     logging.info("onFreezeUltrasoundClicked")
@@ -471,12 +471,11 @@ class LumpNav2Widget(ScriptedLoadableModuleWidget, VTKObservationMixin):
     logging.info("onUltrasoundSequenceBrowserToggled({})".format(toggled))
     self.logic.setUltrasoundSequenceBrowser(toggled)
 
-  #TODO: actually change the brightness
+  #TODO: Remove the brightness slider and add 3 preset buttons
   def onBrightnessSliderChanged(self):
     logging.debug('onBrightnessSliderChanged')
     self.setImageMinMaxLevel(self.brightnessSliderWidget.minimumValue, self.brightnessSliderWidget.maximumValue)
 
-  #TODO: 
   def onMarkPointsClicked(self, pushed):
     self.ui.selectPointsToEraseButton.setChecked(False)
     logging.info("Mark Points clicked")
@@ -578,11 +577,7 @@ class LumpNav2Widget(ScriptedLoadableModuleWidget, VTKObservationMixin):
     cameraNode1.ResetClippingRange()
 
   def onDisplayDistanceClicked(self, toggled):
-    logging.info("onDisplayDistanceClicked")
-    logging.info("Display Distance to Tumor button clicked")
-    #distanceToTumor = self.breachWarningNode.GetClosestDistanceToModelFromToolTip()
-    #TODO: what does this even do? 
-    print(toggled)
+    logging.info("onDisplayDistanceClicked({})".format(toggled))
     if toggled:
       for i in range(0,3):
         view = slicer.app.layoutManager().threeDWidget(i).threeDView()
@@ -675,7 +670,7 @@ class LumpNav2Widget(ScriptedLoadableModuleWidget, VTKObservationMixin):
     self.viewpointLogic.getViewpointForViewNode(viewNode).autoCenterSetSafeXMaximum(widthViewCoordLimits)
     self.viewpointLogic.getViewpointForViewNode(viewNode).autoCenterSetSafeYMinimum(-heightViewCoordLimits)
     self.viewpointLogic.getViewpointForViewNode(viewNode).autoCenterSetSafeYMaximum(heightViewCoordLimits)
-    self.viewpointLogic.getViewpointForViewNode(viewNode).autoCenterSetModelNode(self.logic.tumorModel_Needle)
+    # self.viewpointLogic.getViewpointForViewNode(viewNode).autoCenterSetModelNode(self.logic.tumorModel_Needle)
     self.viewpointLogic.getViewpointForViewNode(viewNode).autoCenterStart()
 
   def disableViewpointInViewNode(self,viewNode):
@@ -777,8 +772,16 @@ class LumpNav2Widget(ScriptedLoadableModuleWidget, VTKObservationMixin):
     slicer.util.setModuleHelpSectionVisible(False)
     slicer.util.setModulePanelTitleVisible(False)
 
-    layoutManager = slicer.app.layoutManager()
-    layoutManager.setLayout(self.logic.LAYOUT_2D3D)
+    # Choose layout based on which collapsible button is open
+
+    if self.ui.toolsCollapsibleButton.checked:
+      slicer.app.layoutManager().setLayout(self.logic.LAYOUT_2D3D)
+
+    if self.ui.contouringCollapsibleButton.checked:
+      slicer.app.layoutManager().setLayout(6)
+
+    if self.ui.navigationCollapsibleButton.checked:
+      self.onThreeDViewButton(self.ui.threeDViewButton.checked)
 
     self.updateGUIFromParameterNode()
     self.updateGUIFromMRML()
@@ -832,7 +835,7 @@ class LumpNav2Widget(ScriptedLoadableModuleWidget, VTKObservationMixin):
     """
     Called just after the scene is closed.
     """
-    print("onSceneEndClose") #todo delete
+    logging.info("onSceneEndClose")
 
     # If this module is shown while the scene is closed then recreate a new parameter node immediately
     if self.parent.isEntered:
@@ -906,7 +909,6 @@ class LumpNav2Widget(ScriptedLoadableModuleWidget, VTKObservationMixin):
       if self.observedCauteryModel:
         self.addObserver(self.observedCauteryModel, slicer.vtkMRMLDisplayableNode.DisplayModifiedEvent, self.updateGUIFromMRML)
 
-    # TODO: Do we need to add one of these for tumorModel_Needle and tumorMarkups_Needle?
     currentTrackingSeqBrNode = self._parameterNode.GetNodeReference(self.logic.TRACKING_SEQUENCE_BROWSER)
     if currentTrackingSeqBrNode != self.observedTrackingSeqBrNode:
       self.removeObserver(self.observedTrackingSeqBrNode, vtk.vtkCommand.ModifiedEvent, self.updateGUIFromMRML)
@@ -945,9 +947,6 @@ class LumpNav2Widget(ScriptedLoadableModuleWidget, VTKObservationMixin):
     else:
       self.ui.markPointsButton.setChecked(False)
 
-    #TODO: Fix navigation views incorrect when switching from another module back to lumpnav
-    #if self.ui.navigationCollapsibleButton.checked = True:
-    #  open proper views
   def updateGUIFromMRML(self, caller=None, event=None):
     """
     Updates the GUI from MRML nodes in the scene (except parameter node).
@@ -1114,7 +1113,6 @@ class LumpNav2Logic(ScriptedLoadableModuleLogic, VTKObservationMixin):
     self.tumorMarkups_Needle = None
     self.tumorMarkupAddedObserverTag = None
     self.tumorMarkupEndInteractionObserverTag = None
-    self.tumorModel_Needle = None #TODO: is this allowed? Are we supposed to do this?
 
     #Second fiducial node used to erase points #TODO: should we convert this to parameterNode? Also why
     #are we calling setAndObserveMarkupsNode at the start?
@@ -1124,8 +1122,7 @@ class LumpNav2Logic(ScriptedLoadableModuleLogic, VTKObservationMixin):
     self.eraseMarkups_NeedleObserver = None
     self.setAndObserveErasedMarkupsNode(self.eraseMarkups_Needle)
 
-    #TODO: "temporary solution to double function call problem" what does that mean?
-    self.eraserFlag = True
+    self.eraserFlag = True  # Indicates if we are removing points
 
     self.hideDistance = False
   
@@ -1336,7 +1333,7 @@ class LumpNav2Logic(ScriptedLoadableModuleLogic, VTKObservationMixin):
     #parameterNode.SetNodeReferenceID(self.TUMOR_MODEL, tumorModel.GetID())
 
     #TODO: two lines below: is self.TUMOR_MODEL in the needle coordinate system? When do we include the _Needle?
-    #TODO: Line below is not the right way to grab the node, right?
+    #TODO: getFirstNodeByName should never be used!
     tumorModel_Needle = slicer.util.getFirstNodeByName(self.TUMOR_MODEL, className='vtkMRMLModelNode')
     if tumorModel_Needle is None:
       tumorModel_Needle = slicer.vtkMRMLModelNode()
