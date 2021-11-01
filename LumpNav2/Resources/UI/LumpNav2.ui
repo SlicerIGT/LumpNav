@@ -580,6 +580,25 @@
     </widget>
    </item>
    <item>
+    <widget class="ctkCollapsibleButton" name="oscilloscopeCollapsibleButton">
+     <property name="text">
+      <string>Oscilloscope</string>
+     </property>
+     <property name="checked">
+      <bool>false</bool>
+     </property>
+     <layout class="QVBoxLayout" name="verticalLayout_7">
+      <item>
+       <widget class="QPushButton" name="displaySampleGraphButton">
+        <property name="text">
+         <string>Display Sample Graph</string>
+        </property>
+       </widget>
+      </item>
+     </layout>
+    </widget>
+   </item>
+   <item>
     <spacer name="verticalSpacer">
      <property name="orientation">
       <enum>Qt::Vertical</enum>

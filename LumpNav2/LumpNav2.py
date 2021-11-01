@@ -265,6 +265,9 @@ class LumpNav2Widget(ScriptedLoadableModuleWidget, VTKObservationMixin):
     # Add custom layouts
     self.logic.addCustomLayouts()
 
+    # Oscilloscope
+    self.ui.displaySampleGraphButton.connect('clicked()', self.onDisplaySampleGraphButton)
+
     import Viewpoint
     self.viewpointLogic = Viewpoint.ViewpointLogic()
 
@@ -615,6 +618,10 @@ class LumpNav2Widget(ScriptedLoadableModuleWidget, VTKObservationMixin):
     else:
       self.ui.toolModelButton.text = "Stick Model"
     self.logic.setToolModelClicked(toggled)
+
+  def onDisplaySampleGraphButton(self):
+    logging.info('onDisplaySampleGraphButton')
+    self.logic.setDisplaySampleGraphButton()
 
   def enableBullseyeInViewNode(self, viewNode):
     logging.debug("enableBullseyeInViewNode")
@@ -1085,9 +1092,12 @@ class LumpNav2Logic(ScriptedLoadableModuleLogic, VTKObservationMixin):
 
   TRACKING_SEQUENCE_BROWSER = "TrackingSequenceBrowser"
   ULTRASOUND_SEQUENCE_BROWSER = "UltrasoundSequenceBrowser"
-
   TUMOR_MARKUPS_NEEDLE = "TumorMarkups_Needle"
   
+  # Oscilloscope
+
+  SIGNAL_SIGNAL = 'Signal_Signal'
+
   def __init__(self):
     """
     Called when the logic class is instantiated. Can be used for initializing member variables.
@@ -1734,6 +1744,30 @@ class LumpNav2Logic(ScriptedLoadableModuleLogic, VTKObservationMixin):
     else:
       # deactivate placement mode
       interactionNode.SetCurrentInteractionMode(interactionNode.ViewTransform)
+
+  def setDisplaySampleGraphButton(self):
+    logging.info('setDisplaySampleGraphButton')
+    oscilloscopeVolume = slicer.mrmlScene.GetFirstNode(self.SIGNAL_SIGNAL)
+    oscilloscopeArray = slicer.util.arrayFromVolume(oscilloscopeVolume)
+    time = oscilloscopeArray[0,0]
+    ChA = oscilloscopeArray[0,1]
+    ChB = oscilloscopeArray[0,2]
+    ChA_Array = np.array([time, ChA])
+    ChA_Array = np.transpose(ChA_Array)
+    ChB_Array = np.array([time, ChB])
+    ChB_Array = np.transpose(ChB_Array)
+    ChA_ChartNode = slicer.util.plot(ChA_Array, 0)
+    ChB_ChartNode = slicer.util.plot(ChB_Array, 0)
+    layoutManager = slicer.app.layoutManager()
+    layoutWithPlot = slicer.modules.plots.logic().GetLayoutWithPlot(layoutManager.layout)
+    layoutManager.setLayout(layoutWithPlot)
+    plotWidget = layoutManager.plotWidget(1)
+    plotViewNode = plotWidget.mrmlPlotViewNode()
+    plotViewNode.SetPlotChartNodeID(ChA_ChartNode.GetID())
+    plotWidget = layoutManager.plotWidget(2)
+    plotViewNode = plotWidget.mrmlPlotViewNode()
+    plotViewNode.SetPlotChartNodeID(ChB_ChartNode.GetID())
+
 
   def onEraserClicked(self, observer, eventid) :
     logging.debug("onEraserClicked")
