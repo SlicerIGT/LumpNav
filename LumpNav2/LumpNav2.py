@@ -1321,7 +1321,6 @@ class LumpNav2Logic(ScriptedLoadableModuleLogic, VTKObservationMixin):
 
     # TODO: should this be here?
     self.segmentationLogic = slicer.modules.segmentationunet.widgetRepresentation().self().logic
-    self.predictionActive = False
 
   def resourcePath(self, filename):
     """
@@ -1958,29 +1957,68 @@ class LumpNav2Logic(ScriptedLoadableModuleLogic, VTKObservationMixin):
     sequenceBrowserTracking = parameterNode.GetNodeReference(self.TRACKING_SEQUENCE_BROWSER)
     sequenceBrowserTracking.SetRecordingActive(recording) #stop
 
-  # TODO: on first click, image gets stretched and returns to normal once recording is stopped
+  # TODO: on click, images freezes and stretches, eventually starts again
   def onUltrasoundSequenceBrowserClicked(self, toggled):
     self.setUltrasoundSequenceBrowser(toggled)
+    self.setupPredictionProcess(toggled)
+    self.setLivePrediction(toggled)
 
-    # Update TransdToNeedle when TransdToReference changes
+  def setUltrasoundSequenceBrowser(self, recording):
+    sequenceLogic = slicer.modules.sequences.logic()  # TODO: what is the point of this line?
+    parameterNode = self.getParameterNode()
+    sequenceBrowserUltrasound = parameterNode.GetNodeReference(self.ULTRASOUND_SEQUENCE_BROWSER)
+    sequenceBrowserUltrasound.SetRecordingActive(recording)  # stop
+
+  def setupPredictionProcess(self, toggled):
+    logging.info(f"setupPredictionProcess{toggled}")
     parameterNode = self.getParameterNode()
     imageToTransd = parameterNode.GetNodeReference(self.IMAGE_TO_TRANSD)
     transdToNeedle = parameterNode.GetNodeReference(self.TRANSD_TO_NEEDLE)
     transdToReference = parameterNode.GetNodeReference(self.TRANSD_TO_REFERENCE)
-
-    # AI tumour reconstruction
-    if not toggled and not self.predictionActive:
-      return
-    if toggled and not self.predictionActive:
-      self.setupPredictionProcess()
-
-    # Move ImageToTransd to TransdToNeedle
     if toggled:
+      # Move ImageToTransd to TransdToNeedle
       imageToTransd.SetAndObserveTransformNodeID(transdToNeedle.GetID())
+      # Set nodes for segmentation logic
+      self.segmentationLogic.setModelPath(self.resourcePath(self.AI_MODEL_PATH))
+      self.segmentationLogic.setInputImage(parameterNode.GetNodeReference(self.IMAGE_IMAGE))
+
+      # Create PredToTransd transform node to track prediction
+      predToTransd = parameterNode.GetNodeReference(self.PREDICTION_TO_TRANSD)
+      if predToTransd is None:
+        predToTransd = self.addLinearTransformToScene(self.PREDICTION_TO_TRANSD)
+      self.segmentationLogic.setOutputTransform(predToTransd)
+
+      # Set up display node for prediction
+      predictionNode = parameterNode.GetNodeReference(self.PREDICTION_VOLUME)
+      # Remove existing prediction volume
+      if predictionNode is not None:
+        slicer.mrmlScene.RemoveNode(predictionNode)
+
+      predictionNode = slicer.mrmlScene.AddNewNodeByClass("vtkMRMLScalarVolumeNode", self.PREDICTION_VOLUME)
+      parameterNode.SetNodeReferenceID(self.PREDICTION_VOLUME, predictionNode.GetID())
+      predictionNode.SetAndObserveTransformNodeID(predToTransd.GetID())
+      predictionNode.CreateDefaultDisplayNodes()
+      predictionDisplayNode = predictionNode.GetDisplayNode()
+      predictionDisplayNode.SetWindow(205)
+      predictionDisplayNode.SetLevel(220)
+      predictionDisplayNode.SetAndObserveColorNodeID("vtkMRMLColorTableNodeRed")
+      self.segmentationLogic.setOutputImage(predictionNode)
+
     else:
       imageToTransd.SetAndObserveTransformNodeID(transdToReference.GetID())
 
-    self.setLivePrediction(toggled)
+  def setLivePrediction(self, toggled):
+    logging.info(f"setLivePrediction({toggled})")
+    self.segmentationLogic.setRealTimePrediction(toggled)
+    # Display prediction in slice view
+    predictionNode = self.getParameterNode().GetNodeReference(self.PREDICTION_VOLUME)
+    if predictionNode is not None:
+      if toggled:
+        slicer.util.setSliceViewerLayers(foreground=predictionNode, foregroundOpacity=0.5, fit=True)
+      else:
+        slicer.util.setSliceViewerLayers(foreground=None)
+    self.setRegionOfInterestNode(toggled)
+    # self.setVolumeReconstruction(toggled)
 
   def setUltrasoundSequenceBrowser(self, recording):
     parameterNode = self.getParameterNode()
@@ -1993,7 +2031,7 @@ class LumpNav2Logic(ScriptedLoadableModuleLogic, VTKObservationMixin):
 
     if not toggled:
       return
-    # delete old roi and create new one everytime new process starts
+    # Delete old roi and create new one everytime new process starts
     if roiNode is not None:
       slicer.mrmlScene.RemoveNode(roiNode)
 
@@ -2010,47 +2048,8 @@ class LumpNav2Logic(ScriptedLoadableModuleLogic, VTKObservationMixin):
     roiNode.SetRadiusXYZ(100, 100, 100)
     logging.info(f"Added a 10x10x10cm ROI at position: {sliceCenter}")
 
-  def setupPredictionProcess(self):
-    logging.debug("setupPredictionProcess")
-    parameterNode = self.getParameterNode()
-    self.segmentationLogic.setModelPath(self.resourcePath(self.AI_MODEL_PATH))
-    self.segmentationLogic.setInputImage(parameterNode.GetNodeReference(self.IMAGE_IMAGE))
-
-    # create PredToTransd transform node to track prediction
-    predToTransd = parameterNode.GetNodeReference(self.PREDICTION_TO_TRANSD)
-    if predToTransd is None:
-      predToTransd = self.addLinearTransformToScene(self.PREDICTION_TO_TRANSD)
-      self.segmentationLogic.setOutputTransform(predToTransd)
-
-    # set up display node for prediction
-    predictionNode = parameterNode.GetNodeReference(self.PREDICTION_VOLUME)
-    if predictionNode is None:
-      predictionNode = slicer.mrmlScene.AddNewNodeByClass("vtkMRMLScalarVolumeNode", self.PREDICTION_VOLUME)
-      parameterNode.SetNodeReferenceID(self.PREDICTION_VOLUME, predictionNode.GetID())
-      predictionNode.SetAndObserveTransformNodeID(predToTransd.GetID())
-      predictionNode.CreateDefaultDisplayNodes()
-      predictionDisplayNode = predictionNode.GetDisplayNode()
-      predictionDisplayNode.SetWindow(110)
-      predictionDisplayNode.SetLevel(175)
-      predictionDisplayNode.SetAndObserveColorNodeID("vtkMRMLColorTableNodeRed")
-    self.segmentationLogic.setOutputImage(predictionNode)
-
-  def setLivePrediction(self, toggled):
-    logging.debug(f"setupPredictionProcess({toggled})")
-    self.setRegionOfInterestNode(toggled)
-    self.segmentationLogic.setRealTimePrediction(toggled)
-    self.predictionActive = toggled
-    # display prediction in slice view
-    predictionNode = self.getParameterNode().GetNodeReference(self.PREDICTION_VOLUME)
-    if predictionNode is not None:
-      if toggled:
-        slicer.util.setSliceViewerLayers(foreground=predictionNode, foregroundOpacity=0.5, fit=True)
-      else:
-        slicer.util.setSliceViewerLayers(foreground=None)
-    self.setVolumeReconstruction(toggled)
-
-  # TODO: reconstruction output is the US image but larger?
-  # TODO: stopping recording crashes slicer
+  # TODO: when reconstruction is on, prediction doesn't show up and image is permanently frozen
+  # TODO: stopping reconstruction crashes slicer - sometimes before stopping
   def setVolumeReconstruction(self, toggled):
     reconstructionLogic = slicer.modules.volumereconstruction.logic()
     parameterNode = self.getParameterNode()
@@ -2062,16 +2061,31 @@ class LumpNav2Logic(ScriptedLoadableModuleLogic, VTKObservationMixin):
       reconstructionVolume = parameterNode.GetNodeReference(self.RECONSTRUCTION_VOLUME)
       if reconstructionVolume is not None:
         slicer.mrmlScene.RemoveNode(reconstructionVolume)
+      # TODO: Remove all volume rendering nodes
 
-      # Start reconstruction
+      # Set up nodes for live reconstruction
       logging.info("Starting volume reconstruction")
       reconstructionNode = slicer.mrmlScene.AddNewNodeByClass("vtkMRMLVolumeReconstructionNode", self.RECONSTRUCTION_NODE)
+      reconstructionNode.SetLiveVolumeReconstruction(True)
       reconstructionNode.SetAndObserveInputVolumeNode(parameterNode.GetNodeReference(self.PREDICTION_VOLUME))
       reconstructionNode.SetAndObserveInputROINode(parameterNode.GetNodeReference(self.ROI_NODE))
+      reconstructionNode.SetInterpolationMode(1)  # linear interpolation
+
       # Create volume node for reconstruction output
       reconstructionVolume = slicer.mrmlScene.AddNewNodeByClass("vtkMRMLScalarVolumeNode", self.RECONSTRUCTION_VOLUME)
       reconstructionNode.SetAndObserveOutputVolumeNode(reconstructionVolume)
+      volRenLogic = slicer.modules.volumerendering.logic()
+      reconstructionDisplayNode = volRenLogic.CreateVolumeRenderingDisplayNode()
+      reconstructionDisplayNode.UnRegister(volRenLogic)
+      slicer.mrmlScene.AddNode(reconstructionDisplayNode)
+      reconstructionVolume.AddAndObserveDisplayNodeID(reconstructionDisplayNode.GetID())
+      volRenLogic.UpdateDisplayNodeFromVolumeNode(reconstructionDisplayNode, reconstructionVolume)
+      reconstructionDisplayNode.SetAndObserveROINodeID(parameterNode.GetNodeReference(self.ROI_NODE).GetID())
+      reconstructionDisplayNode.GetVolumePropertyNode().Copy(volRenLogic.GetPresetByName("MR-Default"))
+
       reconstructionLogic.StartLiveVolumeReconstruction(reconstructionNode)
+
+      # TODO: set window/level/transfer functions for reconstructed volume
 
     else:
       logging.info("Stopping volume reconstruction")
