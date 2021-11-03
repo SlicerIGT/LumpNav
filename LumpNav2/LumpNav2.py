@@ -227,7 +227,6 @@ class LumpNav2Widget(ScriptedLoadableModuleWidget, VTKObservationMixin):
     self.ui.needleVisibilityButton.checked = needleVisibilitySetting
     self.ui.needleVisibilityButton.connect('toggled(bool)', self.onNeedleVisibilityToggled)
     self.ui.trackingSequenceBrowserButton.connect('toggled(bool)', self.onTrackingSequenceBrowser)
-    self.ui.ultrasoundSequenceBrowserButton.connect('toggled(bool)', self.onUltrasoundSequenceBrowser)
     cauteryVisible = slicer.util.settingsValue(self.logic.CAUTERY_VISIBILITY_SETTING, True, converter=slicer.util.toBool)
     self.ui.cauteryVisibilityButton.checked = cauteryVisible
     self.ui.cauteryVisibilityButton.connect('toggled(bool)', self.onCauteryVisibilityToggled)
@@ -237,7 +236,9 @@ class LumpNav2Widget(ScriptedLoadableModuleWidget, VTKObservationMixin):
     self.ui.saveSceneButton.connect('clicked()', self.onSaveSceneClicked)
 
     #contouring
-    self.ui.brightnessSliderWidget.connect('valuesChanged(double, double)', self.onBrightnessSliderChanged)
+    self.ui.normalBrightnessButton.connect('clicked()', self.onNormalBrightnessClicked)
+    self.ui.brightBrightnessButton.connect('clicked()', self.onBrightBrightnessClicked)
+    self.ui.brightestBrightnessButton.connect('clicked()', self.onBrightestBrightnessClicked)
     self.ui.markPointsButton.connect('toggled(bool)', self.onMarkPointsClicked)
     self.ui.deleteLastFiducialButton.connect('clicked()', self.onDeleteLastFiducialClicked)
     self.ui.deleteAllFiducialsButton.connect('clicked()', self.onDeleteAllFiducialsClicked)
@@ -266,6 +267,7 @@ class LumpNav2Widget(ScriptedLoadableModuleWidget, VTKObservationMixin):
 
     # Oscilloscope
     self.ui.displaySampleGraphButton.connect('clicked()', self.onDisplaySampleGraphButton)
+    self.ui.streamGraphButton.connect('toggled(bool)', self.onStreamGraphButton)
 
     import Viewpoint
     self.viewpointLogic = Viewpoint.ViewpointLogic()
@@ -437,11 +439,13 @@ class LumpNav2Widget(ScriptedLoadableModuleWidget, VTKObservationMixin):
 
   def onStartStopRecordingClicked(self, toggled):
     if toggled:
-      self.ui.startStopRecordingButton.text = "Stop Recording"
-      #TODO: Call start image recording using logic
+      self.ui.startStopRecordingButton.text = "Stop Ultrasound Recording"
+      #TODO: Call start image recording using (COMPLETED)
+      self.logic.setUltrasoundSequenceBrowser(toggled)
     else:
-      self.ui.startStopRecordingButton.text = "Start Recording"
-      # TODO: Call stop image recording using logic
+      self.ui.startStopRecordingButton.text = "Start Ultrasound Recording"
+      # TODO: Call stop image recording using logic (COMPLETED)
+      self.logic.setUltrasoundSequenceBrowser(toggled)
 
   def onFreezeUltrasoundClicked(self, toggled):
     logging.info("onFreezeUltrasoundClicked")
@@ -467,14 +471,18 @@ class LumpNav2Widget(ScriptedLoadableModuleWidget, VTKObservationMixin):
     logging.info("onTrackingSequenceBrowserToggled({})".format(toggled))
     self.logic.setTrackingSequenceBrowser(toggled)
 
-  def onUltrasoundSequenceBrowser(self, toggled):
-    logging.info("onUltrasoundSequenceBrowserToggled({})".format(toggled))
-    self.logic.setUltrasoundSequenceBrowser(toggled)
+  #TODO: Remove the brightness slider and add 3 preset buttons (COMPLETED)
+  def onNormalBrightnessClicked(self):
+    logging.info("onNormalBrightnessClicked")
+    self.logic.setNormalBrightnessClicked()
 
-  #TODO: Remove the brightness slider and add 3 preset buttons
-  def onBrightnessSliderChanged(self):
-    logging.debug('onBrightnessSliderChanged')
-    self.setImageMinMaxLevel(self.brightnessSliderWidget.minimumValue, self.brightnessSliderWidget.maximumValue)
+  def onBrightBrightnessClicked(self):
+    logging.info("onBrightBrightnessClicked")
+    self.logic.setBrightBrightnessClicked()
+
+  def onBrightestBrightnessClicked(self):
+    logging.info("onBrightestBrightnessClicked")
+    self.logic.setBrightestBrightnessClicked()
 
   def onMarkPointsClicked(self, pushed):
     self.ui.selectPointsToEraseButton.setChecked(False)
@@ -617,6 +625,10 @@ class LumpNav2Widget(ScriptedLoadableModuleWidget, VTKObservationMixin):
   def onDisplaySampleGraphButton(self):
     logging.info('onDisplaySampleGraphButton')
     self.logic.setDisplaySampleGraphButton()
+
+  def onStreamGraphButton(self, toggled):
+    logging.info('onStreamGraphButton')
+    self.logic.setStreamGraphButton(toggled)
 
   def enableBullseyeInViewNode(self, viewNode):
     logging.debug("enableBullseyeInViewNode")
@@ -983,7 +995,7 @@ class LumpNav2Widget(ScriptedLoadableModuleWidget, VTKObservationMixin):
 
     ultrasoundSqBr = self._parameterNode.GetNodeReference(self.logic.ULTRASOUND_SEQUENCE_BROWSER)
     if ultrasoundSqBr is not None:
-      self.ui.ultrasoundSequenceBrowserButton.checked = ultrasoundSqBr.GetRecordingActive()
+      self.ui.startStopRecordingButton.checked = ultrasoundSqBr.GetRecordingActive()
 
     self._updatingGUIFromMRML = False
 
@@ -1113,6 +1125,10 @@ class LumpNav2Logic(ScriptedLoadableModuleLogic, VTKObservationMixin):
     self.tumorMarkups_Needle = None
     self.tumorMarkupAddedObserverTag = None
     self.tumorMarkupEndInteractionObserverTag = None
+    self.tumorModel_Needle = None #TODO: is this allowed? Are we supposed to do this? No
+    
+    self.ChA_ChartNode = None
+    self.ChB_ChartNode = None
 
     #Second fiducial node used to erase points #TODO: should we convert this to parameterNode? Also why
     #are we calling setAndObserveMarkupsNode at the start?
@@ -1615,14 +1631,12 @@ class LumpNav2Logic(ScriptedLoadableModuleLogic, VTKObservationMixin):
   #def sequenceBrowserSetUp(self):
   def setTrackingSequenceBrowser(self, recording):
     
-    sequenceLogic = slicer.modules.sequences.logic()
     parameterNode = self.getParameterNode()
     sequenceBrowserTracking = parameterNode.GetNodeReference(self.TRACKING_SEQUENCE_BROWSER)
     sequenceBrowserTracking.SetRecordingActive(recording) #stop
 
   def setUltrasoundSequenceBrowser(self, recording):
 
-    sequenceLogic = slicer.modules.sequences.logic()
     parameterNode = self.getParameterNode()
     sequenceBrowserUltrasound = parameterNode.GetNodeReference(self.ULTRASOUND_SEQUENCE_BROWSER)
     sequenceBrowserUltrasound.SetRecordingActive(recording) #stop
@@ -1765,10 +1779,36 @@ class LumpNav2Logic(ScriptedLoadableModuleLogic, VTKObservationMixin):
     plotViewNode = plotWidget.mrmlPlotViewNode()
     plotViewNode.SetPlotChartNodeID(ChB_ChartNode.GetID())
 
+  def setStreamGraphButton(toggled):
+    loggin.info('setStreamGraphButton')
+    #if toggled:
+      #add observer
 
+    #else:
+      #remove observer
+  
   def onEraserClicked(self, observer, eventid) :
     logging.debug("onEraserClicked")
     self.removeFiducialPoint()
+
+  def setNormalBrightnessClicked(self):
+    logging.info("setNormalBrightnessClicked")
+    self.setImageMinMaxLevel(0,200)
+
+  def setBrightBrightnessClicked(self):
+    logging.info("setBrightBrightnessClicked")
+    self.setImageMinMaxLevel(0,120)
+
+  def setBrightestBrightnessClicked(self):
+    logging.info("setBrightestBrightnessClicked")
+    self.setImageMinMaxLevel(0,60)
+
+  def setImageMinMaxLevel(self, minLevel, maxLevel):
+    logging.info("setImageMinMaxLevel")
+    parameterNode = self.getParameterNode()
+    liveUSNode = parameterNode.GetNodeReference(self.IMAGE_IMAGE).GetDisplayNode()
+    liveUSNode.SetAutoWindowLevel(0)
+    liveUSNode.SetWindowLevelMinMax(minLevel, maxLevel)
 
   def onTumorMarkupsNodeModified(self, observer, eventid):
     numberOfPoints = self.tumorMarkups_Needle.GetNumberOfFiducials()

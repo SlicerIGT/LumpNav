@@ -10,6 +10,9 @@
     <height>890</height>
    </rect>
   </property>
+  <property name="cursor">
+   <cursorShape>ArrowCursor</cursorShape>
+  </property>
   <layout class="QVBoxLayout" name="verticalLayout">
    <item>
     <widget class="ctkCollapsibleButton" name="toolsCollapsibleButton">
@@ -99,18 +102,33 @@
       <string>Tumor contouring</string>
      </property>
      <property name="checked">
-      <bool>false</bool>
+      <bool>true</bool>
      </property>
      <layout class="QVBoxLayout" name="verticalLayout_3">
       <item>
-       <widget class="ctkSliderWidget" name="brightnessSliderWidget">
-        <property name="pageStep">
-         <double>9.000000000000000</double>
-        </property>
-        <property name="maximum">
-         <double>255.000000000000000</double>
-        </property>
-       </widget>
+       <layout class="QHBoxLayout" name="horizontalLayout_13">
+        <item>
+         <widget class="QPushButton" name="normalBrightnessButton">
+          <property name="text">
+           <string>Normal</string>
+          </property>
+         </widget>
+        </item>
+        <item>
+         <widget class="QPushButton" name="brightBrightnessButton">
+          <property name="text">
+           <string>Bright</string>
+          </property>
+         </widget>
+        </item>
+        <item>
+         <widget class="QPushButton" name="brightestBrightnessButton">
+          <property name="text">
+           <string>Brightest</string>
+          </property>
+         </widget>
+        </item>
+       </layout>
       </item>
       <item>
        <layout class="QHBoxLayout" name="horizontalLayout_4">
@@ -168,7 +186,7 @@
         <item>
          <widget class="QPushButton" name="startStopRecordingButton">
           <property name="text">
-           <string>Start recording</string>
+           <string>Start Ultrasound Recording</string>
           </property>
           <property name="checkable">
            <bool>true</bool>
@@ -502,19 +520,6 @@
        </widget>
       </item>
       <item>
-       <widget class="QPushButton" name="ultrasoundSequenceBrowserButton">
-        <property name="text">
-         <string>Record Ultrasound</string>
-        </property>
-        <property name="checkable">
-         <bool>true</bool>
-        </property>
-        <property name="checked">
-         <bool>true</bool>
-        </property>
-       </widget>
-      </item>
-      <item>
        <widget class="QPushButton" name="trackingSequenceBrowserButton">
         <property name="text">
          <string>Record Tracking</string>
@@ -585,6 +590,13 @@
       <bool>false</bool>
      </property>
      <layout class="QVBoxLayout" name="verticalLayout_7">
+      <item>
+       <widget class="QPushButton" name="streamGraphButton">
+        <property name="text">
+         <string>Stream Graph</string>
+        </property>
+       </widget>
+      </item>
       <item>
        <widget class="QPushButton" name="displaySampleGraphButton">
         <property name="text">
