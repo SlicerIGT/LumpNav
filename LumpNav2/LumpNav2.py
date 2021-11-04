@@ -546,6 +546,7 @@ class LumpNav2Widget(ScriptedLoadableModuleWidget, VTKObservationMixin):
     cameraNode1 = self.getCamera('View1')
     cameraNode2 = self.getCamera('View2')
     cameraNode3 = self.getCamera('View3')
+    #TODO: Don't use magic numbers
     cameraNode1.SetPosition(-242.0042709749552, 331.2026122150233, -36.6617924419265)
     cameraNode1.SetViewUp(0.802637869051714, 0.5959392355990031, -0.025077452777348814)
     cameraNode1.SetFocalPoint(0.0,0.0,0.0)
@@ -1265,7 +1266,6 @@ class LumpNav2Logic(ScriptedLoadableModuleLogic, VTKObservationMixin):
     """
     Sets up the Slicer scene. Creates nodes if they are missing.
     """
-
     parameterNode = self.getParameterNode()
 
     self.setupTransformHierarchy()
@@ -1348,44 +1348,36 @@ class LumpNav2Logic(ScriptedLoadableModuleLogic, VTKObservationMixin):
     #tumorModel = slicer.mrmlScene.AddNewNodeByClass("vtkMRMLModelNode", self.TUMOR_MODEL)
     #parameterNode.SetNodeReferenceID(self.TUMOR_MODEL, tumorModel.GetID())
 
-    #TODO: two lines below: is self.TUMOR_MODEL in the needle coordinate system? When do we include the _Needle?
-    #TODO: getFirstNodeByName should never be used!
-    tumorModel_Needle = slicer.util.getFirstNodeByName(self.TUMOR_MODEL, className='vtkMRMLModelNode')
+    tumorModel_Needle = parameterNode.GetNodeReference(self.TUMOR_MODEL)
     if tumorModel_Needle is None:
-      tumorModel_Needle = slicer.vtkMRMLModelNode()
-      tumorModel_Needle.SetName("TumorModel")
-      sphereSource = vtk.vtkSphereSource()
-      sphereSource.SetRadius(0.001)
-      tumorModel_Needle.SetPolyDataConnection(sphereSource.GetOutputPort())
-      slicer.mrmlScene.AddNode(tumorModel_Needle)
-      # Add display node
-      modelDisplayNode = slicer.vtkMRMLModelDisplayNode()
+      tumorModel_Needle = slicer.mrmlScene.AddNewNodeByClass("vtkMRMLModelNode", self.TUMOR_MODEL)
+      tumorModel_Needle.CreateDefaultDisplayNodes()
+      modelDisplayNode = tumorModel_Needle.GetDisplayNode()
       modelDisplayNode.SetColor(0,1,0) # Green
       modelDisplayNode.BackfaceCullingOff()
       modelDisplayNode.SliceIntersectionVisibilityOn()
       modelDisplayNode.SetSliceIntersectionThickness(4)
       modelDisplayNode.SetOpacity(0.3) # Between 0-1, 1 being opaque
-      slicer.mrmlScene.AddNode(modelDisplayNode)
-      #TODO: what does the line below this do?
-      tumorModel_Needle.SetAndObserveDisplayNodeID(modelDisplayNode.GetID())
       parameterNode.SetNodeReferenceID(self.TUMOR_MODEL, tumorModel_Needle.GetID())
 
-    #TODO: Line below is not the right way to grab the node?
-    tumorMarkups_Needle = slicer.util.getFirstNodeByName(self.TUMOR_MARKUPS_NEEDLE, className='vtkMRMLMarkupsFiducialNode')
+    needleToReference = parameterNode.GetNodeReference(self.NEEDLE_TO_REFERENCE)
+    tumorModel_Needle.SetAndObserveTransformNodeID(needleToReference.GetID())
+
+    tumorMarkups_Needle = parameterNode.GetNodeReference(self.TUMOR_MARKUPS_NEEDLE)
     if tumorMarkups_Needle is None:
-      tumorMarkups_Needle = slicer.vtkMRMLMarkupsFiducialNode()
-      tumorMarkups_Needle.SetName(self.TUMOR_MARKUPS_NEEDLE)
-      slicer.mrmlScene.AddNode(tumorMarkups_Needle)
+      tumorMarkups_Needle = slicer.mrmlScene.AddNewNodeByClass("vtkMRMLMarkupsFiducialNode", self.TUMOR_MARKUPS_NEEDLE)
       tumorMarkups_Needle.CreateDefaultDisplayNodes()
       tumorMarkups_Needle.GetDisplayNode().SetTextScale(0)
     self.setAndObserveTumorMarkupsNode(tumorMarkups_Needle)
+    tumorMarkups_Needle.SetAndObserveTransformNodeID(needleToReference.GetID())
     parameterNode.SetNodeReferenceID(self.TUMOR_MARKUPS_NEEDLE, tumorMarkups_Needle.GetID())
+
     # OpenIGTLink connection
 
     self.setupPlusServer()
 
     sequenceLogic = slicer.modules.sequences.logic()
-    parameterNode = self.getParameterNode()
+
     sequenceBrowserTracking = parameterNode.GetNodeReference(self.TRACKING_SEQUENCE_BROWSER)
     
     if sequenceBrowserTracking is None:
@@ -1422,19 +1414,6 @@ class LumpNav2Logic(ScriptedLoadableModuleLogic, VTKObservationMixin):
     sequenceBrowserUltrasound.SetRecording(sequenceNode, True)
     sequenceBrowserUltrasound.SetPlayback(sequenceNode, True)
     sequenceBrowserUltrasound.SetRecordingActive(False)
-
-    #create markups node to save all fiducials in the needle coordinate system.
-    #TODO: Do we need to set paramaterNode.SetNodeReferenceID here? When do we do that again?
-    tumorMarkups_Needle = parameterNode.GetNodeReference(self.TUMOR_MARKUPS_NEEDLE)
-
-    if tumorMarkups_Needle is None:
-      tumorMarkups_Needle = slicer.vtkMRMLMarkupsFiducialNode()
-      tumorMarkups_Needle.SetName("T")
-      slicer.mrmlScene.AddNode(tumorMarkups_Needle)
-      tumorMarkups_Needle.CreateDefaultDisplayNodes()
-      tumorMarkups_Needle.GetDisplayNode().SetTextScale(0)
-    self.setAndObserveTumorMarkupsNode(tumorMarkups_Needle)
-    self.tumorMarkups_Needle.SetAndObserveTransformNodeID(needleToReference.GetID())
 
     #TODO: convert this to above methodology?
     needleToReferece = parameterNode.GetNodeReference(self.NEEDLE_TO_REFERENCE)
