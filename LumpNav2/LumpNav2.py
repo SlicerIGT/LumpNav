@@ -1846,6 +1846,7 @@ class LumpNav2Logic(ScriptedLoadableModuleLogic, VTKObservationMixin):
 
     transdToReference = self.addLinearTransformToScene(self.TRANSD_TO_REFERENCE, parentTransform=referenceToRas)
     imageToTransd = self.addLinearTransformToScene(self.IMAGE_TO_TRANSD, parentTransform=transdToReference)
+    predictionToTransd = self.addLinearTransformToScene(self.PREDICTION_TO_TRANSD, parentTransform=transdToReference)
     self.updateImageToTransdFromDepth(self.DEFAULT_US_DEPTH)
 
     imageImage = parameterNode.GetNodeReference(self.IMAGE_IMAGE)
@@ -1857,6 +1858,15 @@ class LumpNav2Logic(ScriptedLoadableModuleLogic, VTKObservationMixin):
       parameterNode.SetNodeReferenceID(self.IMAGE_IMAGE, imageImage.GetID())
     imageImage.SetAndObserveTransformNodeID(imageToTransd.GetID())
 
+    predictionImage = parameterNode.GetNodeReference(self.PREDICTION_VOLUME)
+    if predictionImage is None:
+      predictionImage = slicer.mrmlScene.AddNewNodeByClass("vtkMRMLScalarVolumeNode", self.PREDICTION_VOLUME)
+      predictionImage.CreateDefaultDisplayNodes()
+      imageArray = np.zeros((512, 512, 1), dtype="uint8")
+      slicer.util.updateVolumeFromArray(predictionImage, imageArray)
+      parameterNode.SetNodeReferenceID(self.PREDICTION_VOLUME, predictionImage.GetID())
+    predictionImage.SetAndObserveTransformNodeID(predictionToTransd.GetID())
+    
     # TransdToNeedle to display tumour reconstruction in needle coordinate system
     transdToNeedle = self.addLinearTransformToScene(self.TRANSD_TO_NEEDLE, parentTransform=needleToReference)
     parameterNode.SetNodeReferenceID(self.TRANSD_TO_NEEDLE, transdToNeedle.GetID())
@@ -1990,14 +2000,6 @@ class LumpNav2Logic(ScriptedLoadableModuleLogic, VTKObservationMixin):
 
       # Set up display node for prediction
       predictionNode = parameterNode.GetNodeReference(self.PREDICTION_VOLUME)
-      # Remove existing prediction volume
-      if predictionNode is not None:
-        slicer.mrmlScene.RemoveNode(predictionNode)
-
-      predictionNode = slicer.mrmlScene.AddNewNodeByClass("vtkMRMLScalarVolumeNode", self.PREDICTION_VOLUME)
-      parameterNode.SetNodeReferenceID(self.PREDICTION_VOLUME, predictionNode.GetID())
-      predictionNode.SetAndObserveTransformNodeID(predToTransd.GetID())
-      predictionNode.CreateDefaultDisplayNodes()
       predictionDisplayNode = predictionNode.GetDisplayNode()
       predictionDisplayNode.SetWindow(205)
       predictionDisplayNode.SetLevel(220)
