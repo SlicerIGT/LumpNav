@@ -1853,7 +1853,7 @@ class LumpNav2Logic(ScriptedLoadableModuleLogic, VTKObservationMixin):
     if imageImage is None:
       imageImage = slicer.mrmlScene.AddNewNodeByClass("vtkMRMLScalarVolumeNode", self.IMAGE_IMAGE)
       imageImage.CreateDefaultDisplayNodes()
-      imageArray = np.zeros((512, 512, 1), dtype="uint8")
+      imageArray = np.zeros((1, 512, 512), dtype="uint8")
       slicer.util.updateVolumeFromArray(imageImage, imageArray)
       parameterNode.SetNodeReferenceID(self.IMAGE_IMAGE, imageImage.GetID())
     imageImage.SetAndObserveTransformNodeID(imageToTransd.GetID())
@@ -1862,11 +1862,11 @@ class LumpNav2Logic(ScriptedLoadableModuleLogic, VTKObservationMixin):
     if predictionImage is None:
       predictionImage = slicer.mrmlScene.AddNewNodeByClass("vtkMRMLScalarVolumeNode", self.PREDICTION_VOLUME)
       predictionImage.CreateDefaultDisplayNodes()
-      imageArray = np.zeros((512, 512, 1), dtype="uint8")
+      imageArray = np.zeros((1, 512, 512), dtype="uint8")
       slicer.util.updateVolumeFromArray(predictionImage, imageArray)
       parameterNode.SetNodeReferenceID(self.PREDICTION_VOLUME, predictionImage.GetID())
     predictionImage.SetAndObserveTransformNodeID(predictionToTransd.GetID())
-    
+
     # TransdToNeedle to display tumour reconstruction in needle coordinate system
     transdToNeedle = self.addLinearTransformToScene(self.TRANSD_TO_NEEDLE, parentTransform=needleToReference)
     parameterNode.SetNodeReferenceID(self.TRANSD_TO_NEEDLE, transdToNeedle.GetID())
@@ -1994,8 +1994,6 @@ class LumpNav2Logic(ScriptedLoadableModuleLogic, VTKObservationMixin):
 
       # Create PredToTransd transform node to track prediction
       predToTransd = parameterNode.GetNodeReference(self.PREDICTION_TO_TRANSD)
-      if predToTransd is None:
-        predToTransd = self.addLinearTransformToScene(self.PREDICTION_TO_TRANSD)
       self.segmentationLogic.setOutputTransform(predToTransd)
 
       # Set up display node for prediction
