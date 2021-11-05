@@ -1777,15 +1777,15 @@ class LumpNav2Logic(ScriptedLoadableModuleLogic, VTKObservationMixin):
 
   def setNormalBrightnessClicked(self):
     logging.info("setNormalBrightnessClicked")
-    self.setImageMinMaxLevel(0,200)
+    self.setImageMinMaxLevel(0,300)
 
   def setBrightBrightnessClicked(self):
     logging.info("setBrightBrightnessClicked")
-    self.setImageMinMaxLevel(0,120)
+    self.setImageMinMaxLevel(0,220)
 
   def setBrightestBrightnessClicked(self):
     logging.info("setBrightestBrightnessClicked")
-    self.setImageMinMaxLevel(0,60)
+    self.setImageMinMaxLevel(0,140)
 
   def setImageMinMaxLevel(self, minLevel, maxLevel):
     logging.info("setImageMinMaxLevel")
