@@ -244,7 +244,7 @@ class LumpNav2Widget(ScriptedLoadableModuleWidget, VTKObservationMixin):
     self.ui.deleteAllFiducialsButton.connect('clicked()', self.onDeleteAllFiducialsClicked)
     self.ui.selectPointsToEraseButton.connect('toggled(bool)', self.onSelectPointsToEraseClicked)
     self.ui.markPointCauteryTipButton.connect('clicked()', self.onMarkPointCauteryTipClicked)
-    self.ui.startStopRecordingButton.connect('toggled(bool)', self.onStartStopRecordingClicked)
+    self.ui.startStopRecordingButton.connect('toggled(bool)', self.onStartStopRecordingClicked)  
     self.ui.freezeUltrasoundButton.connect('toggled(bool)', self.onFreezeUltrasoundClicked)
     self.pivotSamplingTimer.connect('timeout()', self.onPivotSamplingTimeout)
     self.initializeParameterNode() # Make sure parameter node is initialized (needed for module reload)
@@ -739,12 +739,12 @@ class LumpNav2Widget(ScriptedLoadableModuleWidget, VTKObservationMixin):
       self.ui.bottomAutoCenterCameraButton.setChecked(False)
     self.ui.bottomAutoCenterCameraButton.blockSignals(blockSignalState)
 
-    blockSignalState = self.ui.bottomBullseyeCameraButton.blockSignals(True)
-    if (self.viewpointLogic.getViewpointForViewNode(centerViewNode).isCurrentModeBullseye()):
-      self.ui.bottomBullseyeCameraButton.setChecked(True)
-    else:
-      self.ui.bottomBullseyeCameraButton.setChecked(False)
-    self.ui.bottomBullseyeCameraButton.blockSignals(blockSignalState)
+    #blockSignalState = self.ui.bottomBullseyeCameraButton.blockSignals(True)
+    #if (self.viewpointLogic.getViewpointForViewNode(centerViewNode).isCurrentModeBullseye()):
+    #  self.ui.bottomBullseyeCameraButton.setChecked(True)
+    #else:
+    #  self.ui.bottomBullseyeCameraButton.setChecked(False)
+    #self.ui.bottomBullseyeCameraButton.blockSignals(blockSignalState)
 
   def setCustomStyle(self, visible):
     """

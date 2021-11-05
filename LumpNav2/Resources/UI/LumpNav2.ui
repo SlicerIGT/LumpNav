@@ -217,16 +217,6 @@
      </property>
      <layout class="QVBoxLayout" name="verticalLayout_4">
       <item>
-       <widget class="QPushButton" name="bottomBullseyeCameraButton">
-        <property name="text">
-         <string>Bottom camera</string>
-        </property>
-        <property name="checkable">
-         <bool>true</bool>
-        </property>
-       </widget>
-      </item>
-      <item>
        <widget class="QPushButton" name="toolModelButton">
         <property name="text">
          <string>Cautery Model</string>
@@ -351,103 +341,13 @@
        </layout>
       </item>
       <item>
-       <layout class="QHBoxLayout" name="horizontalLayout_9">
-        <item>
-         <widget class="QLabel" name="fieldOfViewLabel">
-          <property name="enabled">
-           <bool>true</bool>
-          </property>
-          <property name="frameShadow">
-           <enum>QFrame::Raised</enum>
-          </property>
-          <property name="text">
-           <string>&lt;html&gt;&lt;head/&gt;&lt;body&gt;&lt;p&gt;Field of view (degrees):&lt;/p&gt;&lt;/body&gt;&lt;/html&gt;</string>
-          </property>
-         </widget>
-        </item>
-        <item>
-         <widget class="ctkSliderWidget" name="fieldOfViewSlider">
-          <property name="enabled">
-           <bool>false</bool>
-          </property>
-          <property name="value">
-           <double>30.000000000000000</double>
-          </property>
-         </widget>
-        </item>
-       </layout>
+       <layout class="QHBoxLayout" name="horizontalLayout_10"/>
       </item>
       <item>
-       <layout class="QHBoxLayout" name="horizontalLayout_10">
-        <item>
-         <widget class="QLabel" name="leftRightLabel">
-          <property name="enabled">
-           <bool>true</bool>
-          </property>
-          <property name="text">
-           <string>&lt;html&gt;&lt;head/&gt;&lt;body&gt;&lt;p&gt;Leftt/Right (mm):&lt;/p&gt;&lt;/body&gt;&lt;/html&gt;</string>
-          </property>
-         </widget>
-        </item>
-        <item>
-         <widget class="ctkSliderWidget" name="cameraXPosSlider">
-          <property name="enabled">
-           <bool>false</bool>
-          </property>
-          <property name="value">
-           <double>30.000000000000000</double>
-          </property>
-         </widget>
-        </item>
-       </layout>
+       <layout class="QHBoxLayout" name="horizontalLayout_11"/>
       </item>
       <item>
-       <layout class="QHBoxLayout" name="horizontalLayout_11">
-        <item>
-         <widget class="QLabel" name="downUpLabel">
-          <property name="enabled">
-           <bool>true</bool>
-          </property>
-          <property name="text">
-           <string>&lt;html&gt;&lt;head/&gt;&lt;body&gt;&lt;p&gt;Down/Up (mm):&lt;/p&gt;&lt;/body&gt;&lt;/html&gt;</string>
-          </property>
-         </widget>
-        </item>
-        <item>
-         <widget class="ctkSliderWidget" name="cameraYPosSlider">
-          <property name="enabled">
-           <bool>false</bool>
-          </property>
-          <property name="value">
-           <double>30.000000000000000</double>
-          </property>
-         </widget>
-        </item>
-       </layout>
-      </item>
-      <item>
-       <layout class="QHBoxLayout" name="horizontalLayout_12">
-        <item>
-         <widget class="QLabel" name="frontBackLabel">
-          <property name="enabled">
-           <bool>true</bool>
-          </property>
-          <property name="text">
-           <string>&lt;html&gt;&lt;head/&gt;&lt;body&gt;&lt;p&gt;Front/Back (mm):&lt;/p&gt;&lt;/body&gt;&lt;/html&gt;</string>
-          </property>
-         </widget>
-        </item>
-        <item>
-         <widget class="ctkSliderWidget" name="cameraZPosSlider">
-          <property name="enabled">
-           <bool>false</bool>
-          </property>
-          <property name="value">
-           <double>30.000000000000000</double>
-          </property>
-         </widget>
-        </item>
-       </layout>
+       <layout class="QHBoxLayout" name="horizontalLayout_12"/>
       </item>
       <item>
        <widget class="ctkCollapsibleButton" name="contourAdjustmentCollpsibleButton">
@@ -481,7 +381,7 @@
    <item>
     <widget class="ctkCollapsibleButton" name="advancedCollapsibleButton">
      <property name="text">
-      <string>Advanced</string>
+      <string>Settings</string>
      </property>
      <property name="checked">
       <bool>false</bool>
@@ -623,11 +523,6 @@
    <extends>QWidget</extends>
    <header>ctkCollapsibleButton.h</header>
    <container>1</container>
-  </customwidget>
-  <customwidget>
-   <class>ctkSliderWidget</class>
-   <extends>QWidget</extends>
-   <header>ctkSliderWidget.h</header>
   </customwidget>
   <customwidget>
    <class>qMRMLWidget</class>
