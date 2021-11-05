@@ -232,7 +232,6 @@ class LumpNav2Widget(ScriptedLoadableModuleWidget, VTKObservationMixin):
     self.ui.cauteryVisibilityButton.connect('toggled(bool)', self.onCauteryVisibilityToggled)
     self.ui.displayDistanceButton.connect('toggled(bool)', self.onDisplayDistanceClicked)
     self.ui.exitButton.connect('clicked()', self.onExitButtonClicked)
-    self.ui.showFullScreenButton.connect('toggled(bool)', self.onShowFullScreenClicked)
     self.ui.saveSceneButton.connect('clicked()', self.onSaveSceneClicked)
 
     #contouring
@@ -318,15 +317,6 @@ class LumpNav2Widget(ScriptedLoadableModuleWidget, VTKObservationMixin):
       logging.error("Scene saving failed")
     qt.QApplication.restoreOverrideCursor()
     slicer.util.showStatusMessage("Saved!", 2000)
-
-  def onShowFullScreenClicked(self, toggled):
-    mainWindow=slicer.util.mainWindow()
-    if toggled:
-      mainWindow.showFullScreen()
-      self.ui.showFullScreenButton.text = "Show Normal Screen"
-    else:
-      self.ui.showFullScreenButton.text = "Show Full Screen"
-      mainWindow.showMaximized()
 
   def onStopPivotCalibration(self):
     self.pivotCalibrationLogic.SetRecordingState(False)
