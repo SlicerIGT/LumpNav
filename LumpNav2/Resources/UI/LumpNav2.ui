@@ -24,13 +24,6 @@
      </property>
      <layout class="QVBoxLayout" name="verticalLayout_2">
       <item>
-       <widget class="QPushButton" name="pushButton">
-        <property name="text">
-         <string>PushButton</string>
-        </property>
-       </widget>
-      </item>
-      <item>
        <widget class="QPushButton" name="cauteryCalibrationButton">
         <property name="text">
          <string>Start cautery calibration</string>
@@ -102,7 +95,7 @@
       <string>Tumor contouring</string>
      </property>
      <property name="checked">
-      <bool>true</bool>
+      <bool>false</bool>
      </property>
      <layout class="QVBoxLayout" name="verticalLayout_3">
       <item>
@@ -247,13 +240,6 @@
        </widget>
       </item>
       <item>
-       <widget class="QPushButton" name="deleteLastFiducialDuringNavigationButton">
-        <property name="text">
-         <string>Delete Last Point</string>
-        </property>
-       </widget>
-      </item>
-      <item>
        <layout class="QHBoxLayout" name="horizontalLayout_3">
         <item>
          <widget class="QPushButton" name="leftBreastButton">
@@ -337,6 +323,9 @@
           <property name="text">
            <string>Left</string>
           </property>
+          <property name="checkable">
+           <bool>true</bool>
+          </property>
          </widget>
         </item>
         <item>
@@ -344,12 +333,18 @@
           <property name="text">
            <string>Bottom</string>
           </property>
+          <property name="checkable">
+           <bool>true</bool>
+          </property>
          </widget>
         </item>
         <item>
          <widget class="QPushButton" name="rightAutoCenterCameraButton">
           <property name="text">
            <string>Right</string>
+          </property>
+          <property name="checkable">
+           <bool>true</bool>
           </property>
          </widget>
         </item>
