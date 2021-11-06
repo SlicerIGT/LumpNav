@@ -154,7 +154,6 @@ class LumpNav2Widget(ScriptedLoadableModuleWidget, VTKObservationMixin):
   NEEDLE_CALIBRATION_THRESHOLD_SETTING = "LumpNav2/NeedleCalibrationTresholdMm"
   NEEDLE_CALIBRATION_THRESHOLD_DEFAULT = 1.0
 
-
   def __init__(self, parent=None):
     """
     Called when the user opens the module the first time and the widget is initialized.
@@ -463,10 +462,10 @@ class LumpNav2Widget(ScriptedLoadableModuleWidget, VTKObservationMixin):
   def onStartStopRecordingClicked(self, toggled):
     if toggled:
       self.ui.startStopRecordingButton.text = "Stop Ultrasound Recording"
-      self.logic.setUltrasoundSequenceBrowser(toggled)
+      self.logic.onUltrasoundSequenceBrowserClicked(toggled)
     else:
       self.ui.startStopRecordingButton.text = "Start Ultrasound Recording"
-      self.logic.setUltrasoundSequenceBrowser(toggled)
+      self.logic.onUltrasoundSequenceBrowserClicked(toggled)
 
   def onFreezeUltrasoundClicked(self, toggled):
     logging.info("onFreezeUltrasoundClicked")
@@ -498,11 +497,10 @@ class LumpNav2Widget(ScriptedLoadableModuleWidget, VTKObservationMixin):
   def onUltrasoundSequenceBrowser(self, toggled):
     logging.info("onUltrasoundSequenceBrowserToggled({})".format(toggled))
     self.logic.onUltrasoundSequenceBrowserClicked(toggled)
+
   def onNormalBrightnessClicked(self):
     logging.info("onNormalBrightnessClicked")
     self.logic.setNormalBrightnessClicked()
-    if toggled:
-      self.logic.setRegionOfInterestNode()
 
   def onBrightBrightnessClicked(self):
     logging.info("onBrightBrightnessClicked")
@@ -1007,7 +1005,6 @@ class LumpNav2Widget(ScriptedLoadableModuleWidget, VTKObservationMixin):
       if firstVolumeNode:
         self._parameterNode.SetNodeReferenceID("InputVolume", firstVolumeNode.GetID())
 
-
   def setParameterNode(self, inputParameterNode):
     """
     Set and observe parameter node.
@@ -1430,8 +1427,9 @@ class LumpNav2Logic(ScriptedLoadableModuleLogic, VTKObservationMixin):
       settings.setValue(self.NEEDLE_VISIBILITY_SETTING, "True" if visible else "False")
 
   def setWarningSound(self, enabled):
-    if self.breachWarningNode is not None:
-      self.breachWarningNode.SetPlayWarningSound(enabled)
+    breachWarningNode = self.getParameterNode().GetNodeReference(self.BREACH_WARNING)
+    if breachWarningNode is not None:
+      breachWarningNode.SetPlayWarningSound(enabled)
       settings = qt.QSettings()
       settings.setValue(self.WARNING_SOUND_SETTING, enabled)
 
@@ -1968,9 +1966,7 @@ class LumpNav2Logic(ScriptedLoadableModuleLogic, VTKObservationMixin):
     if plusServerLauncherNode.GetNodeReferenceID('plusServerRef') != plusServerNode.GetID():
       plusServerLauncherNode.AddAndObserveServerNode(plusServerNode)
 
-  #def sequenceBrowserSetUp(self):
   def setTrackingSequenceBrowser(self, recording):
-
     parameterNode = self.getParameterNode()
     sequenceBrowserTracking = parameterNode.GetNodeReference(self.TRACKING_SEQUENCE_BROWSER)
     sequenceBrowserTracking.SetRecordingActive(recording) #stop
@@ -1979,12 +1975,6 @@ class LumpNav2Logic(ScriptedLoadableModuleLogic, VTKObservationMixin):
     self.setUltrasoundSequenceBrowser(toggled)
     self.setupPredictionProcess(toggled)
     self.setLivePrediction(toggled)
-
-  def setUltrasoundSequenceBrowser(self, recording):
-    sequenceLogic = slicer.modules.sequences.logic()  # TODO: what is the point of this line?
-    parameterNode = self.getParameterNode()
-    sequenceBrowserUltrasound = parameterNode.GetNodeReference(self.ULTRASOUND_SEQUENCE_BROWSER)
-    sequenceBrowserUltrasound.SetRecordingActive(recording)  # stop
 
   def setupPredictionProcess(self, toggled):
     logging.info(f"setupPredictionProcess({toggled})")
@@ -2055,8 +2045,6 @@ class LumpNav2Logic(ScriptedLoadableModuleLogic, VTKObservationMixin):
     roiNode.SetRadiusXYZ(100, 100, 100)
     logging.info(f"Added a 10x10x10cm ROI at position: {sliceCenter}")
 
-  # TODO: when reconstruction is on, prediction doesn't show up and image is permanently frozen
-  # TODO: stopping reconstruction crashes slicer - sometimes before stopping
   def setVolumeReconstruction(self, toggled):
     parameterNode = self.getParameterNode()
     reconstructionNode = parameterNode.GetNodeReference(self.RECONSTRUCTION_NODE)
@@ -2096,9 +2084,6 @@ class LumpNav2Logic(ScriptedLoadableModuleLogic, VTKObservationMixin):
     else:
       logging.info("Stopping volume reconstruction")
       self.reconstructionLogic.StopLiveVolumeReconstruction(reconstructionNode)
-
-  def setAndObserveTumorMarkupsNode(self, tumorMarkups_Needle):
-    logging.debug("setAndObserveTumorMarkupsNode")
 
   def setDeleteLastFiducialClicked(self, numberOfPoints):
     deleted_coord = [0.0, 0.0, 0.0]
@@ -2214,7 +2199,7 @@ class LumpNav2Logic(ScriptedLoadableModuleLogic, VTKObservationMixin):
     plotViewNode.SetPlotChartNodeID(ChA_ChartNode.GetID())
 
   def setStreamGraphButton(toggled):
-    loggin.info('setStreamGraphButton')
+    logging.info('setStreamGraphButton')
     #if toggled:
       #add observer
 
@@ -2788,6 +2773,9 @@ class LumpNav2Logic(ScriptedLoadableModuleLogic, VTKObservationMixin):
   def mMean(self, channelA, channelB):
       mMean = (self.absMean(channelA) * self.absSum(channelB)) * 100
       return mMean
+
+  def onImageImageModified(self, observer, eventid):
+    self.updatePredictionImageDimensions()
 
   def updatePredictionImageDimensions(self):
     parameterNode = self.getParameterNode()
