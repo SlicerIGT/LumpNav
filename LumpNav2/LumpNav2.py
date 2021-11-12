@@ -705,35 +705,23 @@ class LumpNav2Widget(ScriptedLoadableModuleWidget, VTKObservationMixin):
 
   def onCollectOffToggled(self, toggled):
     logging.info('onCollectOffToggled({})'.format(toggled))
-    parameterNode = self._parameterNode
-    signalSignal = parameterNode.GetNodeReference(self.logic.SIGNAL_SIGNAL)
-    if toggled:
-      #add observer for same as scopeSignalModified observer
-      self.addObserver(signalSignal, slicer.vtkMRMLScalarVolumeNode.ImageDataModifiedEvent, self.logic.setCollectOff)
-    else:
-      self.removeObserver(signalSignal, slicer.vtkMRMLScalarVolumeNode.ImageDataModifiedEvent, self.logic.setCollectOff)
-      #remove observer from above
-    return
+    self.logic.setCollectOff(toggled)
 
   def onCollectCutAirToggled(self, toggled):
     logging.info('onCollectCutAirToggled')
-    self.logic.setCollectCutAir()
-    return
+    self.logic.setCollectCutAir(toggled)
 
   def onCollectCutTissueToggled(self, toggled):
     logging.info('onCollectCutTissueToggled')
-    self.logic.setCollectCutAir()
-    return
+    self.logic.setCollectCutAir(toggled)
 
   def onCollectCoagAirToggled(self, toggled):
     logging.info('onCollectCoagAirToggled')
-    self.logic.setCollectCoagAir()
-    return
+    self.logic.setCollectCoagAir(toggled)
 
   def onCollectCoagTissueToggled(self, toggled):
     logging.info('onCollectCoagTissueToggled')
-    self.logic.setCollectCoagTissue()
-    return
+    self.logic.setCollectCoagTissue(toggled)
 
   def onTrainAndImplementModelClicked(self):
     logging.info('onTrainAndImplementModelClicked')
@@ -1204,6 +1192,12 @@ class LumpNav2Logic(ScriptedLoadableModuleLogic, VTKObservationMixin):
   COLLECT_COAG_AIR = "CollectCoagAir"
   COLLECT_COAG_TISSUE = "CollectCoagTissue"
 
+  COLLECT_OFF_SEQUENCE_BROWSER = "CollectOffSequenceBrowser"
+  COLLECT_CUT_AIR_SEQUENCE_BROWSER = "CollectCutAirSequenceBrowser"
+  COLLECT_CUT_TISSUE_SEQUENCE_BROWSER = "CollectCutTissueSequenceBrowser"
+  COLLECT_COAG_AIR_SEQUENCE_BROWSER = "CollectCoagAirSequenceBrowser"
+  COLLECT_COAG_TISSUE_SEQUENCE_BROWSER = "CollectCoagTissueSequenceBrowser"
+
   def __init__(self):
     """
     Called when the logic class is instantiated. Can be used for initializing member variables.
@@ -1519,44 +1513,60 @@ class LumpNav2Logic(ScriptedLoadableModuleLogic, VTKObservationMixin):
       parameterNode.SetNodeReferenceID(self.SIGNAL_SIGNAL, signalSignal.GetID())
     self.addObserver(signalSignal, slicer.vtkMRMLScalarVolumeNode.ImageDataModifiedEvent, self.scopeSignalModified)
 
-    sequenceBrowserScopeCollectCutAir = parameterNode.GetNodeReference(self.COLLECT_CUT_AIR)
+    sequenceBrowserScopeCollectOff = parameterNode.GetNodeReference(self.COLLECT_OFF_SEQUENCE_BROWSER)
+    if sequenceBrowserScopeCollectOff is None:
+      sequenceBrowserScopeCollectOff = slicer.mrmlScene.AddNewNodeByClass("vtkMRMLSequenceBrowserNode", self.COLLECT_OFF_SEQUENCE_BROWSER)
+      parameterNode.SetNodeReferenceID(self.COLLECT_OFF_SEQUENCE_BROWSER, sequenceBrowserScopeCollectOff.GetID())
+    signal_Signal = parameterNode.GetNodeReference(self.SIGNAL_SIGNAL)
+    sequenceNode = sequenceLogic.AddSynchronizedNode(None, signal_Signal, sequenceBrowserScopeCollectOff)
+    sequenceBrowserScopeCollectOff.SetRecording(sequenceNode, True)
+    sequenceBrowserScopeCollectOff.SetPlayback(sequenceNode, True)
+    sequenceBrowserScopeCollectOff.SetSaveChanges(sequenceNode, True)
+    sequenceBrowserScopeCollectOff.SetRecordingActive(False)
+    #TODO: why do we include sequenceNode as parameters in these lines?
+
+    sequenceBrowserScopeCollectCutAir = parameterNode.GetNodeReference(self.COLLECT_CUT_AIR_SEQUENCE_BROWSER)
     if sequenceBrowserScopeCollectCutAir is None:
-      sequenceBrowserScopeCollectCutAir = slicer.mrmlScene.AddNewNodeByClass("vtkMRMLSequenceBrowserNode", self.COLLECT_CUT_AIR)
-      parameterNode.SetNodeReferenceID(self.COLLECT_CUT_AIR, sequenceBrowserScopeCollectCutAir.GetID())
+      sequenceBrowserScopeCollectCutAir = slicer.mrmlScene.AddNewNodeByClass("vtkMRMLSequenceBrowserNode", self.COLLECT_CUT_AIR_SEQUENCE_BROWSER)
+      parameterNode.SetNodeReferenceID(self.COLLECT_CUT_AIR_SEQUENCE_BROWSER, sequenceBrowserScopeCollectCutAir.GetID())
     signal_Signal = parameterNode.GetNodeReference(self.SIGNAL_SIGNAL)
     sequenceNode = sequenceLogic.AddSynchronizedNode(None, signal_Signal, sequenceBrowserScopeCollectCutAir)
-    sequenceBrowserScopeCollectCutAir.SetRecording(sequenceNode, False)
+    sequenceBrowserScopeCollectCutAir.SetRecording(sequenceNode, True)
     sequenceBrowserScopeCollectCutAir.SetPlayback(sequenceNode, True)
+    sequenceBrowserScopeCollectCutAir.SetSaveChanges(sequenceNode, True)
     sequenceBrowserScopeCollectCutAir.SetRecordingActive(False)
 
-    sequenceBrowserScopeCollectCutTissue = parameterNode.GetNodeReference(self.COLLECT_CUT_TISSUE)
+    sequenceBrowserScopeCollectCutTissue = parameterNode.GetNodeReference(self.COLLECT_CUT_AIR_SEQUENCE_BROWSER)
     if sequenceBrowserScopeCollectCutTissue is None:
-      sequenceBrowserScopeCollectCutTissue = slicer.mrmlScene.AddNewNodeByClass("vtkMRMLSequenceBrowserNode", self.COLLECT_CUT_TISSUE)
-      parameterNode.SetNodeReferenceID(self.COLLECT_CUT_TISSUE, sequenceBrowserScopeCollectCutTissue.GetID())
+      sequenceBrowserScopeCollectCutTissue = slicer.mrmlScene.AddNewNodeByClass("vtkMRMLSequenceBrowserNode", self.COLLECT_CUT_TISSUE_SEQUENCE_BROWSER)
+      parameterNode.SetNodeReferenceID(self.COLLECT_CUT_TISSUE_SEQUENCE_BROWSER, sequenceBrowserScopeCollectCutTissue.GetID())
     signal_Signal = parameterNode.GetNodeReference(self.SIGNAL_SIGNAL)
     sequenceNode = sequenceLogic.AddSynchronizedNode(None, signal_Signal, sequenceBrowserScopeCollectCutTissue)
-    sequenceBrowserScopeCollectCutTissue.SetRecording(sequenceNode, False)
+    sequenceBrowserScopeCollectCutTissue.SetRecording(sequenceNode, True)
     sequenceBrowserScopeCollectCutTissue.SetPlayback(sequenceNode, True)
+    sequenceBrowserScopeCollectCutTissue.SetSaveChanges(sequenceNode, True)
     sequenceBrowserScopeCollectCutTissue.SetRecordingActive(False)
 
-    sequenceBrowserScopeCollectCoagAir = parameterNode.GetNodeReference(self.COLLECT_COAG_AIR)
+    sequenceBrowserScopeCollectCoagAir = parameterNode.GetNodeReference(self.COLLECT_CUT_AIR_SEQUENCE_BROWSER)
     if sequenceBrowserScopeCollectCoagAir is None:
-      sequenceBrowserScopeCollectCoagAir = slicer.mrmlScene.AddNewNodeByClass("vtkMRMLSequenceBrowserNode", self.COLLECT_COAG_AIR)
-      parameterNode.SetNodeReferenceID(self.COLLECT_COAG_AIR, sequenceBrowserScopeCollectCoagAir.GetID())
+      sequenceBrowserScopeCollectCoagAir = slicer.mrmlScene.AddNewNodeByClass("vtkMRMLSequenceBrowserNode", self.COLLECT_COAG_AIR_SEQUENCE_BROWSER)
+      parameterNode.SetNodeReferenceID(self.COLLECT_COAG_AIR_SEQUENCE_BROWSER, sequenceBrowserScopeCollectCoagAir.GetID())
     signal_Signal = parameterNode.GetNodeReference(self.SIGNAL_SIGNAL)
     sequenceNode = sequenceLogic.AddSynchronizedNode(None, signal_Signal, sequenceBrowserScopeCollectCoagAir)
-    sequenceBrowserScopeCollectCoagAir.SetRecording(sequenceNode, False)
+    sequenceBrowserScopeCollectCoagAir.SetRecording(sequenceNode, True)
     sequenceBrowserScopeCollectCoagAir.SetPlayback(sequenceNode, True)
+    sequenceBrowserScopeCollectCoagAir.SetSaveChanges(sequenceNode, True)
     sequenceBrowserScopeCollectCoagAir.SetRecordingActive(False)
 
-    sequenceBrowserScopeCollectCoagTissue = parameterNode.GetNodeReference(self.COLLECT_COAG_TISSUE)
+    sequenceBrowserScopeCollectCoagTissue = parameterNode.GetNodeReference(self.COLLECT_CUT_AIR_SEQUENCE_BROWSER)
     if sequenceBrowserScopeCollectCoagTissue is None:
-      sequenceBrowserScopeCollectCoagTissue = slicer.mrmlScene.AddNewNodeByClass("vtkMRMLSequenceBrowserNode", self.COLLECT_COAG_TISSUE)
-      parameterNode.SetNodeReferenceID(self.COLLECT_COAG_TISSUE, sequenceBrowserScopeCollectCoagTissue.GetID())
+      sequenceBrowserScopeCollectCoagTissue = slicer.mrmlScene.AddNewNodeByClass("vtkMRMLSequenceBrowserNode", self.COLLECT_COAG_TISSUE_SEQUENCE_BROWSER)
+      parameterNode.SetNodeReferenceID(self.COLLECT_COAG_TISSUE_SEQUENCE_BROWSER, sequenceBrowserScopeCollectCoagTissue.GetID())
     signal_Signal = parameterNode.GetNodeReference(self.SIGNAL_SIGNAL)
     sequenceNode = sequenceLogic.AddSynchronizedNode(None, signal_Signal, sequenceBrowserScopeCollectCoagTissue)
-    sequenceBrowserScopeCollectCoagTissue.SetRecording(sequenceNode, False)
+    sequenceBrowserScopeCollectCoagTissue.SetRecording(sequenceNode, True)
     sequenceBrowserScopeCollectCoagTissue.SetPlayback(sequenceNode, True)
+    sequenceBrowserScopeCollectCoagTissue.SetSaveChanges(sequenceNode, True)
     sequenceBrowserScopeCollectCoagTissue.SetRecordingActive(False)
 
     # Set up breach warning node
@@ -2088,7 +2098,7 @@ class LumpNav2Logic(ScriptedLoadableModuleLogic, VTKObservationMixin):
       else :
         view.setCornerAnnotationText("{0:.2f}mm".format(self.breachWarningNode.GetClosestDistanceToModelFromToolTip()))
   
-  def setCollectOff(self):
+  def setCollectOff(self, recording):
     #logging.info("setCollectOff")
     #convert to volume, save a reference to that. slicer.util.updateVolumeFromArray
     #take sequence browswer
@@ -2096,9 +2106,37 @@ class LumpNav2Logic(ScriptedLoadableModuleLogic, VTKObservationMixin):
     #click play, grab proxy node
 
     parameterNode = self.getParameterNode()
-    sequenceBrowserUltrasound = parameterNode.GetNodeReference(self.ULTRASOUND_SEQUENCE_BROWSER)
+    sequenceBrowserUltrasound = parameterNode.GetNodeReference(self.COLLECT_OFF_SEQUENCE_BROWSER)
     sequenceBrowserUltrasound.SetRecordingActive(recording) #stop
     return
+    
+  def setCollectCutAir(self, recording):
+    logging.info("setCollectCutAir")
+    parameterNode = self.getParameterNode()
+    sequenceBrowserUltrasound = parameterNode.GetNodeReference(self.COLLECT_CUT_AIR_SEQUENCE_BROWSER)
+    sequenceBrowserUltrasound.SetRecordingActive(recording) #stop
+
+  def setCollectCutTissue(self, recording):
+    logging.info("setCollectCutTissue")
+    parameterNode = self.getParameterNode()
+    sequenceBrowserUltrasound = parameterNode.GetNodeReference(self.COLLECT_CUT_AIR_SEQUENCE_BROWSER)
+    sequenceBrowserUltrasound.SetRecordingActive(recording) #stop
+
+  def setCollectCoagAir(self, recording):
+    logging.info("setCollectCoagAir")
+    parameterNode = self.getParameterNode()
+    sequenceBrowserUltrasound = parameterNode.GetNodeReference(self.COLLECT_CUT_AIR_SEQUENCE_BROWSER)
+    sequenceBrowserUltrasound.SetRecordingActive(recording) #stop
+
+  def setCollectCoagTissue(self, recording):
+    logging.info("setCollectCoagTissue")
+    parameterNode = self.getParameterNode()
+    sequenceBrowserUltrasound = parameterNode.GetNodeReference(self.COLLECT_CUT_AIR_SEQUENCE_BROWSER)
+    sequenceBrowserUltrasound.SetRecordingActive(recording) #stop
+
+  def setTrainAndImplementModel(self):
+    logging.info("setTrainAndImplementModel")
+
     '''
     time, ChA, ChB = self.getOscilloscopeChannels()
     parameterNode = self.getParameterNode()
@@ -2112,21 +2150,24 @@ class LumpNav2Logic(ScriptedLoadableModuleLogic, VTKObservationMixin):
       newChArray_Array = np.append(oldChArray_Array, newChArray_Array)
       newChArray_String = newChArray_Array.tostring()
       parameterNode.SetAttribute(self.COLLECT_OFF, newChArray_String)
+    
+    #getting proxy node from recorded sequence browser of osciloscope signals
+    parameterNode = self.getParameterNode()
+    collectOffSeqBr = parameterNode.GetNodeReference(self.COLLECT_OFF_SEQUENCE_BROWSER)
+    signal_Signal = parameterNode.GetNodeReference(self.SIGNAL_SIGNAL)
+    n = collectOffSeqBr.GetNumberOfItems()
+    collectOffSeqBr.SelectFirstItem()
+    for i in range(n):
+      a = slicer.util.arrayFromVolume(signal_Signal)
+      #get array of current sample
+      #append array with channelA
+      #append array with channelB
+    print(a[:4])
+    #result: 3900 by n (samples) array
+
+
+print(a.shape)
     '''
-  def setCollectCutAir(self):
-    logging.info("setCollectCutAir")
-
-  def setCollectCutTissue(self):
-    logging.info("setCollectCutTissue")
-
-  def setCollectCoagAir(self):
-    logging.info("setCollectCoagAir")
-
-  def setCollectCoagTissue(self):
-    logging.info("setCollectCoagTissue")
-
-  def setTrainAndImplementModel(self):
-    logging.info("setTrainAndImplementModel")
 
   def setUseBaseModelClicked(self):
     #TODO: how do I non-specific to my computer file paths
