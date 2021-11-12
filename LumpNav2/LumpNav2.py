@@ -268,6 +268,14 @@ class LumpNav2Widget(ScriptedLoadableModuleWidget, VTKObservationMixin):
     # Oscilloscope
     self.ui.displaySampleGraphButton.connect('clicked()', self.onDisplaySampleGraphButton)
     self.ui.streamGraphButton.connect('toggled(bool)', self.onStreamGraphButton)
+    self.ui.collectOffButton.connect('toggled(bool)', self.onCollectOffToggled)
+    self.ui.collectCutAirButton.connect('toggled(bool)', self.onCollectCutAirToggled)
+    self.ui.collectCutTissueButton.connect('toggled(bool)', self.onCollectCutTissueToggled)
+    self.ui.collectCoagAirButton.connect('toggled(bool)', self.onCollectCoagAirToggled)
+    self.ui.collectCoagTissueButton.connect('toggled(bool)', self.onCollectCoagTissueToggled)
+    self.ui.trainAndImplementModelButton.connect('clicked()', self.onTrainAndImplementModelClicked)
+    self.ui.useBaseModelButton.connect('clicked()', self.onUseBaseModelClicked)
+    self.ui.resetModelButton.connect('clicked()', self.onResetModelClicked)
 
     import Viewpoint
     self.viewpointLogic = Viewpoint.ViewpointLogic()
@@ -438,11 +446,14 @@ class LumpNav2Widget(ScriptedLoadableModuleWidget, VTKObservationMixin):
 
   def onFreezeUltrasoundClicked(self, toggled):
     logging.info("onFreezeUltrasoundClicked")
+    plusServerNode = self._parameterNode.GetNodeReference(self.logic.PLUS_SERVER_NODE)
     if toggled:
       self.ui.freezeUltrasoundButton.text = "Un-Freeze"
+      plusServerNode.StartServer()
     else:
       self.ui.freezeUltrasoundButton.text = "Freeze"
-    self.logic.setFreezeUltrasoundClicked()
+      plusServerNode.StopServer()
+    #self.logic.setFreezeUltrasoundClicked()
 
   def onStartPlusClicked(self, toggled):
     plusServerNode = self._parameterNode.GetNodeReference(self.logic.PLUS_SERVER_NODE)
@@ -692,11 +703,57 @@ class LumpNav2Widget(ScriptedLoadableModuleWidget, VTKObservationMixin):
       self.viewpointLogic.getViewpointForViewNode(viewNode).autoCenterStop()
       logging.info("Auto center for %s disabled", viewNode.GetName())
 
+  def onCollectOffToggled(self, toggled):
+    logging.info('onCollectOffToggled({})'.format(toggled))
+    parameterNode = self._parameterNode
+    signalSignal = parameterNode.GetNodeReference(self.logic.SIGNAL_SIGNAL)
+    if toggled:
+      #add observer for same as scopeSignalModified observer
+      self.addObserver(signalSignal, slicer.vtkMRMLScalarVolumeNode.ImageDataModifiedEvent, self.logic.setCollectOff)
+    else:
+      self.removeObserver(signalSignal, slicer.vtkMRMLScalarVolumeNode.ImageDataModifiedEvent, self.logic.setCollectOff)
+      #remove observer from above
+    return
+
+  def onCollectCutAirToggled(self, toggled):
+    logging.info('onCollectCutAirToggled')
+    self.logic.setCollectCutAir()
+    return
+
+  def onCollectCutTissueToggled(self, toggled):
+    logging.info('onCollectCutTissueToggled')
+    self.logic.setCollectCutAir()
+    return
+
+  def onCollectCoagAirToggled(self, toggled):
+    logging.info('onCollectCoagAirToggled')
+    self.logic.setCollectCoagAir()
+    return
+
+  def onCollectCoagTissueToggled(self, toggled):
+    logging.info('onCollectCoagTissueToggled')
+    self.logic.setCollectCoagTissue()
+    return
+
+  def onTrainAndImplementModelClicked(self):
+    logging.info('onTrainAndImplementModelClicked')
+    self.logic.setTrainAndImplementModel()
+    return
+
+  def onUseBaseModelClicked(self):
+    logging.info('onUseBaseModelClicked')
+    self.logic.setUseBaseModelClicked()
+
+    return
+  def onResetModelClicked(self):
+    logging.info('onResetModelClicked')
+    return
+
   def enableAutoCenterInViewNode(self, viewNode):
     logging.debug("enableAutoCenterInViewNode")
     self.disableViewpointInViewNode(viewNode)
-    heightViewCoordLimits = 0.6;
-    widthViewCoordLimits = 0.9;
+    heightViewCoordLimits = 0.6
+    widthViewCoordLimits = 0.9
     self.viewpointLogic.getViewpointForViewNode(viewNode).setViewNode(viewNode)
     self.viewpointLogic.getViewpointForViewNode(viewNode).autoCenterSetSafeXMinimum(-widthViewCoordLimits)
     self.viewpointLogic.getViewpointForViewNode(viewNode).autoCenterSetSafeXMaximum(widthViewCoordLimits)
@@ -1137,6 +1194,16 @@ class LumpNav2Logic(ScriptedLoadableModuleLogic, VTKObservationMixin):
   CONTOUR_ERASING = "ContourErasing"
   CONTOUR_UNSELECTED = "ContourUnselected"
 
+  CHA_CHARTNODE = "ChannelAScopePlotChartNode"
+  CHA_ARRAYNODE = "ChannelAArrayNode"
+  CHA_ARRAY = "ChannelAArray"
+
+  COLLECT_OFF = "CollectOff"
+  COLLECT_CUT_AIR = "CollectCutAir"
+  COLLECT_CUT_TISSUE = "CollectCutTissue"
+  COLLECT_COAG_AIR = "CollectCoagAir"
+  COLLECT_COAG_TISSUE = "CollectCoagTissue"
+
   def __init__(self):
     """
     Called when the logic class is instantiated. Can be used for initializing member variables.
@@ -1156,9 +1223,6 @@ class LumpNav2Logic(ScriptedLoadableModuleLogic, VTKObservationMixin):
     self.eraseMarkups_Needle = None
     self.eraseMarkupsAddedObserverTag = None
     self.eraseMarkupEndInteractionObserverTag = None
-
-    self.ChA_ChartNode = None
-    self.ChB_ChartNode = None
 
     self.eraserFlag = True  # Indicates if we are removing points
 
@@ -1415,11 +1479,9 @@ class LumpNav2Logic(ScriptedLoadableModuleLogic, VTKObservationMixin):
     sequenceLogic = slicer.modules.sequences.logic()
 
     sequenceBrowserTracking = parameterNode.GetNodeReference(self.TRACKING_SEQUENCE_BROWSER)
-    
     if sequenceBrowserTracking is None:
       sequenceBrowserTracking = slicer.mrmlScene.AddNewNodeByClass("vtkMRMLSequenceBrowserNode", self.TRACKING_SEQUENCE_BROWSER)
       parameterNode.SetNodeReferenceID(self.TRACKING_SEQUENCE_BROWSER, sequenceBrowserTracking.GetID())
-
     cauteryToReference = parameterNode.GetNodeReference(self.CAUTERY_TO_REFERENCE)
     sequenceNode = sequenceLogic.AddSynchronizedNode(None, cauteryToReference, sequenceBrowserTracking)
     sequenceBrowserTracking.SetRecording(sequenceNode, True)
@@ -1436,20 +1498,66 @@ class LumpNav2Logic(ScriptedLoadableModuleLogic, VTKObservationMixin):
     sequenceNode = sequenceLogic.AddSynchronizedNode(None, cauteryTipToCautery, sequenceBrowserTracking)
     sequenceBrowserTracking.SetRecording(sequenceNode, True)
     sequenceBrowserTracking.SetPlayback(sequenceNode, True)
-
     sequenceBrowserTracking.SetRecordingActive(True) # Actually start recording
 
     sequenceBrowserUltrasound = parameterNode.GetNodeReference(self.ULTRASOUND_SEQUENCE_BROWSER)
-    
     if sequenceBrowserUltrasound is None:
       sequenceBrowserUltrasound = slicer.mrmlScene.AddNewNodeByClass("vtkMRMLSequenceBrowserNode", self.ULTRASOUND_SEQUENCE_BROWSER)
       parameterNode.SetNodeReferenceID(self.ULTRASOUND_SEQUENCE_BROWSER, sequenceBrowserUltrasound.GetID())
-    
     image_Image = parameterNode.GetNodeReference(self.IMAGE_IMAGE)
     sequenceNode = sequenceLogic.AddSynchronizedNode(None, image_Image, sequenceBrowserUltrasound)
     sequenceBrowserUltrasound.SetRecording(sequenceNode, True)
     sequenceBrowserUltrasound.SetPlayback(sequenceNode, True)
     sequenceBrowserUltrasound.SetRecordingActive(False)
+
+    signalSignal = parameterNode.GetNodeReference(self.SIGNAL_SIGNAL)
+    if signalSignal is None:
+      signalSignal = slicer.mrmlScene.AddNewNodeByClass('vtkMRMLScalarVolumeNode', self.SIGNAL_SIGNAL)
+      signalSignal.CreateDefaultDisplayNodes()
+      signalArray = np.zeros((3900, 3, 1), dtype="uint8")
+      slicer.util.updateVolumeFromArray(signalSignal, signalArray)
+      parameterNode.SetNodeReferenceID(self.SIGNAL_SIGNAL, signalSignal.GetID())
+    self.addObserver(signalSignal, slicer.vtkMRMLScalarVolumeNode.ImageDataModifiedEvent, self.scopeSignalModified)
+
+    sequenceBrowserScopeCollectCutAir = parameterNode.GetNodeReference(self.COLLECT_CUT_AIR)
+    if sequenceBrowserScopeCollectCutAir is None:
+      sequenceBrowserScopeCollectCutAir = slicer.mrmlScene.AddNewNodeByClass("vtkMRMLSequenceBrowserNode", self.COLLECT_CUT_AIR)
+      parameterNode.SetNodeReferenceID(self.COLLECT_CUT_AIR, sequenceBrowserScopeCollectCutAir.GetID())
+    signal_Signal = parameterNode.GetNodeReference(self.SIGNAL_SIGNAL)
+    sequenceNode = sequenceLogic.AddSynchronizedNode(None, signal_Signal, sequenceBrowserScopeCollectCutAir)
+    sequenceBrowserScopeCollectCutAir.SetRecording(sequenceNode, False)
+    sequenceBrowserScopeCollectCutAir.SetPlayback(sequenceNode, True)
+    sequenceBrowserScopeCollectCutAir.SetRecordingActive(False)
+
+    sequenceBrowserScopeCollectCutTissue = parameterNode.GetNodeReference(self.COLLECT_CUT_TISSUE)
+    if sequenceBrowserScopeCollectCutTissue is None:
+      sequenceBrowserScopeCollectCutTissue = slicer.mrmlScene.AddNewNodeByClass("vtkMRMLSequenceBrowserNode", self.COLLECT_CUT_TISSUE)
+      parameterNode.SetNodeReferenceID(self.COLLECT_CUT_TISSUE, sequenceBrowserScopeCollectCutTissue.GetID())
+    signal_Signal = parameterNode.GetNodeReference(self.SIGNAL_SIGNAL)
+    sequenceNode = sequenceLogic.AddSynchronizedNode(None, signal_Signal, sequenceBrowserScopeCollectCutTissue)
+    sequenceBrowserScopeCollectCutTissue.SetRecording(sequenceNode, False)
+    sequenceBrowserScopeCollectCutTissue.SetPlayback(sequenceNode, True)
+    sequenceBrowserScopeCollectCutTissue.SetRecordingActive(False)
+
+    sequenceBrowserScopeCollectCoagAir = parameterNode.GetNodeReference(self.COLLECT_COAG_AIR)
+    if sequenceBrowserScopeCollectCoagAir is None:
+      sequenceBrowserScopeCollectCoagAir = slicer.mrmlScene.AddNewNodeByClass("vtkMRMLSequenceBrowserNode", self.COLLECT_COAG_AIR)
+      parameterNode.SetNodeReferenceID(self.COLLECT_COAG_AIR, sequenceBrowserScopeCollectCoagAir.GetID())
+    signal_Signal = parameterNode.GetNodeReference(self.SIGNAL_SIGNAL)
+    sequenceNode = sequenceLogic.AddSynchronizedNode(None, signal_Signal, sequenceBrowserScopeCollectCoagAir)
+    sequenceBrowserScopeCollectCoagAir.SetRecording(sequenceNode, False)
+    sequenceBrowserScopeCollectCoagAir.SetPlayback(sequenceNode, True)
+    sequenceBrowserScopeCollectCoagAir.SetRecordingActive(False)
+
+    sequenceBrowserScopeCollectCoagTissue = parameterNode.GetNodeReference(self.COLLECT_COAG_TISSUE)
+    if sequenceBrowserScopeCollectCoagTissue is None:
+      sequenceBrowserScopeCollectCoagTissue = slicer.mrmlScene.AddNewNodeByClass("vtkMRMLSequenceBrowserNode", self.COLLECT_COAG_TISSUE)
+      parameterNode.SetNodeReferenceID(self.COLLECT_COAG_TISSUE, sequenceBrowserScopeCollectCoagTissue.GetID())
+    signal_Signal = parameterNode.GetNodeReference(self.SIGNAL_SIGNAL)
+    sequenceNode = sequenceLogic.AddSynchronizedNode(None, signal_Signal, sequenceBrowserScopeCollectCoagTissue)
+    sequenceBrowserScopeCollectCoagTissue.SetRecording(sequenceNode, False)
+    sequenceBrowserScopeCollectCoagTissue.SetPlayback(sequenceNode, True)
+    sequenceBrowserScopeCollectCoagTissue.SetRecordingActive(False)
 
     # Set up breach warning node
     logging.info('Set up breach warning')
@@ -1637,6 +1745,7 @@ class LumpNav2Logic(ScriptedLoadableModuleLogic, VTKObservationMixin):
     sequenceBrowserUltrasound = parameterNode.GetNodeReference(self.ULTRASOUND_SEQUENCE_BROWSER)
     sequenceBrowserUltrasound.SetRecordingActive(recording) #stop
 
+
   def setDeleteLastFiducialClicked(self, numberOfPoints):
     deleted_coord = [0.0, 0.0, 0.0]
     self.tumorMarkups_Needle.GetNthFiducialPosition(numberOfPoints-1,deleted_coord)
@@ -1711,27 +1820,74 @@ class LumpNav2Logic(ScriptedLoadableModuleLogic, VTKObservationMixin):
       interactionNode.SetCurrentInteractionMode(interactionNode.ViewTransform)
       
   def setDisplaySampleGraphButton(self):
-    logging.info('setDisplaySampleGraphButton')
-    oscilloscopeVolume = slicer.mrmlScene.GetFirstNode(self.SIGNAL_SIGNAL)
+    #logging.info('setDisplaySampleGraphButton')
+    #call scopeSignalModified
+    self.scopeSignalModified()
+
+  def getOscilloscopeChannels(self):
+    #logging.info("getOscilloscopeChannels")
+    parameterNode = self.getParameterNode()
+    oscilloscopeVolume = parameterNode.GetNodeReference(self.SIGNAL_SIGNAL)
     oscilloscopeArray = slicer.util.arrayFromVolume(oscilloscopeVolume)
+    #TODO: create parameter node reference for arrays.
     time = oscilloscopeArray[0,0]
     ChA = oscilloscopeArray[0,1]
     ChB = oscilloscopeArray[0,2]
+    #TODO: create parameter node reference for arrays.
+    return time, ChA, ChB
+
+  def scopeSignalModified(self, observer, eventid):
+    #logging.info('scopeSignalModified')
+    plotchart = slicer.mrmlScene.GetFirstNodeByClass('vtkMRMLPlotChartNode')
+    plotseries = slicer.mrmlScene.GetFirstNodeByClass('vtkMRMLPlotSeriesNode')
+    table = slicer.mrmlScene.GetFirstNodeByClass('vtkMRMLTableNode')
+    slicer.mrmlScene.RemoveNode(plotchart)
+    slicer.mrmlScene.RemoveNode(plotseries)
+    slicer.mrmlScene.RemoveNode(table)
+    time, ChA, ChB = self.getOscilloscopeChannels()
     ChA_Array = np.array([time, ChA])
     ChA_Array = np.transpose(ChA_Array)
-    ChB_Array = np.array([time, ChB])
-    ChB_Array = np.transpose(ChB_Array)
+    #ChB_Array = np.array([time, ChB])
+    #ChB_Array = np.transpose(ChB_Array)
+    #ChA_ChartNode = parameterNode.GetNodeReference(self.CHA_CHARTNODE)
     ChA_ChartNode = slicer.util.plot(ChA_Array, 0)
-    ChB_ChartNode = slicer.util.plot(ChB_Array, 0)
+    #update param node with new data?
+    #ChB_ChartNode = slicer.util.plot(ChB_Array, 0)
     layoutManager = slicer.app.layoutManager()
     layoutWithPlot = slicer.modules.plots.logic().GetLayoutWithPlot(layoutManager.layout)
     layoutManager.setLayout(layoutWithPlot)
-    plotWidget = layoutManager.plotWidget(1)
+    plotWidget = layoutManager.plotWidget(0)
     plotViewNode = plotWidget.mrmlPlotViewNode()
     plotViewNode.SetPlotChartNodeID(ChA_ChartNode.GetID())
-    plotWidget = layoutManager.plotWidget(2)
-    plotViewNode = plotWidget.mrmlPlotViewNode()
-    plotViewNode.SetPlotChartNodeID(ChB_ChartNode.GetID())
+    #plotWidget = layoutManager.plotWidget(2)
+    #plotViewNode = plotWidget.mrmlPlotViewNode()
+    #plotViewNode.SetPlotChartNodeID(ChB_ChartNode.GetID())
+    '''
+    logging.info('scopeSignalModified')
+    parameterNode = self.getParameterNode()
+    oscilloscopeVolume = parameterNode.GetNodeReference(self.SIGNAL_SIGNAL)
+    oscilloscopeArray = slicer.util.arrayFromVolume(oscilloscopeVolume)
+    time = oscilloscopeArray[0,0]
+    ChA = oscilloscopeArray[0,1]
+    ChA_ArrayData = np.array([time, ChA])
+    #ChA_ArrayData = np.transpose(ChA_ArrayData)
+    ChA_ArrayNode = parameterNode.GetNodeReference(self.CHA_ARRAYNODE)
+    #delete old array data
+    print(np.shape(ChA_ArrayData))
+    ChA_ArrayNode.AddXYValue(ChA_ArrayData)
+    ChA_ChartNode = parameterNode.GetNodeReference(self.CHA_CHARTNODE)
+    ChA_ChartNode.AddArray("Channel A", ChA_ArrayNode.GetID())
+    lns = slicer.mrmlScene.GetNodesByClass('vtkMRMLLayoutNode')
+    lns.InitTraversal()
+    ln = lns.GetNextItemAsObject()
+    ln.SetViewArrangement(24)    
+    cvns = slicer.mrmlScene.GetNodesByClass('vtkMRMLChartViewNode')
+    cvns.InitTraversal()
+    cvn = cvns.GetNextItemAsObject()
+    cvn.SetChartNodeID(ChA_ChartNode.GetID())
+    #update param node with new data?
+    
+    '''
 
   def setStreamGraphButton(toggled):
     loggin.info('setStreamGraphButton')
@@ -1931,6 +2087,117 @@ class LumpNav2Logic(ScriptedLoadableModuleLogic, VTKObservationMixin):
         view.setCornerAnnotationText("{0:.1f}mm".format(self.breachWarningNode.GetClosestDistanceToModelFromToolTip()))
       else :
         view.setCornerAnnotationText("{0:.2f}mm".format(self.breachWarningNode.GetClosestDistanceToModelFromToolTip()))
+  
+  def setCollectOff(self):
+    #logging.info("setCollectOff")
+    #convert to volume, save a reference to that. slicer.util.updateVolumeFromArray
+    #take sequence browswer
+    #sequences, create new browser, add sequence, make sure proxy node, click record
+    #click play, grab proxy node
+
+    parameterNode = self.getParameterNode()
+    sequenceBrowserUltrasound = parameterNode.GetNodeReference(self.ULTRASOUND_SEQUENCE_BROWSER)
+    sequenceBrowserUltrasound.SetRecordingActive(recording) #stop
+    return
+    '''
+    time, ChA, ChB = self.getOscilloscopeChannels()
+    parameterNode = self.getParameterNode()
+    currentChArray_Array = np.array([ChA, ChB])
+    if parameterNode.GetAttribute(self.COLLECT_OFF) != self.COLLECT_OFF:
+      newChArray_String = currentChArray_Array.tostring()
+      parameterNode.SetAttribute(self.COLLECT_OFF, newChArray_String)
+    else:
+      oldChArray_String = parameterNode.GetAttribute(self.COLLECT_OFF)
+      oldChArray_Array = np.fromstring(oldChArray_String)
+      newChArray_Array = np.append(oldChArray_Array, newChArray_Array)
+      newChArray_String = newChArray_Array.tostring()
+      parameterNode.SetAttribute(self.COLLECT_OFF, newChArray_String)
+    '''
+  def setCollectCutAir(self):
+    logging.info("setCollectCutAir")
+
+  def setCollectCutTissue(self):
+    logging.info("setCollectCutTissue")
+
+  def setCollectCoagAir(self):
+    logging.info("setCollectCoagAir")
+
+  def setCollectCoagTissue(self):
+    logging.info("setCollectCoagTissue")
+
+  def setTrainAndImplementModel(self):
+    logging.info("setTrainAndImplementModel")
+
+  def setUseBaseModelClicked(self):
+    #TODO: how do I non-specific to my computer file paths
+    filename = "D:\Research\Oscilloscope\cauteryModelSVM.sav"
+    import pickle
+    cauterySVMModel = pickle.load(open(filename, "rb"))
+    parameterNode = self.getParameterNode()
+    oscilloscopeVolume = parameterNode.GetNodeReference(self.SIGNAL_SIGNAL)
+    oscilloscopeArray = slicer.util.arrayFromVolume(oscilloscopeVolume)
+    #TODO: create parameter node reference for arrays.
+    time = oscilloscopeArray[0,0]
+    ChA = np.transpose(oscilloscopeArray[0,1])
+    ChB = np.transpose(oscilloscopeArray[0,2])
+    feat = np.empty([1,2])
+    print("ChA", ChA, "ChB", ChB)
+    lmrMeanTest = self.lmrMean(ChA, ChB)
+    mMeanTest = self.mMean(ChA, ChB)
+    feat[0][0] = lmrMeanTest
+    feat[0][1] = mMeanTest
+    print("lmrMeanTest", lmrMeanTest, "mMeanTest", mMeanTest)
+    predict = cauterySVMModel.predict(feat)
+    print("Prediction", predict)
+    
+  def mean(self, channel):
+      mean = np.mean(channel)
+      return mean
+
+  def fft(self, channel):
+      frequency = np.mean((np.fft.fft(channel))).real
+      return frequency
+
+  def testFreq(self, channel):
+      testFreq = sy.fft(channel).real
+      return testFreq
+
+  def minumum(self, channel):
+      minimum = np.minimum(channel)
+      return minimum
+
+  def maximum(self, channel):
+      maximum = np.amax(channel)
+      return maximum
+
+  def absSum(self, channel):
+      absSum = np.sum(np.absolute(channel))
+      return absSum
+
+  def absMean(self, channel):
+      absMean = np.mean(np.absolute(channel))
+      return absMean
+      
+  def stdev(self, channel):
+      stdev = np.std(channeL)
+      return stdev
+      
+  def absStdev(self, channel):
+      absStdev = ((np.std(np.absolute(channel))) * 100)
+      return absStdev
+
+  def lmrSum(self, channelA, channelB):
+      lmrSum = self.absSum(channelA) - absSum(channelB)
+      return lmrSum
+
+  def lmrMean(self, channelA, channelB):
+      lmrMean = (self.absMean(channelA - channelB)) * 100
+      return lmrMean
+
+  def mMean(self, channelA, channelB):
+      mMean = (self.absMean(channelA) * self.absSum(channelB)) * 10000
+      return mMean
+
 
 #
 # LumpNav2Test

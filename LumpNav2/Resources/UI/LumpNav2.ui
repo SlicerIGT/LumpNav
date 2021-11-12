@@ -20,7 +20,7 @@
       <string>Tools calibration</string>
      </property>
      <property name="checked">
-      <bool>true</bool>
+      <bool>false</bool>
      </property>
      <layout class="QVBoxLayout" name="verticalLayout_2">
       <item>
@@ -384,10 +384,10 @@
       <string>Settings</string>
      </property>
      <property name="checked">
-      <bool>true</bool>
+      <bool>false</bool>
      </property>
      <property name="collapsed">
-      <bool>false</bool>
+      <bool>true</bool>
      </property>
      <layout class="QVBoxLayout" name="verticalLayout_5">
       <item>
@@ -472,7 +472,7 @@
       <string>Oscilloscope</string>
      </property>
      <property name="checked">
-      <bool>false</bool>
+      <bool>true</bool>
      </property>
      <layout class="QVBoxLayout" name="verticalLayout_7">
       <item>
@@ -487,6 +487,92 @@
         <property name="text">
          <string>Display Sample Graph</string>
         </property>
+       </widget>
+      </item>
+      <item>
+       <widget class="ctkCollapsibleButton" name="CollapsibleButton">
+        <property name="text">
+         <string>Train Model</string>
+        </property>
+        <property name="checked">
+         <bool>true</bool>
+        </property>
+        <layout class="QVBoxLayout" name="verticalLayout_8">
+         <item>
+          <widget class="QPushButton" name="collectOffButton">
+           <property name="text">
+            <string>Collect Cautery On Unpressed</string>
+           </property>
+           <property name="checkable">
+            <bool>true</bool>
+           </property>
+          </widget>
+         </item>
+         <item>
+          <widget class="QPushButton" name="collectCutAirButton">
+           <property name="text">
+            <string>Collect Cut Air</string>
+           </property>
+           <property name="checkable">
+            <bool>true</bool>
+           </property>
+          </widget>
+         </item>
+         <item>
+          <widget class="QPushButton" name="collectCutTissueButton">
+           <property name="text">
+            <string>Collect Cut Tissue</string>
+           </property>
+           <property name="checkable">
+            <bool>true</bool>
+           </property>
+          </widget>
+         </item>
+         <item>
+          <widget class="QPushButton" name="collectCoagAirButton">
+           <property name="text">
+            <string>Collect Coag Air</string>
+           </property>
+           <property name="checkable">
+            <bool>true</bool>
+           </property>
+          </widget>
+         </item>
+         <item>
+          <widget class="QPushButton" name="collectCoagTissueButton">
+           <property name="text">
+            <string>Collect Coag Tissue</string>
+           </property>
+           <property name="checkable">
+            <bool>true</bool>
+           </property>
+          </widget>
+         </item>
+         <item>
+          <widget class="QPushButton" name="trainAndImplementModelButton">
+           <property name="text">
+            <string>Train and Implement Model</string>
+           </property>
+           <property name="checkable">
+            <bool>false</bool>
+           </property>
+          </widget>
+         </item>
+         <item>
+          <widget class="QPushButton" name="useBaseModelButton">
+           <property name="text">
+            <string>Use Base Model</string>
+           </property>
+          </widget>
+         </item>
+         <item>
+          <widget class="QPushButton" name="resetModelButton">
+           <property name="text">
+            <string>Reset Model</string>
+           </property>
+          </widget>
+         </item>
+        </layout>
        </widget>
       </item>
      </layout>
