@@ -1504,14 +1504,15 @@ class LumpNav2Logic(ScriptedLoadableModuleLogic, VTKObservationMixin):
     sequenceBrowserUltrasound.SetPlayback(sequenceNode, True)
     sequenceBrowserUltrasound.SetRecordingActive(False)
 
-    signalSignal = parameterNode.GetNodeReference(self.SIGNAL_SIGNAL)
-    if signalSignal is None:
-      signalSignal = slicer.mrmlScene.AddNewNodeByClass('vtkMRMLScalarVolumeNode', self.SIGNAL_SIGNAL)
-      signalSignal.CreateDefaultDisplayNodes()
+
+    signal_Signal = parameterNode.GetNodeReference(self.SIGNAL_SIGNAL)
+    if signal_Signal is None:
+      signal_Signal = slicer.mrmlScene.AddNewNodeByClass('vtkMRMLScalarVolumeNode', self.SIGNAL_SIGNAL)
+      signal_Signal.CreateDefaultDisplayNodes()
       signalArray = np.zeros((3900, 3, 1), dtype="uint8")
-      slicer.util.updateVolumeFromArray(signalSignal, signalArray)
-      parameterNode.SetNodeReferenceID(self.SIGNAL_SIGNAL, signalSignal.GetID())
-    self.addObserver(signalSignal, slicer.vtkMRMLScalarVolumeNode.ImageDataModifiedEvent, self.scopeSignalModified)
+      slicer.util.updateVolumeFromArray(signal_Signal, signalArray)
+      parameterNode.SetNodeReferenceID(self.SIGNAL_SIGNAL, signal_Signal.GetID())
+    self.addObserver(signal_Signal, slicer.vtkMRMLScalarVolumeNode.ImageDataModifiedEvent, self.scopeSignalModified)
 
     sequenceBrowserScopeCollectOff = parameterNode.GetNodeReference(self.COLLECT_OFF_SEQUENCE_BROWSER)
     if sequenceBrowserScopeCollectOff is None:
@@ -1570,7 +1571,6 @@ class LumpNav2Logic(ScriptedLoadableModuleLogic, VTKObservationMixin):
     sequenceBrowserScopeCollectCoagTissue.SetRecordingActive(False)
 
     # Set up breach warning node
-    logging.info('Set up breach warning')
     breachWarningNode = parameterNode.GetNodeReference(self.BREACH_WARNING)
 
     if breachWarningNode is None:
@@ -1832,7 +1832,7 @@ class LumpNav2Logic(ScriptedLoadableModuleLogic, VTKObservationMixin):
   def setDisplaySampleGraphButton(self):
     #logging.info('setDisplaySampleGraphButton')
     #call scopeSignalModified
-    self.scopeSignalModified()
+    self.scopeSignalModified(None, None)
 
   def getOscilloscopeChannels(self):
     #logging.info("getOscilloscopeChannels")
@@ -1846,8 +1846,9 @@ class LumpNav2Logic(ScriptedLoadableModuleLogic, VTKObservationMixin):
     #TODO: create parameter node reference for arrays.
     return time, ChA, ChB
 
-  def scopeSignalModified(self, observer, eventid):
-    #logging.info('scopeSignalModified')
+  def scopeSignalModified(self, caller, eventid):
+    
+    logging.info('scopeSignalModified')
     plotchart = slicer.mrmlScene.GetFirstNodeByClass('vtkMRMLPlotChartNode')
     plotseries = slicer.mrmlScene.GetFirstNodeByClass('vtkMRMLPlotSeriesNode')
     table = slicer.mrmlScene.GetFirstNodeByClass('vtkMRMLTableNode')
@@ -2136,7 +2137,22 @@ class LumpNav2Logic(ScriptedLoadableModuleLogic, VTKObservationMixin):
 
   def setTrainAndImplementModel(self):
     logging.info("setTrainAndImplementModel")
-
+    parameterNode = self.getParameterNode()
+    collectOffSeqBr = parameterNode.GetNodeReference(self.COLLECT_OFF_SEQUENCE_BROWSER)
+    signal_Signal = parameterNode.GetNodeReference(self.SIGNAL_SIGNAL)
+    n = collectOffSeqBr.GetNumberOfItems()
+    collectOffSeqBr.SelectFirstItem()
+    channelACollectOff = np.empty([n,3900])
+    channelBCollectOff = np.empty([n,3900])
+    for i in range(n):
+      collectOffSeqBr.SelectNextItem()
+      oscilloscopeArray = slicer.util.arrayFromVolume(signal_Signal)
+      ChA = oscilloscopeArray[0,1]
+      ChB = oscilloscopeArray[0,2]
+      channelACollectOff[i] = ChA
+      channelBCollectOff[i] = ChB 
+    
+    print(channelACollectOff)
     '''
     time, ChA, ChB = self.getOscilloscopeChannels()
     parameterNode = self.getParameterNode()
