@@ -1537,7 +1537,11 @@ class LumpNav2Logic(ScriptedLoadableModuleLogic, VTKObservationMixin):
     sequenceBrowserScopeCollectCutAir.SetSaveChanges(sequenceNode, True)
     sequenceBrowserScopeCollectCutAir.SetRecordingActive(False)
 
+<<<<<<< HEAD
     sequenceBrowserScopeCollectCutTissue = parameterNode.GetNodeReference(self.COLLECT_CUT_TISSUE_SEQUENCE_BROWSER)
+=======
+    sequenceBrowserScopeCollectCutTissue = parameterNode.GetNodeReference(self.COLLECT_CUT_AIR_SEQUENCE_BROWSER)
+>>>>>>> remotes/origin/master
     if sequenceBrowserScopeCollectCutTissue is None:
       sequenceBrowserScopeCollectCutTissue = slicer.mrmlScene.AddNewNodeByClass("vtkMRMLSequenceBrowserNode", self.COLLECT_CUT_TISSUE_SEQUENCE_BROWSER)
       parameterNode.SetNodeReferenceID(self.COLLECT_CUT_TISSUE_SEQUENCE_BROWSER, sequenceBrowserScopeCollectCutTissue.GetID())
@@ -1548,7 +1552,11 @@ class LumpNav2Logic(ScriptedLoadableModuleLogic, VTKObservationMixin):
     sequenceBrowserScopeCollectCutTissue.SetSaveChanges(sequenceNode, True)
     sequenceBrowserScopeCollectCutTissue.SetRecordingActive(False)
 
+<<<<<<< HEAD
     sequenceBrowserScopeCollectCoagAir = parameterNode.GetNodeReference(self.COLLECT_COAG_AIR_SEQUENCE_BROWSER)
+=======
+    sequenceBrowserScopeCollectCoagAir = parameterNode.GetNodeReference(self.COLLECT_CUT_AIR_SEQUENCE_BROWSER)
+>>>>>>> remotes/origin/master
     if sequenceBrowserScopeCollectCoagAir is None:
       sequenceBrowserScopeCollectCoagAir = slicer.mrmlScene.AddNewNodeByClass("vtkMRMLSequenceBrowserNode", self.COLLECT_COAG_AIR_SEQUENCE_BROWSER)
       parameterNode.SetNodeReferenceID(self.COLLECT_COAG_AIR_SEQUENCE_BROWSER, sequenceBrowserScopeCollectCoagAir.GetID())
@@ -1559,7 +1567,11 @@ class LumpNav2Logic(ScriptedLoadableModuleLogic, VTKObservationMixin):
     sequenceBrowserScopeCollectCoagAir.SetSaveChanges(sequenceNode, True)
     sequenceBrowserScopeCollectCoagAir.SetRecordingActive(False)
 
+<<<<<<< HEAD
     sequenceBrowserScopeCollectCoagTissue = parameterNode.GetNodeReference(self.COLLECT_COAG_TISSUE_SEQUENCE_BROWSER)
+=======
+    sequenceBrowserScopeCollectCoagTissue = parameterNode.GetNodeReference(self.COLLECT_CUT_AIR_SEQUENCE_BROWSER)
+>>>>>>> remotes/origin/master
     if sequenceBrowserScopeCollectCoagTissue is None:
       sequenceBrowserScopeCollectCoagTissue = slicer.mrmlScene.AddNewNodeByClass("vtkMRMLSequenceBrowserNode", self.COLLECT_COAG_TISSUE_SEQUENCE_BROWSER)
       parameterNode.SetNodeReferenceID(self.COLLECT_COAG_TISSUE_SEQUENCE_BROWSER, sequenceBrowserScopeCollectCoagTissue.GetID())
