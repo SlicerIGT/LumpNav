@@ -2237,19 +2237,19 @@ class LumpNav2Logic(ScriptedLoadableModuleLogic, VTKObservationMixin):
   def setCollectCutTissue(self, recording):
     #logging.info("setCollectCutTissue")
     parameterNode = self.getParameterNode()
-    sequenceBrowserUltrasound = parameterNode.GetNodeReference(self.COLLECT_CUT_AIR_SEQUENCE_BROWSER)
+    sequenceBrowserUltrasound = parameterNode.GetNodeReference(self.COLLECT_CUT_TISSUE_SEQUENCE_BROWSER)
     sequenceBrowserUltrasound.SetRecordingActive(recording) #stop
 
   def setCollectCoagAir(self, recording):
     #logging.info("setCollectCoagAir")
     parameterNode = self.getParameterNode()
-    sequenceBrowserUltrasound = parameterNode.GetNodeReference(self.COLLECT_CUT_AIR_SEQUENCE_BROWSER)
+    sequenceBrowserUltrasound = parameterNode.GetNodeReference(self.COLLECT_COAG_AIR_SEQUENCE_BROWSER)
     sequenceBrowserUltrasound.SetRecordingActive(recording) #stop
 
   def setCollectCoagTissue(self, recording):
     #logging.info("setCollectCoagTissue")
     parameterNode = self.getParameterNode()
-    sequenceBrowserUltrasound = parameterNode.GetNodeReference(self.COLLECT_CUT_AIR_SEQUENCE_BROWSER)
+    sequenceBrowserUltrasound = parameterNode.GetNodeReference(self.COLLECT_COAG_TISSUE_SEQUENCE_BROWSER)
     sequenceBrowserUltrasound.SetRecordingActive(recording) #stop
 
   def setTrainAndImplementModel(self):
@@ -2271,8 +2271,7 @@ class LumpNav2Logic(ScriptedLoadableModuleLogic, VTKObservationMixin):
       channelBCollectOff[i] = ChB
       featureCollectOff[i][0] = self.lmrMean(ChA, ChB)
       featureCollectOff[i][1] = self.mMean(ChA, ChB)
-      collectOffSeqBr.SelectNextItem()
-      collectOffSeqBr = parameterNode.GetNodeReference(self.COLLECT_OFF_SEQUENCE_BROWSER)
+      item = collectOffSeqBr.SelectNextItem()
       signal_Signal = parameterNode.GetNodeReference(self.SIGNAL_SIGNAL)
 
     collectCutAirSeqBr = parameterNode.GetNodeReference(self.COLLECT_CUT_AIR_SEQUENCE_BROWSER)
@@ -2292,8 +2291,8 @@ class LumpNav2Logic(ScriptedLoadableModuleLogic, VTKObservationMixin):
       featureCollectCutAir[i][0] = self.lmrMean(ChA, ChB)
       featureCollectCutAir[i][1] = self.mMean(ChA, ChB)
       collectCutAirSeqBr.SelectNextItem()
-      collectCutAirSeqBr = parameterNode.GetNodeReference(self.COLLECT_CUT_AIR_SEQUENCE_BROWSER)
       signal_Signal = parameterNode.GetNodeReference(self.SIGNAL_SIGNAL)
+      print(featureCollectCutAir[i])
 
     collectCutTissueSeqBr = parameterNode.GetNodeReference(self.COLLECT_CUT_TISSUE_SEQUENCE_BROWSER)
     signal_Signal = parameterNode.GetNodeReference(self.SIGNAL_SIGNAL)
@@ -2312,7 +2311,6 @@ class LumpNav2Logic(ScriptedLoadableModuleLogic, VTKObservationMixin):
       featureCollectCutTissue[i][0] = self.lmrMean(ChA, ChB)
       featureCollectCutTissue[i][1] = self.mMean(ChA, ChB)
       collectCutTissueSeqBr.SelectNextItem()
-      collectCutTissueSeqBr = parameterNode.GetNodeReference(self.COLLECT_CUT_TISSUE_SEQUENCE_BROWSER)
       signal_Signal = parameterNode.GetNodeReference(self.SIGNAL_SIGNAL)
   
     collectCoagAirSeqBr = parameterNode.GetNodeReference(self.COLLECT_COAG_AIR_SEQUENCE_BROWSER)
@@ -2331,8 +2329,7 @@ class LumpNav2Logic(ScriptedLoadableModuleLogic, VTKObservationMixin):
       channelBCollectCoagAir[i] = ChB
       featureCollectCoagAir[i][0] = self.lmrMean(ChA, ChB)
       featureCollectCoagAir[i][1] = self.mMean(ChA, ChB)
-      collectCoagAirSeqBr.SelectNextItem()         
-      collectCoagAirSeqBr = parameterNode.GetNodeReference(self.COLLECT_COAG_AIR_SEQUENCE_BROWSER)
+      collectCoagAirSeqBr.SelectNextItem()
       signal_Signal = parameterNode.GetNodeReference(self.SIGNAL_SIGNAL)
     
     collectCoagTissueSeqBr = parameterNode.GetNodeReference(self.COLLECT_COAG_TISSUE_SEQUENCE_BROWSER)
@@ -2352,7 +2349,6 @@ class LumpNav2Logic(ScriptedLoadableModuleLogic, VTKObservationMixin):
       featureCollectCoagTissue[i][0] = self.lmrMean(ChA, ChB)
       featureCollectCoagTissue[i][1] = self.mMean(ChA, ChB)
       collectCoagTissueSeqBr.SelectNextItem()
-      collectCoagTissueSeqBr = parameterNode.GetNodeReference(self.COLLECT_COAG_TISSUE_SEQUENCE_BROWSER)
       signal_Signal = parameterNode.GetNodeReference(self.SIGNAL_SIGNAL)
 
     #append arrays, build X and Y\
@@ -2364,11 +2360,6 @@ class LumpNav2Logic(ScriptedLoadableModuleLogic, VTKObservationMixin):
     Y = np.append(Y, Y_CollectCutTissue)
     Y = np.append(Y, Y_CollectCoagAir)
     Y = np.append(Y, Y_CollectCoagTissue)
-    
-    print("Y shape", np.shape(Y))
-    print("features", np.shape(features))
-    print(Y)
-    print(features)
 
     self.buildScopeModel(features, Y)
 
@@ -2580,7 +2571,6 @@ class LumpNav2Logic(ScriptedLoadableModuleLogic, VTKObservationMixin):
   def mMean(self, channelA, channelB):
       mMean = (self.absMean(channelA) * self.absSum(channelB)) * 100
       return mMean
-
 
 #
 # LumpNav2Test
