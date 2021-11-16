@@ -7,6 +7,19 @@ import vtk, qt, ctk, slicer
 import logging
 from slicer.ScriptedLoadableModule import *
 from slicer.util import VTKObservationMixin
+from vtk.util import numpy_support
+
+import matplotlib.pyplot as plt
+
+from sklearn import datasets
+from sklearn import svm
+from sklearn import metrics    			
+from sklearn.model_selection import train_test_split
+from sklearn.metrics import plot_roc_curve
+from sklearn.multiclass import OneVsRestClassifier
+from sklearn.metrics import roc_curve, auc
+from mlxtend.plotting import plot_decision_regions
+import pickle
 
 #
 # LumpNav2
@@ -713,7 +726,7 @@ class LumpNav2Widget(ScriptedLoadableModuleWidget, VTKObservationMixin):
 
   def onCollectCutTissueToggled(self, toggled):
     logging.info('onCollectCutTissueToggled')
-    self.logic.setCollectCutAir(toggled)
+    self.logic.setCollectCutTissue(toggled)
 
   def onCollectCoagAirToggled(self, toggled):
     logging.info('onCollectCoagAirToggled')
@@ -1186,11 +1199,17 @@ class LumpNav2Logic(ScriptedLoadableModuleLogic, VTKObservationMixin):
   CHA_ARRAYNODE = "ChannelAArrayNode"
   CHA_ARRAY = "ChannelAArray"
 
-  COLLECT_OFF = "CollectOff"
-  COLLECT_CUT_AIR = "CollectCutAir"
-  COLLECT_CUT_TISSUE = "CollectCutTissue"
-  COLLECT_COAG_AIR = "CollectCoagAir"
-  COLLECT_COAG_TISSUE = "CollectCoagTissue"
+  SCOPE_OFF_VOLUME_A = "ScopeOffVolumeA"
+  SCOPE_CUT_AIR_VOLUME_A = "ScopeCutAirVolumeA"
+  SCOPE_CUT_TISSUE_VOLUME_A = "ScopeCutTissueVolumeA"
+  SCOPE_COAG_AIR_VOLUME_A = "ScopeCoagAirVolumeAScopeCoagAirVolumeA"
+  SCOPE_COAG_TISSUE_VOLUME_A = "ScopeCoagTissueVolumeA"
+
+  SCOPE_OFF_VOLUME_B = "ScopeOffVolumeB"
+  SCOPE_CUT_AIR_VOLUME_B = "ScopeCutAirVolumeB"
+  SCOPE_CUT_TISSUE_VOLUME_B = "ScopeCutTissueVolumeB"
+  SCOPE_COAG_AIR_VOLUME_B = "ScopeCoagAirVolumeAScopeCoagAirVolumeB"
+  SCOPE_COAG_TISSUE_VOLUME_B = "ScopeCoagTissueVolumeB"
 
   COLLECT_OFF_SEQUENCE_BROWSER = "CollectOffSequenceBrowser"
   COLLECT_CUT_AIR_SEQUENCE_BROWSER = "CollectCutAirSequenceBrowser"
@@ -1537,11 +1556,7 @@ class LumpNav2Logic(ScriptedLoadableModuleLogic, VTKObservationMixin):
     sequenceBrowserScopeCollectCutAir.SetSaveChanges(sequenceNode, True)
     sequenceBrowserScopeCollectCutAir.SetRecordingActive(False)
 
-<<<<<<< HEAD
     sequenceBrowserScopeCollectCutTissue = parameterNode.GetNodeReference(self.COLLECT_CUT_TISSUE_SEQUENCE_BROWSER)
-=======
-    sequenceBrowserScopeCollectCutTissue = parameterNode.GetNodeReference(self.COLLECT_CUT_AIR_SEQUENCE_BROWSER)
->>>>>>> remotes/origin/master
     if sequenceBrowserScopeCollectCutTissue is None:
       sequenceBrowserScopeCollectCutTissue = slicer.mrmlScene.AddNewNodeByClass("vtkMRMLSequenceBrowserNode", self.COLLECT_CUT_TISSUE_SEQUENCE_BROWSER)
       parameterNode.SetNodeReferenceID(self.COLLECT_CUT_TISSUE_SEQUENCE_BROWSER, sequenceBrowserScopeCollectCutTissue.GetID())
@@ -1552,11 +1567,7 @@ class LumpNav2Logic(ScriptedLoadableModuleLogic, VTKObservationMixin):
     sequenceBrowserScopeCollectCutTissue.SetSaveChanges(sequenceNode, True)
     sequenceBrowserScopeCollectCutTissue.SetRecordingActive(False)
 
-<<<<<<< HEAD
     sequenceBrowserScopeCollectCoagAir = parameterNode.GetNodeReference(self.COLLECT_COAG_AIR_SEQUENCE_BROWSER)
-=======
-    sequenceBrowserScopeCollectCoagAir = parameterNode.GetNodeReference(self.COLLECT_CUT_AIR_SEQUENCE_BROWSER)
->>>>>>> remotes/origin/master
     if sequenceBrowserScopeCollectCoagAir is None:
       sequenceBrowserScopeCollectCoagAir = slicer.mrmlScene.AddNewNodeByClass("vtkMRMLSequenceBrowserNode", self.COLLECT_COAG_AIR_SEQUENCE_BROWSER)
       parameterNode.SetNodeReferenceID(self.COLLECT_COAG_AIR_SEQUENCE_BROWSER, sequenceBrowserScopeCollectCoagAir.GetID())
@@ -1567,11 +1578,7 @@ class LumpNav2Logic(ScriptedLoadableModuleLogic, VTKObservationMixin):
     sequenceBrowserScopeCollectCoagAir.SetSaveChanges(sequenceNode, True)
     sequenceBrowserScopeCollectCoagAir.SetRecordingActive(False)
 
-<<<<<<< HEAD
     sequenceBrowserScopeCollectCoagTissue = parameterNode.GetNodeReference(self.COLLECT_COAG_TISSUE_SEQUENCE_BROWSER)
-=======
-    sequenceBrowserScopeCollectCoagTissue = parameterNode.GetNodeReference(self.COLLECT_CUT_AIR_SEQUENCE_BROWSER)
->>>>>>> remotes/origin/master
     if sequenceBrowserScopeCollectCoagTissue is None:
       sequenceBrowserScopeCollectCoagTissue = slicer.mrmlScene.AddNewNodeByClass("vtkMRMLSequenceBrowserNode", self.COLLECT_COAG_TISSUE_SEQUENCE_BROWSER)
       parameterNode.SetNodeReferenceID(self.COLLECT_COAG_TISSUE_SEQUENCE_BROWSER, sequenceBrowserScopeCollectCoagTissue.GetID())
@@ -1616,6 +1623,109 @@ class LumpNav2Logic(ScriptedLoadableModuleLogic, VTKObservationMixin):
     cauteryCameraToCautery.SetAndObserveTransformNodeID(cauteryToReference.GetID())
 
     self.usFrozen = False
+
+    scopeOffVolumeA = parameterNode.GetNodeReference(self.SCOPE_OFF_VOLUME_A)
+    if scopeOffVolumeA is None:
+      scopeOffVolumeA = slicer.mrmlScene.AddNewNodeByClass("vtkMRMLScalarVolumeNode", self.SCOPE_OFF_VOLUME_A)
+      scopeOffVolumeA.SetOrigin([0,0,0])
+      spacing = [[1, 0, 0], [0, 1, 0], [0, 0, 1]]
+      scopeOffVolumeA.SetSpacing([1, 1, 1])
+      scopeOffVolumeA.SetIJKToRASDirections([[1, 0, 0], [0, 1, 0], [0, 0, 1]])
+      scopeOffVolumeA.CreateDefaultDisplayNodes()
+      parameterNode.SetNodeReferenceID(self.SCOPE_OFF_VOLUME_A, scopeOffVolumeA.GetID())
+
+    scopeCutAirVolumeA = parameterNode.GetNodeReference(self.SCOPE_CUT_AIR_VOLUME_A)
+    if scopeCutAirVolumeA is None:
+      scopeCutAirVolumeA = slicer.mrmlScene.AddNewNodeByClass("vtkMRMLScalarVolumeNode", self.SCOPE_CUT_AIR_VOLUME_A)
+      scopeCutAirVolumeA.SetOrigin([0,0,0])
+      spacing = [[1, 0, 0], [0, 1, 0], [0, 0, 1]]
+      scopeCutAirVolumeA.SetSpacing([1, 1, 1])
+      scopeCutAirVolumeA.SetIJKToRASDirections([[1, 0, 0], [0, 1, 0], [0, 0, 1]])
+      scopeCutAirVolumeA.CreateDefaultDisplayNodes()
+      parameterNode.SetNodeReferenceID(self.SCOPE_CUT_AIR_VOLUME_A, scopeCutAirVolumeA.GetID())
+
+    scopeCutTissueVolumeA = parameterNode.GetNodeReference(self.SCOPE_CUT_TISSUE_VOLUME_A)
+    if scopeCutTissueVolumeA is None:
+      scopeCutTissueVolumeA = slicer.mrmlScene.AddNewNodeByClass("vtkMRMLScalarVolumeNode", self.SCOPE_CUT_TISSUE_VOLUME_A)
+      scopeCutTissueVolumeA.SetOrigin([0,0,0])
+      spacing = [[1, 0, 0], [0, 1, 0], [0, 0, 1]]
+      scopeCutTissueVolumeA.SetSpacing([1, 1, 1])
+      scopeCutTissueVolumeA.SetIJKToRASDirections([[1, 0, 0], [0, 1, 0], [0, 0, 1]])
+      scopeCutTissueVolumeA.CreateDefaultDisplayNodes()
+      parameterNode.SetNodeReferenceID(self.SCOPE_CUT_TISSUE_VOLUME_A, scopeCutTissueVolumeA.GetID())
+
+    scopeCoagTissueVolumeA = parameterNode.GetNodeReference(self.SCOPE_COAG_AIR_VOLUME_A)
+    if scopeCoagTissueVolumeA is None:
+      scopeCoagTissueVolumeA = slicer.mrmlScene.AddNewNodeByClass("vtkMRMLScalarVolumeNode", self.SCOPE_COAG_AIR_VOLUME_A)
+      scopeCoagTissueVolumeA.SetOrigin([0,0,0])
+      spacing = [[1, 0, 0], [0, 1, 0], [0, 0, 1]]
+      scopeCoagTissueVolumeA.SetSpacing([1, 1, 1])
+      scopeCoagTissueVolumeA.SetIJKToRASDirections([[1, 0, 0], [0, 1, 0], [0, 0, 1]])
+      scopeCoagTissueVolumeA.CreateDefaultDisplayNodes()
+      parameterNode.SetNodeReferenceID(self.SCOPE_COAG_AIR_VOLUME_A, scopeCoagTissueVolumeA.GetID())
+
+    scopeCoagAirVolumeA = parameterNode.GetNodeReference(self.SCOPE_COAG_TISSUE_VOLUME_A)
+    if scopeCoagAirVolumeA is None:
+      scopeCoagAirVolumeA = slicer.mrmlScene.AddNewNodeByClass("vtkMRMLScalarVolumeNode", self.SCOPE_COAG_TISSUE_VOLUME_A)
+      scopeCoagAirVolumeA.SetOrigin([0,0,0])
+      spacing = [[1, 0, 0], [0, 1, 0], [0, 0, 1]]
+      scopeCoagAirVolumeA.SetSpacing([1, 1, 1])
+      scopeCoagAirVolumeA.SetIJKToRASDirections([[1, 0, 0], [0, 1, 0], [0, 0, 1]])
+      scopeCoagAirVolumeA.CreateDefaultDisplayNodes()
+      parameterNode.SetNodeReferenceID(self.SCOPE_COAG_TISSUE_VOLUME_A, scopeCoagAirVolumeA.GetID())
+
+    scopeOffVolumeB = parameterNode.GetNodeReference(self.SCOPE_OFF_VOLUME_B)
+    if scopeOffVolumeB is None:
+      scopeOffVolumeB = slicer.mrmlScene.AddNewNodeByClass("vtkMRMLScalarVolumeNode", self.SCOPE_OFF_VOLUME_B)
+      scopeOffVolumeB.SetOrigin([0,0,0])
+      spacing = [[1, 0, 0], [0, 1, 0], [0, 0, 1]]
+      scopeOffVolumeB.SetSpacing([1, 1, 1])
+      scopeOffVolumeB.SetIJKToRASDirections([[1, 0, 0], [0, 1, 0], [0, 0, 1]])
+      scopeOffVolumeB.CreateDefaultDisplayNodes()
+      parameterNode.SetNodeReferenceID(self.SCOPE_OFF_VOLUME_B, scopeOffVolumeB.GetID())
+
+    scopeCutAirVolume_B = parameterNode.GetNodeReference(self.SCOPE_CUT_AIR_VOLUME_B)
+    if scopeCutAirVolume_B is None:
+      scopeCutAirVolume_B = slicer.mrmlScene.AddNewNodeByClass("vtkMRMLScalarVolumeNode", self.SCOPE_CUT_AIR_VOLUME_B)
+      scopeCutAirVolume_B.SetOrigin([0,0,0])
+      spacing = [[1, 0, 0], [0, 1, 0], [0, 0, 1]]
+      scopeCutAirVolume_B.SetSpacing([1, 1, 1])
+      scopeCutAirVolume_B.SetIJKToRASDirections([[1, 0, 0], [0, 1, 0], [0, 0, 1]])
+      scopeCutAirVolume_B.CreateDefaultDisplayNodes()
+      parameterNode.SetNodeReferenceID(self.SCOPE_CUT_AIR_VOLUME_B, scopeCutAirVolume_B.GetID())
+
+    scopeCutTissueVolumeB = parameterNode.GetNodeReference(self.SCOPE_CUT_TISSUE_VOLUME_B)
+    if scopeCutTissueVolumeB is None:
+      scopeCutTissueVolumeB = slicer.mrmlScene.AddNewNodeByClass("vtkMRMLScalarVolumeNode", self.SCOPE_CUT_TISSUE_VOLUME_B)
+      scopeCutTissueVolumeB.SetOrigin([0,0,0])
+      spacing = [[1, 0, 0], [0, 1, 0], [0, 0, 1]]
+      scopeCutTissueVolumeB.SetSpacing([1, 1, 1])
+      scopeCutTissueVolumeB.SetIJKToRASDirections([[1, 0, 0], [0, 1, 0], [0, 0, 1]])
+      scopeCutTissueVolumeB.CreateDefaultDisplayNodes()
+      parameterNode.SetNodeReferenceID(self.SCOPE_CUT_TISSUE_VOLUME_B, scopeCutTissueVolumeB.GetID())
+
+    scopeCoagTissueVolumeB = parameterNode.GetNodeReference(self.SCOPE_COAG_AIR_VOLUME_B)
+    if scopeCoagTissueVolumeB is None:
+      scopeCoagTissueVolumeB = slicer.mrmlScene.AddNewNodeByClass("vtkMRMLScalarVolumeNode", self.SCOPE_COAG_AIR_VOLUME_B)
+      scopeCoagTissueVolumeB.SetOrigin([0,0,0])
+      spacing = [[1, 0, 0], [0, 1, 0], [0, 0, 1]]
+      scopeCoagTissueVolumeB.SetSpacing([1, 1, 1])
+      scopeCoagTissueVolumeB.SetIJKToRASDirections([[1, 0, 0], [0, 1, 0], [0, 0, 1]])
+      scopeCoagTissueVolumeB.CreateDefaultDisplayNodes()
+      parameterNode.SetNodeReferenceID(self.SCOPE_COAG_AIR_VOLUME_B, scopeCoagTissueVolumeB.GetID())
+
+    scopeCoagAirVolumeB = parameterNode.GetNodeReference(self.SCOPE_COAG_TISSUE_VOLUME_B)
+    if scopeCoagAirVolumeB is None:
+      scopeCoagAirVolumeB = slicer.mrmlScene.AddNewNodeByClass("vtkMRMLScalarVolumeNode", self.SCOPE_COAG_TISSUE_VOLUME_B)
+      scopeCoagAirVolumeB.SetOrigin([0,0,0])
+      spacing = [[1, 0, 0], [0, 1, 0], [0, 0, 1]]
+      scopeCoagAirVolumeB.SetSpacing([1, 1, 1])
+      scopeCoagAirVolumeB.SetIJKToRASDirections([[1, 0, 0], [0, 1, 0], [0, 0, 1]])
+      scopeCoagAirVolumeB.CreateDefaultDisplayNodes()
+      parameterNode.SetNodeReferenceID(self.SCOPE_COAG_TISSUE_VOLUME_B, scopeCoagAirVolumeB.GetID())
+
+    
+
 
   def setupTransformHierarchy(self):
     """
@@ -1860,7 +1970,7 @@ class LumpNav2Logic(ScriptedLoadableModuleLogic, VTKObservationMixin):
 
   def scopeSignalModified(self, caller, eventid):
     
-    logging.info('scopeSignalModified')
+    #logging.info('scopeSignalModified')
     plotchart = slicer.mrmlScene.GetFirstNodeByClass('vtkMRMLPlotChartNode')
     plotseries = slicer.mrmlScene.GetFirstNodeByClass('vtkMRMLPlotSeriesNode')
     table = slicer.mrmlScene.GetFirstNodeByClass('vtkMRMLTableNode')
@@ -2113,36 +2223,31 @@ class LumpNav2Logic(ScriptedLoadableModuleLogic, VTKObservationMixin):
   
   def setCollectOff(self, recording):
     #logging.info("setCollectOff")
-    #convert to volume, save a reference to that. slicer.util.updateVolumeFromArray
-    #take sequence browswer
-    #sequences, create new browser, add sequence, make sure proxy node, click record
-    #click play, grab proxy node
-
     parameterNode = self.getParameterNode()
     sequenceBrowserUltrasound = parameterNode.GetNodeReference(self.COLLECT_OFF_SEQUENCE_BROWSER)
     sequenceBrowserUltrasound.SetRecordingActive(recording) #stop
     return
     
   def setCollectCutAir(self, recording):
-    logging.info("setCollectCutAir")
+    #logging.info("setCollectCutAir")
     parameterNode = self.getParameterNode()
     sequenceBrowserUltrasound = parameterNode.GetNodeReference(self.COLLECT_CUT_AIR_SEQUENCE_BROWSER)
     sequenceBrowserUltrasound.SetRecordingActive(recording) #stop
 
   def setCollectCutTissue(self, recording):
-    logging.info("setCollectCutTissue")
+    #logging.info("setCollectCutTissue")
     parameterNode = self.getParameterNode()
     sequenceBrowserUltrasound = parameterNode.GetNodeReference(self.COLLECT_CUT_AIR_SEQUENCE_BROWSER)
     sequenceBrowserUltrasound.SetRecordingActive(recording) #stop
 
   def setCollectCoagAir(self, recording):
-    logging.info("setCollectCoagAir")
+    #logging.info("setCollectCoagAir")
     parameterNode = self.getParameterNode()
     sequenceBrowserUltrasound = parameterNode.GetNodeReference(self.COLLECT_CUT_AIR_SEQUENCE_BROWSER)
     sequenceBrowserUltrasound.SetRecordingActive(recording) #stop
 
   def setCollectCoagTissue(self, recording):
-    logging.info("setCollectCoagTissue")
+    #logging.info("setCollectCoagTissue")
     parameterNode = self.getParameterNode()
     sequenceBrowserUltrasound = parameterNode.GetNodeReference(self.COLLECT_CUT_AIR_SEQUENCE_BROWSER)
     sequenceBrowserUltrasound.SetRecordingActive(recording) #stop
@@ -2156,46 +2261,255 @@ class LumpNav2Logic(ScriptedLoadableModuleLogic, VTKObservationMixin):
     collectOffSeqBr.SelectFirstItem()
     channelACollectOff = np.empty([n,3900])
     channelBCollectOff = np.empty([n,3900])
+    featureCollectOff = np.empty([n,2])
+    Y_CollectOff = np.full((n,1), 0)
     for i in range(n):
-      collectOffSeqBr.SelectNextItem()
       oscilloscopeArray = slicer.util.arrayFromVolume(signal_Signal)
       ChA = oscilloscopeArray[0,1]
       ChB = oscilloscopeArray[0,2]
       channelACollectOff[i] = ChA
-      channelBCollectOff[i] = ChB 
-    
-    print(channelACollectOff)
-    '''
-    time, ChA, ChB = self.getOscilloscopeChannels()
-    parameterNode = self.getParameterNode()
-    currentChArray_Array = np.array([ChA, ChB])
-    if parameterNode.GetAttribute(self.COLLECT_OFF) != self.COLLECT_OFF:
-      newChArray_String = currentChArray_Array.tostring()
-      parameterNode.SetAttribute(self.COLLECT_OFF, newChArray_String)
-    else:
-      oldChArray_String = parameterNode.GetAttribute(self.COLLECT_OFF)
-      oldChArray_Array = np.fromstring(oldChArray_String)
-      newChArray_Array = np.append(oldChArray_Array, newChArray_Array)
-      newChArray_String = newChArray_Array.tostring()
-      parameterNode.SetAttribute(self.COLLECT_OFF, newChArray_String)
-    
-    #getting proxy node from recorded sequence browser of osciloscope signals
-    parameterNode = self.getParameterNode()
-    collectOffSeqBr = parameterNode.GetNodeReference(self.COLLECT_OFF_SEQUENCE_BROWSER)
+      channelBCollectOff[i] = ChB
+      featureCollectOff[i][0] = self.lmrMean(ChA, ChB)
+      featureCollectOff[i][1] = self.mMean(ChA, ChB)
+      collectOffSeqBr.SelectNextItem()
+      collectOffSeqBr = parameterNode.GetNodeReference(self.COLLECT_OFF_SEQUENCE_BROWSER)
+      signal_Signal = parameterNode.GetNodeReference(self.SIGNAL_SIGNAL)
+
+    collectCutAirSeqBr = parameterNode.GetNodeReference(self.COLLECT_CUT_AIR_SEQUENCE_BROWSER)
     signal_Signal = parameterNode.GetNodeReference(self.SIGNAL_SIGNAL)
-    n = collectOffSeqBr.GetNumberOfItems()
-    collectOffSeqBr.SelectFirstItem()
+    n = collectCutAirSeqBr.GetNumberOfItems()
+    collectCutAirSeqBr.SelectFirstItem()
+    channelACollectCutAir = np.empty([n,3900])
+    channelBCollectCutAir = np.empty([n,3900])
+    featureCollectCutAir = np.empty([n,2])
+    Y_CollectCutAir = np.full((n,1), 1)
     for i in range(n):
-      a = slicer.util.arrayFromVolume(signal_Signal)
-      #get array of current sample
-      #append array with channelA
-      #append array with channelB
-    print(a[:4])
-    #result: 3900 by n (samples) array
+      oscilloscopeArray = slicer.util.arrayFromVolume(signal_Signal)
+      ChA = oscilloscopeArray[0,1]
+      ChB = oscilloscopeArray[0,2]
+      channelACollectCutAir[i] = ChA
+      channelBCollectCutAir[i] = ChB
+      featureCollectCutAir[i][0] = self.lmrMean(ChA, ChB)
+      featureCollectCutAir[i][1] = self.mMean(ChA, ChB)
+      collectCutAirSeqBr.SelectNextItem()
+      collectCutAirSeqBr = parameterNode.GetNodeReference(self.COLLECT_CUT_AIR_SEQUENCE_BROWSER)
+      signal_Signal = parameterNode.GetNodeReference(self.SIGNAL_SIGNAL)
+
+    collectCutTissueSeqBr = parameterNode.GetNodeReference(self.COLLECT_CUT_TISSUE_SEQUENCE_BROWSER)
+    signal_Signal = parameterNode.GetNodeReference(self.SIGNAL_SIGNAL)
+    n = collectCutTissueSeqBr.GetNumberOfItems()
+    collectCutTissueSeqBr.SelectFirstItem()
+    channelACollectCutTissue = np.empty([n,3900])
+    channelBCollectCutTissue = np.empty([n,3900])
+    featureCollectCutTissue = np.empty([n,2])
+    Y_CollectCutTissue = np.full((n,1), 2)
+    for i in range(n):
+      oscilloscopeArray = slicer.util.arrayFromVolume(signal_Signal)
+      ChA = oscilloscopeArray[0,1]
+      ChB = oscilloscopeArray[0,2]
+      channelACollectCutTissue[i] = ChA
+      channelBCollectCutTissue[i] = ChB
+      featureCollectCutTissue[i][0] = self.lmrMean(ChA, ChB)
+      featureCollectCutTissue[i][1] = self.mMean(ChA, ChB)
+      collectCutTissueSeqBr.SelectNextItem()
+      collectCutTissueSeqBr = parameterNode.GetNodeReference(self.COLLECT_CUT_TISSUE_SEQUENCE_BROWSER)
+      signal_Signal = parameterNode.GetNodeReference(self.SIGNAL_SIGNAL)
+  
+    collectCoagAirSeqBr = parameterNode.GetNodeReference(self.COLLECT_COAG_AIR_SEQUENCE_BROWSER)
+    signal_Signal = parameterNode.GetNodeReference(self.SIGNAL_SIGNAL)
+    n = collectCoagAirSeqBr.GetNumberOfItems()
+    collectCoagAirSeqBr.SelectFirstItem()
+    channelACollectCoagAir = np.empty([n,3900])
+    channelBCollectCoagAir = np.empty([n,3900])
+    featureCollectCoagAir = np.empty([n,2])
+    Y_CollectCoagAir = np.full((n,1), 3)
+    for i in range(n):
+      oscilloscopeArray = slicer.util.arrayFromVolume(signal_Signal)
+      ChA = oscilloscopeArray[0,1]
+      ChB = oscilloscopeArray[0,2]
+      channelACollectCoagAir[i] = ChA
+      channelBCollectCoagAir[i] = ChB
+      featureCollectCoagAir[i][0] = self.lmrMean(ChA, ChB)
+      featureCollectCoagAir[i][1] = self.mMean(ChA, ChB)
+      collectCoagAirSeqBr.SelectNextItem()         
+      collectCoagAirSeqBr = parameterNode.GetNodeReference(self.COLLECT_COAG_AIR_SEQUENCE_BROWSER)
+      signal_Signal = parameterNode.GetNodeReference(self.SIGNAL_SIGNAL)
+    
+    collectCoagTissueSeqBr = parameterNode.GetNodeReference(self.COLLECT_COAG_TISSUE_SEQUENCE_BROWSER)
+    signal_Signal = parameterNode.GetNodeReference(self.SIGNAL_SIGNAL)
+    n = collectCoagTissueSeqBr.GetNumberOfItems()
+    collectCoagTissueSeqBr.SelectFirstItem()
+    channelACollectCoagTissue = np.empty([n,3900])
+    channelBCollectCoagTissue = np.empty([n,3900])
+    featureCollectCoagTissue = np.empty([n,2])
+    Y_CollectCoagTissue = np.full((n,1), 4)
+    for i in range(n):
+      oscilloscopeArray = slicer.util.arrayFromVolume(signal_Signal)
+      ChA = oscilloscopeArray[0,1]
+      ChB = oscilloscopeArray[0,2]
+      channelACollectCoagTissue[i] = ChA
+      channelBCollectCoagTissue[i] = ChB
+      featureCollectCoagTissue[i][0] = self.lmrMean(ChA, ChB)
+      featureCollectCoagTissue[i][1] = self.mMean(ChA, ChB)
+      collectCoagTissueSeqBr.SelectNextItem()
+      collectCoagTissueSeqBr = parameterNode.GetNodeReference(self.COLLECT_COAG_TISSUE_SEQUENCE_BROWSER)
+      signal_Signal = parameterNode.GetNodeReference(self.SIGNAL_SIGNAL)
+
+    #append arrays, build X and Y\
+    features = np.append(featureCollectOff, featureCollectCutAir, axis = 0)
+    features = np.append(features, featureCollectCutTissue, axis = 0)
+    features = np.append(features, featureCollectCoagAir, axis = 0)
+    features = np.append(features, featureCollectCoagTissue, axis = 0)
+    Y = np.append(Y_CollectOff, Y_CollectCutAir)
+    Y = np.append(Y, Y_CollectCutTissue)
+    Y = np.append(Y, Y_CollectCoagAir)
+    Y = np.append(Y, Y_CollectCoagTissue)
+    
+    print("Y shape", np.shape(Y))
+    print("features", np.shape(features))
+    print(Y)
+    print(features)
+
+    self.buildScopeModel(features, Y)
+
+  def buildScopeModel(self, features, Y):
+
+    X_training, X_test, Y_train, Y_test = train_test_split(features, Y, test_size=0.2)
+
+    C = 1.0
+    svc = svm.SVC(kernel = 'linear', C=3.0, decision_function_shape='ovo').fit(X_training, Y_train)
+    lin = svm.LinearSVC().fit(X_training, Y_train)
+    rbf = svm.SVC(kernel = 'rbf', gamma = 0.9, C=1.0).fit(X_training, Y_train)
+    poly = svm.SVC(kernel = 'poly', degree = 3, C = 1.0).fit(X_training, Y_train)
+
+    filename_svc = "D:\Research\Oscilloscope\cauteryModelSVM_svc.sav"
+    filename_lin = "D:\Research\Oscilloscope\cauteryModelSVM_lin.sav"
+    filename_rbf = "D:\Research\Oscilloscope\cauteryModelSVM_rbf.sav"
+    filename_poly = "D:\Research\Oscilloscope\cauteryModelSVM_poly.sav"
+    pickle.dump(svc, open(filename_svc, "wb"))
+    pickle.dump(lin, open(filename_lin, "wb"))
+    pickle.dump(rbf, open(filename_rbf, "wb"))
+    pickle.dump(poly, open(filename_poly, "wb"))
+    loaded_module_svc = pickle.load(open(filename_svc, "rb"))
+    loaded_module_lin = pickle.load(open(filename_lin, "rb"))
+    loaded_module_rbf = pickle.load(open(filename_rbf, "rb"))
+    loaded_module_poly = pickle.load(open(filename_poly, "rb"))
+    result = loaded_module_svc.score(X_test, Y_test)
+    predict = loaded_module_svc.predict(X_test)
+    print("----SVC------")
+    print("Prediction", predict)
+    print("Y test", Y_test)
+    print("result", result)
+    print("-----LIN------")
+    result = loaded_module_lin.score(X_test, Y_test)
+    predict = loaded_module_lin.predict(X_test)
+    print("Prediction", predict)
+    print("Y test", Y_test)
+    print("result", result)
+    print("-----RBF------")
+    result = loaded_module_rbf.score(X_test, Y_test)
+    predict = loaded_module_rbf.predict(X_test)
+    print("Prediction", predict)
+    print("Y test", Y_test)
+    print("result", result)
+    np.save("D:/Research/Oscilloscope/features.npy", features)
+    np.save("D:/Research/Oscilloscope/Y.npy", Y)
+    print("-----POLY------")
+    result_poly = loaded_module_poly.score(X_test, Y_test)
+    predict_poly = loaded_module_poly.predict(X_test)
+    print("Prediction", predict_poly)
+    print("Y test", Y_test)
+    print("result", result_poly)
+    
+    # h = 0.02  # step size in the mesh
+    
+    # # create a mesh to plot in
+
+    # X_train_min, X_train_max = X_training[:,0].min() - 1, X_training[:,0].max() + 1
+    # Y_train_min, Y_train_max = X_training[:,1].min() - 1, X_training[:,1].max() + 1
+    # X_train, yy = np.meshgrid(np.float32(np.arange(X_train_min, X_train_max, h)), np.float32(np.arange(Y_train_min, Y_train_max, h)))
+    # # title for the plots
+    # titles = ['SVC with linear kernel',
+    #     'LinearSVC (linear kernel)',
+    #       'SVC with RBF kernel',
+    #       'SVC with polynomial (degree 3) kernel']
+
+    # for i, clf in enumerate((svc, lin_svc, rbf_svc, poly_svc)):
+    #   # Plot the decision boundarY_train. For that, we will assign a color to each
+    #   # point in the mesh [X_train_min, X_train_max]X_train[Y_train_min, Y_train_max].
+      
+    #   plt.subplot(2, 2, i + 1)
+    #   plt.subplots_adjust(wspace=0.4, hspace=0.4)
+  
+    #   Z = clf.predict(np.c_[X_train.ravel(), yy.ravel()])
+      
+    #   # Put the result into a color plot
+    #   Z = Z.reshape(X_train.shape)
+    #   plt.contourf(X_train, yy, Z, cmap=plt.cm.coolwarm, alpha=0.8)
+  
+    #   # Plot also the training points
+    #   plt.scatter(X_training[:,0], X_training[:,1], c = Y_train, cmap=plt.cm.coolwarm)
+    #   plt.xlabel('lmr')
+    #   plt.ylabel('mMean')
+    #   plt.xlim(X_train.min(), X_train.max())
+    #   plt.ylim(yy.min(), yy.max())
+    #   plt.xticks(())
+    #   plt.yticks(())
+    #   plt.title(titles[i])
+    #   plot_decision_regions(X_training, Y_train, clf = clf, legend=2)
+    #   d = {"Off": 0, "CutAir": 1, "CutTissue": 2, "CoagAir": 3, "CoagTissue": 4}
+    #   handles, labels =  plt.gca().get_legend_handles_labels()
+    #   d_rev = {y:x for x,y in d.items()}
+    #   plt.legend(handles, list(map(d_rev.get, [int(i) for i in d_rev])))
+    
+    # plt.savefig('/Users/Josh Ehrlich/Desktop/SVM.png')
+
+    # #save arrays as volume  
+    # scopeOffVolumeA = parameterNode.GetNodeReference(self.SCOPE_OFF_VOLUME_A)
+    # vtkGrayscale = numpy_support.numpy_to_vtk(channelACollectOff.flatten(order='C'), deep=True, array_type=vtk.VTK_DOUBLE)
+    # # Convert the image to vtkImageData object
+    # sliceImageData = vtk.vtkImageData()
+    # sliceImageData.SetDimensions(len(channelACollectOff[0]), len(channelACollectOff), 1)
+    # sliceImageData.SetOrigin(0.0, 0.0, 0.0)
+    # sliceImageData.GetPointData().SetScalars(vtkGrayscale)
+    # scopeOffVolumeA.SetAndObserveImageData(sliceImageData)
+
+    # scopeOffVolumeB = parameterNode.GetNodeReference(self.SCOPE_OFF_VOLUME_B)
+    # vtkGrayscale = numpy_support.numpy_to_vtk(channelACollectOff.flatten(order='C'), deep=True, array_type=vtk.VTK_DOUBLE)
+    # # Convert the image to vtkImageData object
+    # sliceImageData = vtk.vtkImageData()
+    # sliceImageData.SetDimensions(len(channelACollectOff[0]), len(channelACollectOff), 1)
+    # sliceImageData.SetOrigin(0.0, 0.0, 0.0)
+    # sliceImageData.GetPointData().SetScalars(vtkGrayscale)
+    # scopeOffVolumeB.SetAndObserveImageData(sliceImageData)
+
+    # self.buildScopeModel()
+
+  # def buildScopeModel(self):
+  #   parameterNode = self.getParameterNode()
+  #   scopeOffVolumeA = parameterNode.GetNodeReference(self.SCOPE_OFF_VOLUME_A)
+  #   scopeOffArrayA = slicer.util.arrayFromVolume(scopeOffVolumeA)
+  #   scopeCutAirVolumeA = parameterNode.GetNodeReference(self.SCOPE_CUT_AIR_VOLUME_A)
+  #   scopeCutAirArrayA = slicer.util.arrayFromVolume(scopeCutAirVolumeA)
+  #   scopeCutTissueVolumeA = parameterNode.GetNodeReference(self.SCOPE_CUT_TISSUE_VOLUME_A)
+  #   scopeCutTissueArrayA = slicer.util.arrayFromVolume(scopeCutTissueVolumeA)
+  #   scopeCoagAirVolumeA = parameterNode.GetNodeReference(self.SCOPE_COAG_AIR_VOLUME_A)
+  #   scopeCoagAirArrayA = slicer.util.arrayFromVolume(scopeCoagAirVolumeA)
+  #   scopeCoagTissueVolumeA = parameterNode.GetNodeReference(self.SCOPE_COAG_TISSUE_VOLUME_A)
+  #   scopeCoagTissueArrayA = slicer.util.arrayFromVolume(scopeCoagTissueVolumeA)
+
+  #   scopeOffVolumeB = parameterNode.GetNodeReference(self.SCOPE_OFF_VOLUME_B)
+  #   scopeOffArrayB = slicer.util.arrayFromVolume(scopeOffVolumeB)
+  #   scopeCutAirVolumeB = parameterNode.GetNodeReference(self.SCOPE_CUT_AIR_VOLUME_B)
+  #   scopeCutAirArrayB = slicer.util.arrayFromVolume(scopeCutAirVolumeB)
+  #   scopeCutTissueVolumeB = parameterNode.GetNodeReference(self.SCOPE_CUT_TISSUE_VOLUME_B)
+  #   scopeCutTissueArrayB = slicer.util.arrayFromVolume(scopeCutTissueVolumeB)
+  #   scopeCoagAirVolumeB = parameterNode.GetNodeReference(self.SCOPE_COAG_AIR_VOLUME_B)
+  #   scopeCoagAirArrayB = slicer.util.arrayFromVolume(scopeCoagAirVolumeB)
+  #   scopeCoagTissueVolumeB = parameterNode.GetNodeReference(self.SCOPE_COAG_TISSUE_VOLUME_B)
+  #   scopeCoagTissueArrayB = slicer.util.arrayFromVolume(scopeCoagTissueVolumeB)
 
 
-print(a.shape)
-    '''
 
   def setUseBaseModelClicked(self):
     #TODO: how do I non-specific to my computer file paths
@@ -2260,11 +2574,11 @@ print(a.shape)
       return lmrSum
 
   def lmrMean(self, channelA, channelB):
-      lmrMean = (self.absMean(channelA - channelB)) * 100
+      lmrMean = (self.absMean(channelA - channelB)) * 10000
       return lmrMean
 
   def mMean(self, channelA, channelB):
-      mMean = (self.absMean(channelA) * self.absSum(channelB)) * 10000
+      mMean = (self.absMean(channelA) * self.absSum(channelB)) * 100
       return mMean
 
 
