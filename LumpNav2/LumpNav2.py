@@ -287,7 +287,7 @@ class LumpNav2Widget(ScriptedLoadableModuleWidget, VTKObservationMixin):
     self.ui.collectCoagAirButton.connect('toggled(bool)', self.onCollectCoagAirToggled)
     self.ui.collectCoagTissueButton.connect('toggled(bool)', self.onCollectCoagTissueToggled)
     self.ui.trainAndImplementModelButton.connect('clicked()', self.onTrainAndImplementModelClicked)
-    self.ui.useBaseModelButton.connect('clicked()', self.onUseBaseModelClicked)
+    self.ui.useBaseModelButton.connect('toggled(bool)', self.onUseBaseModelClicked)
     self.ui.resetModelButton.connect('clicked()', self.onResetModelClicked)
 
     import Viewpoint
@@ -741,9 +741,9 @@ class LumpNav2Widget(ScriptedLoadableModuleWidget, VTKObservationMixin):
     self.logic.setTrainAndImplementModel()
     return
 
-  def onUseBaseModelClicked(self):
+  def onUseBaseModelClicked(self, toggled):
     logging.info('onUseBaseModelClicked')
-    self.logic.setUseBaseModelClicked()
+    self.logic.setUseBaseModelClicked(toggled)
 
     return
   def onResetModelClicked(self):
@@ -2292,7 +2292,6 @@ class LumpNav2Logic(ScriptedLoadableModuleLogic, VTKObservationMixin):
       featureCollectCutAir[i][1] = self.mMean(ChA, ChB)
       collectCutAirSeqBr.SelectNextItem()
       signal_Signal = parameterNode.GetNodeReference(self.SIGNAL_SIGNAL)
-      print(featureCollectCutAir[i])
 
     collectCutTissueSeqBr = parameterNode.GetNodeReference(self.COLLECT_CUT_TISSUE_SEQUENCE_BROWSER)
     signal_Signal = parameterNode.GetNodeReference(self.SIGNAL_SIGNAL)
@@ -2360,7 +2359,7 @@ class LumpNav2Logic(ScriptedLoadableModuleLogic, VTKObservationMixin):
     Y = np.append(Y, Y_CollectCutTissue)
     Y = np.append(Y, Y_CollectCoagAir)
     Y = np.append(Y, Y_CollectCoagTissue)
-
+    
     self.buildScopeModel(features, Y)
 
   def buildScopeModel(self, features, Y):
@@ -2500,11 +2499,17 @@ class LumpNav2Logic(ScriptedLoadableModuleLogic, VTKObservationMixin):
   #   scopeCoagTissueVolumeB = parameterNode.GetNodeReference(self.SCOPE_COAG_TISSUE_VOLUME_B)
   #   scopeCoagTissueArrayB = slicer.util.arrayFromVolume(scopeCoagTissueVolumeB)
 
+  def setUseBaseModelClicked(self, clicked):
+    parameterNode = self.getParameterNode()
+    signal_Signal = parameterNode.GetNodeReference(self.SIGNAL_SIGNAL)
+    if clicked:
+      self.addObserver(signal_Signal, slicer.vtkMRMLScalarVolumeNode.ImageDataModifiedEvent, self.useBaseModelModified)
+    else:
+      self.removeObserver(signal_Signal, slicer.vtkMRMLScalarVolumeNode.ImageDataModifiedEvent, self.useBaseModelModified)
 
-
-  def setUseBaseModelClicked(self):
+  def useBaseModelModified(self, observer, eventID):
     #TODO: how do I non-specific to my computer file paths
-    filename = "D:\Research\Oscilloscope\cauteryModelSVM.sav"
+    filename = "D:\Research\Oscilloscope\cauteryModelSVM_svc_78accuracy.sav"
     import pickle
     cauterySVMModel = pickle.load(open(filename, "rb"))
     parameterNode = self.getParameterNode()
@@ -2515,12 +2520,10 @@ class LumpNav2Logic(ScriptedLoadableModuleLogic, VTKObservationMixin):
     ChA = np.transpose(oscilloscopeArray[0,1])
     ChB = np.transpose(oscilloscopeArray[0,2])
     feat = np.empty([1,2])
-    print("ChA", ChA, "ChB", ChB)
     lmrMeanTest = self.lmrMean(ChA, ChB)
     mMeanTest = self.mMean(ChA, ChB)
     feat[0][0] = lmrMeanTest
     feat[0][1] = mMeanTest
-    print("lmrMeanTest", lmrMeanTest, "mMeanTest", mMeanTest)
     predict = cauterySVMModel.predict(feat)
     print("Prediction", predict)
     
