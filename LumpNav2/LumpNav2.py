@@ -1230,7 +1230,7 @@ class LumpNav2Logic(ScriptedLoadableModuleLogic, VTKObservationMixin):
     self.scaling_Intercept = 0.01663333
     self.scaling_Slope = 0.00192667
 
-    self.tumorMarkups_Needle = None
+    #self.tumorMarkups_Needle = None
     self.tumorMarkupAddedObserverTag = None
 
     self.eraseMarkups_Needle = None
@@ -1880,8 +1880,10 @@ class LumpNav2Logic(ScriptedLoadableModuleLogic, VTKObservationMixin):
 
   def setDeleteLastFiducialClicked(self, numberOfPoints):
     deleted_coord = [0.0, 0.0, 0.0]
-    self.tumorMarkups_Needle.GetNthFiducialPosition(numberOfPoints-1,deleted_coord)
-    self.tumorMarkups_Needle.RemoveMarkup(numberOfPoints-1)
+    parameterNode = self.getParameterNode()
+    tumorMarkups_Needle = parameterNode.GetNodeReference(self.TUMOR_MARKUPS_NEEDLE)
+    tumorMarkups_Needle.GetNthFiducialPosition(numberOfPoints-1,deleted_coord)
+    tumorMarkups_Needle.RemoveMarkup(numberOfPoints-1)
     logging.info("Deleted last fiducial at %s", deleted_coord)
     if numberOfPoints<=1:
       sphereSource = vtk.vtkSphereSource()
@@ -1892,12 +1894,13 @@ class LumpNav2Logic(ScriptedLoadableModuleLogic, VTKObservationMixin):
       tumorModel_Needle.Modified()
 
   def setDeleteAllFiducialsClicked(self):
-    self.tumorMarkups_Needle.RemoveAllMarkups()
+    parameterNode = self.getParameterNode()
+    tumorMarkups_Needle = parameterNode.GetNodeReference(self.TUMOR_MARKUPS_NEEDLE)
+    tumorMarkups_Needle.RemoveAllMarkups()
     logging.info("Deleted all fiducials")
     
     sphereSource = vtk.vtkSphereSource()
     sphereSource.SetRadius(0.001)
-    parameterNode = self.getParameterNode()
     tumorModel_Needle = parameterNode.GetNodeReference(self.TUMOR_MODEL)
     tumorModel_Needle.SetPolyDataConnection(sphereSource.GetOutputPort())
     tumorModel_Needle.Modified()
@@ -2054,7 +2057,9 @@ class LumpNav2Logic(ScriptedLoadableModuleLogic, VTKObservationMixin):
     liveUSNode.SetWindowLevelMinMax(minLevel, maxLevel)
 
   def onTumorMarkupsNodeModified(self, observer, eventid):
-    numberOfPoints = self.tumorMarkups_Needle.GetNumberOfFiducials()
+    parameterNode = self.getParameterNode()
+    tumorMarkups_Needle = parameterNode.GetNodeReference(self.TUMOR_MARKUPS_NEEDLE)
+    numberOfPoints = tumorMarkups_Needle.GetNumberOfFiducials()
     #if numberOfPoints>1:
     #  self.ui.deleteLastFiducialButton.setEnabled(True)
     #  self.ui.deleteAllFiducialsButton.setEnabled(True)
@@ -2063,7 +2068,6 @@ class LumpNav2Logic(ScriptedLoadableModuleLogic, VTKObservationMixin):
     logging.debug("onTumorMarkupsNodeModified")
 
     self.createTumorFromMarkups()
-    parameterNode = self.getParameterNode()
     parameterNode.Modified()
 
   def createTumorFromMarkups(self):
@@ -2072,7 +2076,9 @@ class LumpNav2Logic(ScriptedLoadableModuleLogic, VTKObservationMixin):
     # Create polydata point set from markup points
     points = vtk.vtkPoints()
     cellArray = vtk.vtkCellArray()
-    numberOfPoints = self.tumorMarkups_Needle.GetNumberOfFiducials()
+    parameterNode = self.getParameterNode()
+    tumorMarkups_Needle = parameterNode.GetNodeReference(self.TUMOR_MARKUPS_NEEDLE)
+    numberOfPoints = tumorMarkups_Needle.GetNumberOfFiducials()
 
     # Surface generation algorithms behave unpredictably when there are not enough points
     # return if there are very few points
@@ -2082,10 +2088,10 @@ class LumpNav2Logic(ScriptedLoadableModuleLogic, VTKObservationMixin):
     points.SetNumberOfPoints(numberOfPoints)
     new_coord = [0.0, 0.0, 0.0]
     for i in range(numberOfPoints):
-      self.tumorMarkups_Needle.GetNthFiducialPosition(i,new_coord)
+      tumorMarkups_Needle.GetNthFiducialPosition(i,new_coord)
       points.SetPoint(i, new_coord)
 
-    self.tumorMarkups_Needle.GetNthFiducialPosition(numberOfPoints-1,new_coord)
+    tumorMarkups_Needle.GetNthFiducialPosition(numberOfPoints-1,new_coord)
     logging.info("Placed point at position: %s", new_coord)
     
     cellArray.InsertNextCell(numberOfPoints)
@@ -2140,12 +2146,13 @@ class LumpNav2Logic(ScriptedLoadableModuleLogic, VTKObservationMixin):
 
     parameterNode = self.getParameterNode()
     eraseMarkups_Needle = parameterNode.GetNodeReference(self.ERASE_MARKUPS_NEEDLE)
+    tumorMarkups_Needle = parameterNode.GetNodeReference(self.TUMOR_MARKUPS_NEEDLE)
     eraseMarkups_Needle.SetDisplayVisibility(0)
     if self.eraserFlag == False :
       self.eraserFlag = True
       return
     self.eraserFlag = False
-    numberOfPoints = self.tumorMarkups_Needle.GetNumberOfFiducials()
+    numberOfPoints = tumorMarkups_Needle.GetNumberOfFiducials()
     fiducialPosition = [0.0,0.0,0.0]
     if numberOfPoints == 1 :
       #self.deleteLastFiducialButton.setEnabled(False)
@@ -2153,21 +2160,19 @@ class LumpNav2Logic(ScriptedLoadableModuleLogic, VTKObservationMixin):
       #self.deleteLastFiducialNavigationButton.setEnabled(False)
       #self.selectPointsToEraseButton.setEnabled(False)
       #self.selectPointsToEraseButton.setChecked(False)
-      self.tumorMarkups_Needle.GetNthFiducialPosition(0,fiducialPosition)
+      tumorMarkups_Needle.GetNthFiducialPosition(0,fiducialPosition)
       logging.info("Used eraser to remove point at %s", fiducialPosition)
-      self.tumorMarkups_Needle.RemoveMarkup(0)
+      tumorMarkups_Needle.RemoveMarkup(0)
       sphereSource = vtk.vtkSphereSource()
       sphereSource.SetRadius(0.001)
-      parameterNode = self.getParameterNode()
       tumorModel_Needle = parameterNode.GetNodeReference(self.TUMOR_MODEL)
       tumorModel_Needle.SetPolyDataConnection(sphereSource.GetOutputPort())
     elif numberOfPoints > 1 : 
       numberOfErasedPoints = eraseMarkups_Needle.GetNumberOfFiducials()
       mostRecentPoint = [0.0,0.0,0.0]
       eraseMarkups_Needle.GetNthFiducialPosition(numberOfErasedPoints-1, mostRecentPoint)
-      closestPoint = self.returnClosestPoint(self.tumorMarkups_Needle, mostRecentPoint)
-      parameterNode = self.getParameterNode()
-      tumorMarkups_Needle = parameterNode.GetNodeReference(self.TUMOR_MARKUPS_NEEDLE)
+      closestPoint = self.returnClosestPoint(tumorMarkups_Needle, mostRecentPoint)
+      tumorMarkups_Needle = parameterNode.GetNodeReference(TUMOR_MARKUPS_NEEDLE)
       tumorMarkups_Needle.RemoveMarkup(closestPoint)
     tumorMarkups_Needle.Modified()
     self.createTumorFromMarkups() 

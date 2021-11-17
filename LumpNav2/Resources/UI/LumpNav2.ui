@@ -472,7 +472,7 @@
       <string>Oscilloscope</string>
      </property>
      <property name="checked">
-      <bool>true</bool>
+      <bool>false</bool>
      </property>
      <layout class="QVBoxLayout" name="verticalLayout_7">
       <item>
