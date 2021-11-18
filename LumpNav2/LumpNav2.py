@@ -255,7 +255,7 @@ class LumpNav2Widget(ScriptedLoadableModuleWidget, VTKObservationMixin):
     self.ui.markPointsButton.connect('toggled(bool)', self.onMarkPointsToggled)
     self.ui.deleteLastFiducialButton.connect('clicked()', self.onDeleteLastFiducialClicked)
     self.ui.deleteAllFiducialsButton.connect('clicked()', self.onDeleteAllFiducialsClicked)
-    self.ui.selectPointsToEraseButton.connect('toggled(bool)', self.onSelectPointsToEraseToggled)
+    self.ui.selectPointsToEraseButton.connect('toggled(bool)', self.onErasePointsToggled)
     self.ui.markPointCauteryTipButton.connect('clicked()', self.onMarkPointCauteryTipClicked)
     self.ui.startStopRecordingButton.connect('toggled(bool)', self.onStartStopRecordingClicked)  
     self.ui.freezeUltrasoundButton.connect('toggled(bool)', self.onFreezeUltrasoundClicked)
@@ -496,14 +496,17 @@ class LumpNav2Widget(ScriptedLoadableModuleWidget, VTKObservationMixin):
     logging.info("onBrightestBrightnessClicked")
     self.logic.setBrightestBrightnessClicked()
 
-  def onMarkPointsToggled(self, toggled):
+  def onErasePointsToggled(self, toggled):
+    logging.info("onErasePointsToggled")
     if self._updatingGui == True:
       return
     self._updatingGui = True
+    if self.ui.markPointsButton.isChecked() : # ensures point placed doesn't get logged twice
+      self.ui.markPointsButton.click()
     interactionNode = slicer.app.applicationLogic().GetInteractionNode()
     if toggled:  # activate placement mode
-      self.ui.selectPointsToEraseButton.setChecked(False)
       self._parameterNode.SetParameter(self.logic.CONTOUR_STATUS, self.logic.CONTOUR_ADDING)
+      self._parameterNode.SetParameter(self.logic.POINTS_STATUS, self.logic.POINTS_ERASING)
       selectionNode = slicer.app.applicationLogic().GetSelectionNode()
       selectionNode.SetReferenceActivePlaceNodeClassName("vtkMRMLMarkupsFiducialNode")
       tumorMarkups_Needle = self._parameterNode.GetNodeReference(self.logic.TUMOR_MARKUPS_NEEDLE)
@@ -512,6 +515,60 @@ class LumpNav2Widget(ScriptedLoadableModuleWidget, VTKObservationMixin):
       interactionNode.SetCurrentInteractionMode(interactionNode.Place)
     else:  # deactivate placement mode
       self._parameterNode.SetParameter(self.logic.CONTOUR_STATUS, self.logic.CONTOUR_UNSELECTED)
+      self._parameterNode.SetParameter(self.logic.POINTS_STATUS, self.logic.POINTS_UNSELECTED)
+      interactionNode.SetCurrentInteractionMode(interactionNode.ViewTransform)
+    self._updatingGui = False
+
+    '''
+    # if self._updatingGui == True:
+    #   return
+    # self._updatingGui = True
+    # if toggled:
+    #   self._parameterNode.SetParameter(self.logic.CONTOUR_STATUS, self.logic.CONTOUR_ERASING)
+    #   self.ui.markPointsButton.setChecked(False)
+    # else:
+    #   self._parameterNode.SetParameter(self.logic.CONTOUR_STATUS, self.logic.CONTOUR_UNSELECTED)
+    # self._updatingGui = False
+    # TODO: add this to function call from widget
+    if self._updatingGui == True:
+      return
+    self._updatingGui = True
+    parameterNode = self.getParmeterNode()
+    interactionNode = slicer.app.applicationLogic().GetInteractionNode()
+    if changePoints:
+      interactionNode.SetPlaceModePersistence(1)
+      interactionNode.SetCurrentInteractionMode(interactionNode.Place)
+      selectionNode = slicer.app.applicationLogic().GetSelectionNode()
+      selectionNode.SetReferenceActivePlaceNodeClassName("vtkMRMLMarkupsFiducialNode")
+      tumorMarkups_Needle = parameterNode.GetNodeReference(self.logic.TUMOR_MARKUPS_NEEDLE)
+      selectionNode.SetActivePlaceNodeID(tumorMarkups_Needle.GetID())
+      parameterNode.SetParameter(self.logic.CONTOUR_STATUS, self.logic.CONTOUR_ADDING)
+      parameterNode.SetParameter(self.logic.POINTS_STATUS, self.logic.POINTS_ERASING)
+    else:  # deactivate placement mode
+      parameterNode.SetParameter(self.logic.CONTOUR_STATUS, self.logic.CONTOUR_UNSELECTED)
+      interactionNode.SetCurrentInteractionMode(interactionNode.ViewTransform)
+    # TODO: add those after modifyPoints function call line in widget class
+    self._updatingGui = False
+    '''
+
+  def onMarkPointsToggled(self, toggled):
+    if self._updatingGui == True:
+      return
+    self._updatingGui = True
+    interactionNode = slicer.app.applicationLogic().GetInteractionNode()
+    if toggled:  # activate placement mode
+      self.ui.selectPointsToEraseButton.setChecked(False)
+      self._parameterNode.SetParameter(self.logic.CONTOUR_STATUS, self.logic.CONTOUR_ADDING)
+      self._parameterNode.SetParameter(self.logic.POINTS_STATUS, self.logic.POINTS_ADDING)
+      selectionNode = slicer.app.applicationLogic().GetSelectionNode()
+      selectionNode.SetReferenceActivePlaceNodeClassName("vtkMRMLMarkupsFiducialNode")
+      tumorMarkups_Needle = self._parameterNode.GetNodeReference(self.logic.TUMOR_MARKUPS_NEEDLE)
+      selectionNode.SetActivePlaceNodeID(tumorMarkups_Needle.GetID())
+      interactionNode.SetPlaceModePersistence(1)
+      interactionNode.SetCurrentInteractionMode(interactionNode.Place)
+    else:  # deactivate placement mode
+      self._parameterNode.SetParameter(self.logic.CONTOUR_STATUS, self.logic.CONTOUR_UNSELECTED)
+      self._parameterNode.SetParameter(self.logic.POINTS_STATUS, self.logic.POINTS_UNSELECTED)
       interactionNode.SetCurrentInteractionMode(interactionNode.ViewTransform)
     self._updatingGui = False
   
@@ -527,23 +584,11 @@ class LumpNav2Widget(ScriptedLoadableModuleWidget, VTKObservationMixin):
     tumorMarkups_Needle = self._parameterNode.GetNodeReference(self.logic.TUMOR_MARKUPS_NEEDLE)
     numberOfPoints = tumorMarkups_Needle.GetNumberOfFiducials()
     self.logic.setDeleteLastFiducialClicked(numberOfPoints)
-    self.logic.createTumorFromMarkups() #update tumor contour
 
   def onDeleteAllFiducialsClicked(self):
     logging.debug('onDeleteAllFiducialsClicked')
     self.logic.setDeleteAllFiducialsClicked()
     self.updateGUIFromParameterNode()
-
-  def onSelectPointsToEraseToggled(self, toggled):
-    if self._updatingGui == True:
-      return
-    self._updatingGui = True
-    if toggled:
-      self._parameterNode.SetParameter(self.logic.CONTOUR_STATUS, self.logic.CONTOUR_ERASING)
-      self.ui.markPointsButton.setChecked(False)
-    else:
-      self._parameterNode.SetParameter(self.logic.CONTOUR_STATUS, self.logic.CONTOUR_UNSELECTED)
-    self._updatingGui = False
 
   def getViewNode(self, viewName):
     """
@@ -1023,21 +1068,21 @@ class LumpNav2Widget(ScriptedLoadableModuleWidget, VTKObservationMixin):
       self.ui.deleteLastFiducialButton.setEnabled(True)
       self.ui.deleteAllFiducialsButton.setEnabled(True)
       self.ui.deleteLastFiducialNavigationButton.setEnabled(True)
-      if self.ui.selectPointsToEraseButton.isChecked() == False:
-        self.ui.selectPointsToEraseButton.setEnabled(True)
+      self.ui.selectPointsToEraseButton.setEnabled(True)
 
     if numberOfPoints<1:
+
       self.ui.deleteLastFiducialButton.setEnabled(False)
       self.ui.deleteAllFiducialsButton.setEnabled(False)
       self.ui.deleteLastFiducialNavigationButton.setEnabled(False)
-      self.ui.selectPointsToEraseButton.setEnabled(False)
+      self.ui.selectPointsToEraseButton.setChecked(False)
       self.ui.selectPointsToEraseButton.setEnabled(False)
     
-    interactionNode = slicer.app.applicationLogic().GetInteractionNode()
-    if interactionNode.GetInteractionModeAsString() == "Place" and not self.ui.selectPointsToEraseButton.isChecked():
-      self.ui.markPointsButton.setChecked(True)
-    else:
-      self.ui.markPointsButton.setChecked(False)
+    # interactionNode = slicer.app.applicationLogic().GetInteractionNode()
+    # if interactionNode.GetInteractionModeAsString() == "Place" and self.ui.selectPointsToEraseButton.isChecked() == False:
+    #   self.ui.markPointsButton.setChecked(True)
+    # else:
+    #   self.ui.markPointsButton.setChecked(False)
 
   def updateGUIFromMRML(self, caller=None, event=None):
     """
@@ -1184,7 +1229,6 @@ class LumpNav2Logic(ScriptedLoadableModuleLogic, VTKObservationMixin):
   TRACKING_SEQUENCE_BROWSER = "TrackingSequenceBrowser"
   ULTRASOUND_SEQUENCE_BROWSER = "UltrasoundSequenceBrowser"
   TUMOR_MARKUPS_NEEDLE = "TumorMarkups_Needle"
-  ERASE_MARKUPS_NEEDLE = "EraseMarkups_Needle"
   BREACH_WARNING = "LumpNavBreachWarning"
   # Oscilloscope
 
@@ -1194,6 +1238,11 @@ class LumpNav2Logic(ScriptedLoadableModuleLogic, VTKObservationMixin):
   CONTOUR_ADDING = "ContourAdding"
   CONTOUR_ERASING = "ContourErasing"
   CONTOUR_UNSELECTED = "ContourUnselected"
+
+  POINTS_ERASING = "PointsErasing"
+  POINTS_ADDING = "PointsAdding"
+  POINTS_STATUS = "PointsStatus"
+  POINTS_UNSELECTED = "PointsUnselected"
 
   CHA_CHARTNODE = "ChannelAScopePlotChartNode"
   CHA_ARRAYNODE = "ChannelAArrayNode"
@@ -1461,18 +1510,6 @@ class LumpNav2Logic(ScriptedLoadableModuleLogic, VTKObservationMixin):
     needleToReference = parameterNode.GetNodeReference(self.NEEDLE_TO_REFERENCE)
     tumorModel_Needle.SetAndObserveTransformNodeID(needleToReference.GetID())
 
-    # Markups for adding and removing points
-
-    eraseMarkups_Needle = parameterNode.GetNodeReference(self.ERASE_MARKUPS_NEEDLE)
-    if eraseMarkups_Needle is None:
-      eraseMarkups_Needle = slicer.mrmlScene.AddNewNodeByClass("vtkMRMLMarkupsFiducialNode", self.ERASE_MARKUPS_NEEDLE)
-      eraseMarkups_Needle.CreateDefaultDisplayNodes()
-
-    self.addObserver(eraseMarkups_Needle, slicer.vtkMRMLMarkupsNode.PointPositionDefinedEvent, self.onTumorMarkupsNodeModified)
-
-    eraseMarkups_Needle.SetAndObserveTransformNodeID(eraseMarkups_Needle.GetID())
-    parameterNode.SetNodeReferenceID(self.ERASE_MARKUPS_NEEDLE, eraseMarkups_Needle.GetID())
-
     tumorMarkups_Needle = parameterNode.GetNodeReference(self.TUMOR_MARKUPS_NEEDLE)
     if tumorMarkups_Needle is None:
       tumorMarkups_Needle = slicer.mrmlScene.AddNewNodeByClass("vtkMRMLMarkupsFiducialNode", self.TUMOR_MARKUPS_NEEDLE)
@@ -1481,8 +1518,10 @@ class LumpNav2Logic(ScriptedLoadableModuleLogic, VTKObservationMixin):
       tumorMarkups_Needle.LockedOn()
     tumorMarkups_Needle.SetAndObserveTransformNodeID(needleToReference.GetID())
     self.removeObservers(method=self.onTumorMarkupsNodeModified)
-    self.addObserver(tumorMarkups_Needle, slicer.vtkMRMLMarkupsNode.PointPositionDefinedEvent, self.onTumorMarkupsNodeModified)
+    self.addObserver(tumorMarkups_Needle, slicer.vtkMRMLMarkupsNode.PointPositionDefinedEvent, self.modifyPoints)
     self.addObserver(tumorMarkups_Needle, slicer.vtkMRMLMarkupsNode.PointRemovedEvent, self.onTumorMarkupsNodeModified)
+    self.addObserver(tumorMarkups_Needle, slicer.vtkMRMLMarkupsNode.PointPositionDefinedEvent, self.onTumorMarkupsNodeModified)
+
     parameterNode.SetNodeReferenceID(self.TUMOR_MARKUPS_NEEDLE, tumorMarkups_Needle.GetID())
 
     # OpenIGTLink connection
@@ -1983,47 +2022,13 @@ class LumpNav2Logic(ScriptedLoadableModuleLogic, VTKObservationMixin):
     time, ChA, ChB = self.getOscilloscopeChannels()
     ChA_Array = np.array([time, ChA])
     ChA_Array = np.transpose(ChA_Array)
-    #ChB_Array = np.array([time, ChB])
-    #ChB_Array = np.transpose(ChB_Array)
-    #ChA_ChartNode = parameterNode.GetNodeReference(self.CHA_CHARTNODE)
     ChA_ChartNode = slicer.util.plot(ChA_Array, 0)
-    #update param node with new data?
-    #ChB_ChartNode = slicer.util.plot(ChB_Array, 0)
     layoutManager = slicer.app.layoutManager()
     layoutWithPlot = slicer.modules.plots.logic().GetLayoutWithPlot(layoutManager.layout)
     layoutManager.setLayout(layoutWithPlot)
     plotWidget = layoutManager.plotWidget(0)
     plotViewNode = plotWidget.mrmlPlotViewNode()
     plotViewNode.SetPlotChartNodeID(ChA_ChartNode.GetID())
-    #plotWidget = layoutManager.plotWidget(2)
-    #plotViewNode = plotWidget.mrmlPlotViewNode()
-    #plotViewNode.SetPlotChartNodeID(ChB_ChartNode.GetID())
-    '''
-    logging.info('scopeSignalModified')
-    parameterNode = self.getParameterNode()
-    oscilloscopeVolume = parameterNode.GetNodeReference(self.SIGNAL_SIGNAL)
-    oscilloscopeArray = slicer.util.arrayFromVolume(oscilloscopeVolume)
-    time = oscilloscopeArray[0,0]
-    ChA = oscilloscopeArray[0,1]
-    ChA_ArrayData = np.array([time, ChA])
-    #ChA_ArrayData = np.transpose(ChA_ArrayData)
-    ChA_ArrayNode = parameterNode.GetNodeReference(self.CHA_ARRAYNODE)
-    #delete old array data
-    print(np.shape(ChA_ArrayData))
-    ChA_ArrayNode.AddXYValue(ChA_ArrayData)
-    ChA_ChartNode = parameterNode.GetNodeReference(self.CHA_CHARTNODE)
-    ChA_ChartNode.AddArray("Channel A", ChA_ArrayNode.GetID())
-    lns = slicer.mrmlScene.GetNodesByClass('vtkMRMLLayoutNode')
-    lns.InitTraversal()
-    ln = lns.GetNextItemAsObject()
-    ln.SetViewArrangement(24)    
-    cvns = slicer.mrmlScene.GetNodesByClass('vtkMRMLChartViewNode')
-    cvns.InitTraversal()
-    cvn = cvns.GetNextItemAsObject()
-    cvn.SetChartNodeID(ChA_ChartNode.GetID())
-    #update param node with new data?
-    
-    '''
 
   def setStreamGraphButton(toggled):
     loggin.info('setStreamGraphButton')
@@ -2032,10 +2037,6 @@ class LumpNav2Logic(ScriptedLoadableModuleLogic, VTKObservationMixin):
 
     #else:
       #remove observer
-  
-  def onEraserClicked(self, observer, eventid) :
-    logging.debug("onEraserClicked")
-    self.removeFiducialPoint()
 
   def setNormalBrightnessClicked(self):
     logging.info("setNormalBrightnessClicked")
@@ -2083,6 +2084,11 @@ class LumpNav2Logic(ScriptedLoadableModuleLogic, VTKObservationMixin):
     # Surface generation algorithms behave unpredictably when there are not enough points
     # return if there are very few points
     if numberOfPoints<1:
+      sphereSource = vtk.vtkSphereSource()
+      #sphereSource.SetRadius(0.001)
+      tumorModel_Needle = parameterNode.GetNodeReference(self.TUMOR_MODEL)
+      tumorModel_Needle.SetPolyDataConnection(sphereSource.GetOutputPort())
+      tumorModel_Needle.Modified()
       return
     
     points.SetNumberOfPoints(numberOfPoints)
@@ -2141,19 +2147,39 @@ class LumpNav2Logic(ScriptedLoadableModuleLogic, VTKObservationMixin):
     parameterNode = self.getParameterNode()
     tumorModel_Needle = parameterNode.GetNodeReference(self.TUMOR_MODEL)
     tumorModel_Needle.SetAndObservePolyData(normals.GetOutput())
-  
-  def removeFiducialPoint(self):
 
+  def modifyPoints(self, observer, eventID):
     parameterNode = self.getParameterNode()
-    eraseMarkups_Needle = parameterNode.GetNodeReference(self.ERASE_MARKUPS_NEEDLE)
     tumorMarkups_Needle = parameterNode.GetNodeReference(self.TUMOR_MARKUPS_NEEDLE)
-    eraseMarkups_Needle.SetDisplayVisibility(0)
+    if parameterNode.GetParameter(self.POINTS_STATUS) == self.POINTS_ERASING:
+      numberOfPoints = tumorMarkups_Needle.GetNumberOfFiducials()
+      mostRecentPoint = [0.0, 0.0, 0.0]
+      tumorMarkups_Needle.GetNthFiducialPosition(numberOfPoints - 1, mostRecentPoint)
+      closestPoint = self.returnClosestPoint(tumorMarkups_Needle, mostRecentPoint)
+      tumorMarkups_Needle.RemoveMarkup(closestPoint)
+      tumorMarkups_Needle.RemoveMarkup(0)
+      self.createTumorFromMarkups()
+
+  def setRemoveFiducialPoint(self):
+
+    #TODO: Remove function
+    parameterNode = self.getParameterNode()
+    tumorMarkups_Needle = parameterNode.GetNodeReference(self.TUMOR_MARKUPS_NEEDLE)
     if self.eraserFlag == False :
       self.eraserFlag = True
       return
     self.eraserFlag = False
+
+    #place point
+    #locate closest point
+    #erase last placed point and closest point
     numberOfPoints = tumorMarkups_Needle.GetNumberOfFiducials()
     fiducialPosition = [0.0,0.0,0.0]
+    tumorMarkups_Needle.GetNthFiducialPosition(0, fiducialPosition)
+    logging.info("Used eraser to remove point at %s", fiducialPosition)
+    tumorMarkups_Needle.RemoveMarkup(0)
+
+
     if numberOfPoints == 1 :
       #self.deleteLastFiducialButton.setEnabled(False)
       #self.deleteAllFiducialsButton.setEnabled(False)
@@ -2172,7 +2198,7 @@ class LumpNav2Logic(ScriptedLoadableModuleLogic, VTKObservationMixin):
       mostRecentPoint = [0.0,0.0,0.0]
       eraseMarkups_Needle.GetNthFiducialPosition(numberOfErasedPoints-1, mostRecentPoint)
       closestPoint = self.returnClosestPoint(tumorMarkups_Needle, mostRecentPoint)
-      tumorMarkups_Needle = parameterNode.GetNodeReference(TUMOR_MARKUPS_NEEDLE)
+      tumorMarkups_Needle = parameterNode.GetNodeReference(self.TUMOR_MARKUPS_NEEDLE)
       tumorMarkups_Needle.RemoveMarkup(closestPoint)
     tumorMarkups_Needle.Modified()
     self.createTumorFromMarkups() 
