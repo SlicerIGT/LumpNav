@@ -388,6 +388,9 @@ class LumpNav2Widget(ScriptedLoadableModuleWidget, VTKObservationMixin):
     msgBox.setStyleSheet(slicer.util.mainWindow().styleSheet)
     msgBox.setWindowTitle("Confirm exit")
     msgBox.setText("Some data may not have been saved yet. Do you want to exit and discard the current scene?")
+    #TODO: Save scene
+    if self._parameterNode.GetMTime() > self.logic.saveTime.GetMTime()):
+      self.onSaveSceneClicked()
     discardButton = msgBox.addButton("Exit", qt.QMessageBox.DestructiveRole)
     cancelButton = msgBox.addButton("Cancel", qt.QMessageBox.RejectRole)
     msgBox.setModal(True)
@@ -1289,7 +1292,9 @@ class LumpNav2Logic(ScriptedLoadableModuleLogic, VTKObservationMixin):
     self.eraserFlag = True  # Indicates if we are removing points
 
     self.hideDistance = False
-  
+
+    self.saveTime = vtk.vtkTimeStamp()
+
   def resourcePath(self, filename):
     """
     Returns the full path to the given resource file.
