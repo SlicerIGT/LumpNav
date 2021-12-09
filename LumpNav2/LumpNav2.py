@@ -392,7 +392,7 @@ class LumpNav2Widget(ScriptedLoadableModuleWidget, VTKObservationMixin):
     msgBox.setWindowTitle("Confirm exit")
     msgBox.setText("Some data may not have been saved yet. Do you want to exit and discard the current scene?")
     #TODO: Save scene
-    if self._parameterNode.GetMTime() > self.logic.saveTime.GetMTime()):
+    if self._parameterNode.GetMTime() > self.logic.saveTime.GetMTime():
       self.onSaveSceneClicked()
     discardButton = msgBox.addButton("Exit", qt.QMessageBox.DestructiveRole)
     cancelButton = msgBox.addButton("Cancel", qt.QMessageBox.RejectRole)
@@ -1204,7 +1204,7 @@ class LumpNav2Logic(ScriptedLoadableModuleLogic, VTKObservationMixin):
   IMAGE_TO_TRANSD = "ImageToTransd"
   CAUTERYCAMERA_TO_CAUTERY = "CauteryCameraToCautery"
   TRANSD_TO_NEEDLE = "TransdToNeedle"
-  PREDICTION_TO_TRANSD = "PredictionToTransd"
+  PREDICTION_TO_NEEDLE = "PredictionToNeedle"
 
 
   # Ultrasound image
@@ -1845,7 +1845,7 @@ class LumpNav2Logic(ScriptedLoadableModuleLogic, VTKObservationMixin):
 
     transdToReference = self.addLinearTransformToScene(self.TRANSD_TO_REFERENCE, parentTransform=referenceToRas)
     imageToTransd = self.addLinearTransformToScene(self.IMAGE_TO_TRANSD, parentTransform=transdToReference)
-    predictionToTransd = self.addLinearTransformToScene(self.PREDICTION_TO_TRANSD, parentTransform=transdToReference)
+    predictionToNeedle = self.addLinearTransformToScene(self.PREDICTION_TO_NEEDLE)
     self.updateImageToTransdFromDepth(self.DEFAULT_US_DEPTH)
 
     imageImage = parameterNode.GetNodeReference(self.IMAGE_IMAGE)
@@ -1871,7 +1871,7 @@ class LumpNav2Logic(ScriptedLoadableModuleLogic, VTKObservationMixin):
       imageArray = np.zeros((1, 512, 512), dtype="uint8")
       slicer.util.updateVolumeFromArray(predictionImage, imageArray)
       parameterNode.SetNodeReferenceID(self.PREDICTION_VOLUME, predictionImage.GetID())
-    predictionImage.SetAndObserveTransformNodeID(predictionToTransd.GetID())
+    predictionImage.SetAndObserveTransformNodeID(predictionToNeedle.GetID())
 
     # TransdToNeedle to display tumour reconstruction in needle coordinate system
     transdToNeedle = self.addLinearTransformToScene(self.TRANSD_TO_NEEDLE, parentTransform=needleToReference)
@@ -1973,51 +1973,57 @@ class LumpNav2Logic(ScriptedLoadableModuleLogic, VTKObservationMixin):
 
   def onUltrasoundSequenceBrowserClicked(self, toggled):
     self.setUltrasoundSequenceBrowser(toggled)
-    self.setupPredictionProcess(toggled)
     self.setLivePrediction(toggled)
 
-  def setupPredictionProcess(self, toggled):
-    logging.info(f"setupPredictionProcess({toggled})")
+  def setLivePrediction(self, toggled):
+    logging.info(f"setLivePrediction({toggled})")
     parameterNode = self.getParameterNode()
     imageToTransd = parameterNode.GetNodeReference(self.IMAGE_TO_TRANSD)
     transdToNeedle = parameterNode.GetNodeReference(self.TRANSD_TO_NEEDLE)
-    predToTransd = parameterNode.GetNodeReference(self.PREDICTION_TO_TRANSD)
+    predToNeedle = parameterNode.GetNodeReference(self.PREDICTION_TO_NEEDLE)
     needleTipToNeedle = parameterNode.GetNodeReference(self.NEEDLETIP_TO_NEEDLE)
+    reconstructionVolume = parameterNode.GetNodeReference(self.RECONSTRUCTION_VOLUME)
+    predictionNode = self.getParameterNode().GetNodeReference(self.PREDICTION_VOLUME)
 
     if toggled:
       # Rearrange transform hierarchy so that Needle is effectively world
       imageToTransd.SetAndObserveTransformNodeID(transdToNeedle.GetID())
-      predToTransd.SetAndObserveTransformNodeID(transdToNeedle.GetID())
       transdToNeedle.SetAndObserveTransformNodeID(None)
       needleTipToNeedle.SetAndObserveTransformNodeID(None)
+      if reconstructionVolume is not None:
+        reconstructionVolume.SetAndObserveTransformNodeID(None)
 
       # Set nodes for segmentation logic
       self.segmentationLogic.setModelPath(self.resourcePath(self.AI_MODEL_PATH))
       self.segmentationLogic.setInputImage(parameterNode.GetNodeReference(self.IMAGE_IMAGE))
       self.segmentationLogic.setOutputImage(parameterNode.GetNodeReference(self.PREDICTION_VOLUME))
-      self.segmentationLogic.setOutputTransform(predToTransd)
+      self.segmentationLogic.setOutputTransform(predToNeedle)
+
+      # Start prediction
+      self.setRegionOfInterestNode(toggled)
+      self.segmentationLogic.setRealTimePrediction(toggled)
+      self.setVolumeReconstruction(toggled)
+
+      # Display prediction in slice view
+      slicer.util.setSliceViewerLayers(foreground=predictionNode, foregroundOpacity=0.5, fit=True)
 
     else:
-      # move transforms back
+      # Stop prediction
+      self.setVolumeReconstruction(toggled)
+      self.segmentationLogic.setRealTimePrediction(toggled)
+
+      # Move transforms back
       transdToReference = parameterNode.GetNodeReference(self.TRANSD_TO_REFERENCE)
       needleToReference = parameterNode.GetNodeReference(self.NEEDLE_TO_REFERENCE)
       imageToTransd.SetAndObserveTransformNodeID(transdToReference.GetID())
-      predToTransd.SetAndObserveTransformNodeID(transdToReference.GetID())
       transdToNeedle.SetAndObserveTransformNodeID(needleToReference.GetID())
       needleTipToNeedle.SetAndObserveTransformNodeID(needleToReference.GetID())
+      reconstructionVolume.SetAndObserveTransformNodeID(needleToReference.GetID())
+      if reconstructionVolume is not None:
+        reconstructionVolume.SetAndObserveTransformNodeID(needleToReference.GetID())
 
-  def setLivePrediction(self, toggled):
-    logging.info(f"setLivePrediction({toggled})")
-    self.segmentationLogic.setRealTimePrediction(toggled)
-    # Display prediction in slice view
-    predictionNode = self.getParameterNode().GetNodeReference(self.PREDICTION_VOLUME)
-    if predictionNode is not None:
-      if toggled:
-        slicer.util.setSliceViewerLayers(foreground=predictionNode, foregroundOpacity=0.5, fit=True)
-      else:
-        slicer.util.setSliceViewerLayers(foreground=None)
-    self.setRegionOfInterestNode(toggled)
-    self.setVolumeReconstruction(toggled)
+      # Hide segmentation cross-section view
+      slicer.util.setSliceViewerLayers(foreground=None)
 
   def setUltrasoundSequenceBrowser(self, recording):
     parameterNode = self.getParameterNode()
@@ -2076,10 +2082,7 @@ class LumpNav2Logic(ScriptedLoadableModuleLogic, VTKObservationMixin):
       volRenLogic.UpdateDisplayNodeFromVolumeNode(reconstructionDisplayNode, reconstructionVolume)
       reconstructionDisplayNode.SetAndObserveROINodeID(parameterNode.GetNodeReference(self.ROI_NODE).GetID())
       reconstructionDisplayNode.GetVolumePropertyNode().Copy(volRenLogic.GetPresetByName("MR-Default"))
-
       self.reconstructionLogic.StartLiveVolumeReconstruction(reconstructionNode)
-
-      # TODO: set window/level/transfer functions for reconstructed volume
 
     else:
       logging.info("Stopping volume reconstruction")
