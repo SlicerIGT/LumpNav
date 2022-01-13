@@ -263,6 +263,8 @@ class LumpNav2Widget(ScriptedLoadableModuleWidget, VTKObservationMixin):
     self.ui.startStopRecordingButton.connect('toggled(bool)', self.onStartStopRecordingClicked)  
     self.ui.freezeUltrasoundButton.connect('toggled(bool)', self.onFreezeUltrasoundClicked)
     self.pivotSamplingTimer.connect('timeout()', self.onPivotSamplingTimeout)
+    self.logic.lastSliderValue = self.ui.transferFunctionSlider.value
+    self.ui.transferFunctionSlider.connect("valueChanged(int)", self.onTransferSliderValueChanged)
     self.initializeParameterNode() # Make sure parameter node is initialized (needed for module reload)
 
     #navigation
@@ -479,13 +481,19 @@ class LumpNav2Widget(ScriptedLoadableModuleWidget, VTKObservationMixin):
     #self.logic.setFreezeUltrasoundClicked()
 
   def onStartPlusClicked(self, toggled):
-    plusServerNode = self._parameterNode.GetNodeReference(self.logic.PLUS_SERVER_NODE)
-    if plusServerNode:
-      if toggled == True:
-        plusServerNode.StartServer()
+    # plusServerNode = self._parameterNode.GetNodeReference(self.logic.PLUS_SERVER_NODE)
+    # if plusServerNode:
+    #   if toggled == True:
+    #     plusServerNode.StartServer()
+    #   else:
+    #     # self.ui.startPlusButton.text
+    #     plusServerNode.StopServer()
+    plusRemoteNode = self._parameterNode.GetNodeReference(self.logic.PLUS_REMOTE_NODE)
+    if plusRemoteNode:
+      if toggled:
+        plusRemoteNode.Start()
       else:
-        # self.ui.startPlusButton.text
-        plusServerNode.StopServer()
+        plusRemoteNode.Stop()
 
   def onCustomUiClicked(self, checked):
     self.setCustomStyle(checked)
@@ -603,6 +611,14 @@ class LumpNav2Widget(ScriptedLoadableModuleWidget, VTKObservationMixin):
     logging.debug('onDeleteAllFiducialsClicked')
     self.logic.setDeleteAllFiducialsClicked()
     self.updateGUIFromParameterNode()
+
+  def onTransferSliderValueChanged(self, value):
+    reconstructionVolume = self._parameterNode.GetNodeReference(self.logic.RECONSTRUCTION_VOLUME)
+    if reconstructionVolume:
+      sliderMin = self.ui.transferFunctionSlider.minimum
+      sliderMax = self.ui.transferFunctionSlider.maximum
+      self.logic.setTransferFunctionValueChanged(value, sliderMin, sliderMax)
+      self.logic.lastSliderValue = value
 
   def getViewNode(self, viewName):
     """
@@ -1319,6 +1335,8 @@ class LumpNav2Logic(ScriptedLoadableModuleLogic, VTKObservationMixin):
     self.firstOutputReady = False
     self.reconstructionLogic = slicer.modules.volumereconstruction.logic()
     self.reconstructionActive = False
+    self.transferFunctionPoints = None
+    self.lastSliderValue = 50
 
   def resourcePath(self, filename):
     """
@@ -1978,6 +1996,13 @@ class LumpNav2Logic(ScriptedLoadableModuleLogic, VTKObservationMixin):
     if plusServerLauncherNode.GetNodeReferenceID('plusServerRef') != plusServerNode.GetID():
       plusServerLauncherNode.AddAndObserveServerNode(plusServerNode)
 
+    # TODO: may not be the right way to start server?
+    plusRemoteNode = parameterNode.GetNodeReference(self.PLUS_REMOTE_NODE)
+    if not plusRemoteNode:
+      plusRemoteNode = slicer.mrmlScene.AddNewNodeByClass("vtkMRMLIGTLConnectorNode", self.PLUS_REMOTE_NODE)
+      plusRemoteNode.SaveWithSceneOff()
+      parameterNode.SetNodeReferenceID(self.PLUS_REMOTE_NODE, plusRemoteNode.GetID())
+
   def setTrackingSequenceBrowser(self, recording):
     parameterNode = self.getParameterNode()
     sequenceBrowserTracking = parameterNode.GetNodeReference(self.TRACKING_SEQUENCE_BROWSER)
@@ -2109,6 +2134,7 @@ class LumpNav2Logic(ScriptedLoadableModuleLogic, VTKObservationMixin):
     p1 = lower + (upper - lower) * 0.5
     p2 = lower + (upper - lower) * 0.7
     p3 = upper
+    self.transferFunctionPoints = [p0, p1, p2, p3]
 
     opacityTransferFunction = vtk.vtkPiecewiseFunction()
     opacityTransferFunction.AddPoint(p0, 0.0)
@@ -2128,6 +2154,29 @@ class LumpNav2Logic(ScriptedLoadableModuleLogic, VTKObservationMixin):
     volumeProperty.SetScalarOpacity(opacityTransferFunction)
     volumeProperty.ShadeOn()
     volumeProperty.SetInterpolationTypeToLinear()
+
+  def setTransferFunctionValueChanged(self, value, min, max):
+    volumeNode = self.getParameterNode().GetNodeReference(self.RECONSTRUCTION_VOLUME)
+    volRenLogic = slicer.modules.volumerendering.logic()
+    displayNode = volRenLogic.GetFirstVolumeRenderingDisplayNode(volumeNode)
+    volumeProperty = displayNode.GetVolumePropertyNode().GetVolumeProperty()
+    opacityTransferFunction = volumeProperty.GetScalarOpacity()
+
+    # Calculate how far relatively to move transfer function points
+    percentagePositionChange = (value - self.lastSliderValue) / (max - min)
+    transferMin, transferMax = opacityTransferFunction.GetRange()
+    amountTransferChange = -((transferMax - transferMin) * percentagePositionChange)
+
+    # Move inner points by calculated amount
+    numInnerPoints = opacityTransferFunction.GetSize()
+    for i in range(1, numInnerPoints - 1):
+      x = self.transferFunctionPoints[i]
+      y = opacityTransferFunction.GetValue(x)
+      opacityTransferFunction.RemovePoint(x)
+      opacityTransferFunction.AddPoint(x + amountTransferChange, y)
+      self.transferFunctionPoints[i] = x + amountTransferChange
+
+    # TODO: also move inner points in color transfer function?
 
   def setDeleteLastFiducialClicked(self, numberOfPoints):
     deleted_coord = [0.0, 0.0, 0.0]
