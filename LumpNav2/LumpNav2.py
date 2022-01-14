@@ -9,16 +9,31 @@ from slicer.ScriptedLoadableModule import *
 from slicer.util import VTKObservationMixin
 from vtk.util import numpy_support
 
-import matplotlib.pyplot as plt
+try:
+  import matplotlib.pyplot as plt
+except:
+  slicer.util.pip_install('matplotlib')
+  import matplotlib.pyplot as plt
 
-from sklearn import datasets
+try:
+  from sklearn import datasets
+except:
+  slicer.util.pip_install('scikit-learn')
+  from sklearn import datasets
+
 from sklearn import svm
 from sklearn import metrics    			
 from sklearn.model_selection import train_test_split
 from sklearn.metrics import plot_roc_curve
 from sklearn.multiclass import OneVsRestClassifier
 from sklearn.metrics import roc_curve, auc
-from mlxtend.plotting import plot_decision_regions
+
+try:
+  from mlxtend.plotting import plot_decision_regions
+except:
+  slicer.util.pip_install('mlxtend')
+  from mlxtend.plotting import plot_decision_regions
+
 import pickle
 
 #
