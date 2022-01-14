@@ -2256,8 +2256,16 @@ class LumpNav2Logic(ScriptedLoadableModuleLogic, VTKObservationMixin):
 
   def setDisplaySampleGraphButton(self):
     #logging.info('setDisplaySampleGraphButton')
-    #call scopeSignalModified
-    self.scopeSignalModified(None, None)
+    time, ChA, ChB = self.getOscilloscopeChannels()
+    time = np.array(time)
+    ChA = np.transpose(np.array(ChA))
+    ChB = np.transpose(np.array(ChB))
+    plt.plot(time, ChA, time, ChB)
+    plt.title("Coagulate Air")
+    plt.xlabel("time (us)")
+    plt.ylabel("Voltage (V)")
+    plt.savefig("D:\Research\Oscilloscope\Saved Burns\Saved Figures\ChA_Array.png")
+    plt.clf()
 
   def getOscilloscopeChannels(self):
     #logging.info("getOscilloscopeChannels")
@@ -2553,7 +2561,7 @@ class LumpNav2Logic(ScriptedLoadableModuleLogic, VTKObservationMixin):
     collectOffSeqBr.SelectFirstItem()
     channelACollectOff = np.empty([n,3900])
     channelBCollectOff = np.empty([n,3900])
-    featureCollectOff = np.empty([n,2])
+    featureCollectOff = np.empty([n,6])
     Y_CollectOff = np.full((n,1), 0)
     for i in range(n):
       oscilloscopeArray = slicer.util.arrayFromVolume(signal_Signal)
@@ -2561,10 +2569,20 @@ class LumpNav2Logic(ScriptedLoadableModuleLogic, VTKObservationMixin):
       ChB = oscilloscopeArray[0,2]
       channelACollectOff[i] = ChA
       channelBCollectOff[i] = ChB
-      featureCollectOff[i][0] = self.lmrMean(ChA, ChB)
-      featureCollectOff[i][1] = self.mMean(ChA, ChB)
+      #TODO: take this outside the for loop
+      featureCollectOff[i][0] = self.lmrSum(ChA, ChB)
+      featureCollectOff[i][1] = self.maximum(ChB)
+      featureCollectOff[i][2] = self.absSum(ChA)
+      featureCollectOff[i][3] = self.absSum(ChB)
+      featureCollectOff[i][4] = self.absSum(ChA)
+      featureCollectOff[i][5] = self.absSum(ChB)
       item = collectOffSeqBr.SelectNextItem()
       signal_Signal = parameterNode.GetNodeReference(self.SIGNAL_SIGNAL)
+    np.save("D:/Research/Oscilloscope/featureCollectOff.npy", featureCollectOff)
+    np.save("D:/Research/Oscilloscope/channelACollectOff.npy", channelACollectOff)
+    np.save("D:/Research/Oscilloscope/channelBCollectOff.npy", channelBCollectOff)
+
+
 
     collectCutAirSeqBr = parameterNode.GetNodeReference(self.COLLECT_CUT_AIR_SEQUENCE_BROWSER)
     signal_Signal = parameterNode.GetNodeReference(self.SIGNAL_SIGNAL)
@@ -2572,7 +2590,7 @@ class LumpNav2Logic(ScriptedLoadableModuleLogic, VTKObservationMixin):
     collectCutAirSeqBr.SelectFirstItem()
     channelACollectCutAir = np.empty([n,3900])
     channelBCollectCutAir = np.empty([n,3900])
-    featureCollectCutAir = np.empty([n,2])
+    featureCollectCutAir = np.empty([n,6])
     Y_CollectCutAir = np.full((n,1), 1)
     for i in range(n):
       oscilloscopeArray = slicer.util.arrayFromVolume(signal_Signal)
@@ -2580,10 +2598,17 @@ class LumpNav2Logic(ScriptedLoadableModuleLogic, VTKObservationMixin):
       ChB = oscilloscopeArray[0,2]
       channelACollectCutAir[i] = ChA
       channelBCollectCutAir[i] = ChB
-      featureCollectCutAir[i][0] = self.lmrMean(ChA, ChB)
-      featureCollectCutAir[i][1] = self.mMean(ChA, ChB)
+      featureCollectCutAir[i][0] = self.lmrSum(ChA, ChB)
+      featureCollectCutAir[i][1] = self.maximum(ChB)
+      featureCollectCutAir[i][2] = self.absSum(ChA)
+      featureCollectCutAir[i][3] = self.absSum(ChB)
+      featureCollectCutAir[i][4] = self.lmrSum(ChA, ChB)
+      featureCollectCutAir[i][5] = self.maximum(ChB)
       collectCutAirSeqBr.SelectNextItem()
       signal_Signal = parameterNode.GetNodeReference(self.SIGNAL_SIGNAL)
+    np.save("D:/Research/Oscilloscope/featureCollectCutAir.npy", featureCollectCutAir)
+    np.save("D:/Research/Oscilloscope/channelACollectCutAir.npy", channelACollectCutAir)
+    np.save("D:/Research/Oscilloscope/channelBCollectCutAir.npy", channelBCollectCutAir)
 
     collectCutTissueSeqBr = parameterNode.GetNodeReference(self.COLLECT_CUT_TISSUE_SEQUENCE_BROWSER)
     signal_Signal = parameterNode.GetNodeReference(self.SIGNAL_SIGNAL)
@@ -2591,7 +2616,7 @@ class LumpNav2Logic(ScriptedLoadableModuleLogic, VTKObservationMixin):
     collectCutTissueSeqBr.SelectFirstItem()
     channelACollectCutTissue = np.empty([n,3900])
     channelBCollectCutTissue = np.empty([n,3900])
-    featureCollectCutTissue = np.empty([n,2])
+    featureCollectCutTissue = np.empty([n,6])
     Y_CollectCutTissue = np.full((n,1), 2)
     for i in range(n):
       oscilloscopeArray = slicer.util.arrayFromVolume(signal_Signal)
@@ -2599,10 +2624,18 @@ class LumpNav2Logic(ScriptedLoadableModuleLogic, VTKObservationMixin):
       ChB = oscilloscopeArray[0,2]
       channelACollectCutTissue[i] = ChA
       channelBCollectCutTissue[i] = ChB
-      featureCollectCutTissue[i][0] = self.lmrMean(ChA, ChB)
-      featureCollectCutTissue[i][1] = self.mMean(ChA, ChB)
+      featureCollectCutTissue[i][0] = self.lmrSum(ChA, ChB)
+      featureCollectCutTissue[i][1] = self.maximum(ChB)
+      featureCollectCutTissue[i][2] = self.absSum(ChA)
+      featureCollectCutTissue[i][3] = self.absSum(ChB)
+      featureCollectCutTissue[i][4] = self.maximum(ChB)
+      featureCollectCutTissue[i][5] = self.maximum(ChB)
       collectCutTissueSeqBr.SelectNextItem()
       signal_Signal = parameterNode.GetNodeReference(self.SIGNAL_SIGNAL)
+
+    np.save("D:/Research/Oscilloscope/featureCollectCutTissue.npy", featureCollectCutTissue)
+    np.save("D:/Research/Oscilloscope/channelACollectCutTissue.npy", channelACollectCutTissue)
+    np.save("D:/Research/Oscilloscope/channelBCollectCutTissue.npy", channelBCollectCutTissue)
 
     collectCoagAirSeqBr = parameterNode.GetNodeReference(self.COLLECT_COAG_AIR_SEQUENCE_BROWSER)
     signal_Signal = parameterNode.GetNodeReference(self.SIGNAL_SIGNAL)
@@ -2610,7 +2643,7 @@ class LumpNav2Logic(ScriptedLoadableModuleLogic, VTKObservationMixin):
     collectCoagAirSeqBr.SelectFirstItem()
     channelACollectCoagAir = np.empty([n,3900])
     channelBCollectCoagAir = np.empty([n,3900])
-    featureCollectCoagAir = np.empty([n,2])
+    featureCollectCoagAir = np.empty([n,6])
     Y_CollectCoagAir = np.full((n,1), 3)
     for i in range(n):
       oscilloscopeArray = slicer.util.arrayFromVolume(signal_Signal)
@@ -2618,10 +2651,18 @@ class LumpNav2Logic(ScriptedLoadableModuleLogic, VTKObservationMixin):
       ChB = oscilloscopeArray[0,2]
       channelACollectCoagAir[i] = ChA
       channelBCollectCoagAir[i] = ChB
-      featureCollectCoagAir[i][0] = self.lmrMean(ChA, ChB)
-      featureCollectCoagAir[i][1] = self.mMean(ChA, ChB)
+      featureCollectCoagAir[i][0] = self.lmrSum(ChA, ChB)
+      featureCollectCoagAir[i][1] = self.maximum(ChB)
+      featureCollectCoagAir[i][2] = self.absSum(ChA)
+      featureCollectCoagAir[i][3] = self.absSum(ChB)
+      featureCollectCoagAir[i][4] = self.lmrSum(ChA, ChB)
+      featureCollectCoagAir[i][5] = self.maximum(ChB)
       collectCoagAirSeqBr.SelectNextItem()
       signal_Signal = parameterNode.GetNodeReference(self.SIGNAL_SIGNAL)
+
+    np.save("D:/Research/Oscilloscope/featureCollectCoagAir.npy", featureCollectCoagAir)
+    np.save("D:/Research/Oscilloscope/channelACollectCoagAir.npy", channelACollectCoagAir)
+    np.save("D:/Research/Oscilloscope/channelBCollectCoagAir.npy", channelBCollectCoagAir)
 
     collectCoagTissueSeqBr = parameterNode.GetNodeReference(self.COLLECT_COAG_TISSUE_SEQUENCE_BROWSER)
     signal_Signal = parameterNode.GetNodeReference(self.SIGNAL_SIGNAL)
@@ -2629,7 +2670,7 @@ class LumpNav2Logic(ScriptedLoadableModuleLogic, VTKObservationMixin):
     collectCoagTissueSeqBr.SelectFirstItem()
     channelACollectCoagTissue = np.empty([n,3900])
     channelBCollectCoagTissue = np.empty([n,3900])
-    featureCollectCoagTissue = np.empty([n,2])
+    featureCollectCoagTissue = np.empty([n,6])
     Y_CollectCoagTissue = np.full((n,1), 4)
     for i in range(n):
       oscilloscopeArray = slicer.util.arrayFromVolume(signal_Signal)
@@ -2637,76 +2678,94 @@ class LumpNav2Logic(ScriptedLoadableModuleLogic, VTKObservationMixin):
       ChB = oscilloscopeArray[0,2]
       channelACollectCoagTissue[i] = ChA
       channelBCollectCoagTissue[i] = ChB
-      featureCollectCoagTissue[i][0] = self.lmrMean(ChA, ChB)
-      featureCollectCoagTissue[i][1] = self.mMean(ChA, ChB)
+      featureCollectCoagTissue[i][0] = self.lmrSum(ChA, ChB)
+      featureCollectCoagTissue[i][1] = self.maximum(ChB)
+      featureCollectCoagTissue[i][2] = self.absSum(ChA)
+      featureCollectCoagTissue[i][3] = self.absSum(ChB)
+      featureCollectCoagTissue[i][4] = self.lmrSum(ChA, ChB)
+      featureCollectCoagTissue[i][5] = self.maximum(ChB)
       collectCoagTissueSeqBr.SelectNextItem()
       signal_Signal = parameterNode.GetNodeReference(self.SIGNAL_SIGNAL)
+    np.save("D:/Research/Oscilloscope/featureCollectCoagTissue.npy", featureCollectCoagTissue)
+    np.save("D:/Research/Oscilloscope/channelACollectCoagTissue.npy", channelACollectCoagTissue)
+    np.save("D:/Research/Oscilloscope/channelBCollectCoagTissue.npy", channelBCollectCoagTissue)
 
     #append arrays, build X and Y\
-    features = np.append(featureCollectOff, featureCollectCutAir, axis = 0)
-    features = np.append(features, featureCollectCutTissue, axis = 0)
-    features = np.append(features, featureCollectCoagAir, axis = 0)
-    features = np.append(features, featureCollectCoagTissue, axis = 0)
+    features = np.append(featureCollectOff[:,:2], featureCollectCutAir[:,:2], axis = 0)
+    features = np.append(features, featureCollectCutTissue[:,:2], axis = 0)
+    features = np.append(features, featureCollectCoagAir[:,:2], axis = 0)
+    features = np.append(features, featureCollectCoagTissue[:,:2], axis = 0)
     Y = np.append(Y_CollectOff, Y_CollectCutAir)
     Y = np.append(Y, Y_CollectCutTissue)
     Y = np.append(Y, Y_CollectCoagAir)
     Y = np.append(Y, Y_CollectCoagTissue)
 
+    np.save("D:/Research/Oscilloscope/Y_collections.npy", Y)
+
+    print("collect off")
+    print(featureCollectOff)
+    print("coag air")
+    print(featureCollectCoagAir)
+    print("coag tissue")
+    print(featureCollectCoagTissue)
     self.buildScopeModel(features, Y)
 
   def buildScopeModel(self, features, Y):
-
+    logging.info("buildScopeModel")
     X_training, X_test, Y_train, Y_test = train_test_split(features, Y, test_size=0.2)
 
-    C = 1.0
-    svc = svm.SVC(kernel = 'linear', C=3.0, decision_function_shape='ovo').fit(X_training, Y_train)
-    lin = svm.LinearSVC().fit(X_training, Y_train)
-    rbf = svm.SVC(kernel = 'rbf', gamma = 0.9, C=1.0).fit(X_training, Y_train)
-    poly = svm.SVC(kernel = 'poly', degree = 3, C = 1.0).fit(X_training, Y_train)
+    svc = svm.LinearSVC().fit(X_training, Y_train)#svm.SVC(kernel = 'poly').fit(X_training, Y_train) #kernel = 'linear', C=1.0
+    #lin = 
+    #rbf = svm.SVC(kernel = 'rbf', gamma = 0.9, C=1.0).fit(X_training, Y_train)
+    #poly = svm.SVC(kernel = 'poly', degree = 3, C = 1.0).fit(X_training, Y_train)
 
     filename_svc = "D:\Research\Oscilloscope\cauteryModelSVM_svc.sav"
-    filename_lin = "D:\Research\Oscilloscope\cauteryModelSVM_lin.sav"
-    filename_rbf = "D:\Research\Oscilloscope\cauteryModelSVM_rbf.sav"
-    filename_poly = "D:\Research\Oscilloscope\cauteryModelSVM_poly.sav"
+    #filename_lin = "D:\Research\Oscilloscope\cauteryModelSVM_lin.sav"
+    #filename_rbf = "D:\Research\Oscilloscope\cauteryModelSVM_rbf.sav"
+    #filename_poly = "D:\Research\Oscilloscope\cauteryModelSVM_poly.sav"
+    
     pickle.dump(svc, open(filename_svc, "wb"))
-    pickle.dump(lin, open(filename_lin, "wb"))
-    pickle.dump(rbf, open(filename_rbf, "wb"))
-    pickle.dump(poly, open(filename_poly, "wb"))
+    #pickle.dump(lin, open(filename_lin, "wb"))
+    #pickle.dump(rbf, open(filename_rbf, "wb"))
+    #pickle.dump(poly, open(filename_poly, "wb"))
+    
     loaded_module_svc = pickle.load(open(filename_svc, "rb"))
-    loaded_module_lin = pickle.load(open(filename_lin, "rb"))
-    loaded_module_rbf = pickle.load(open(filename_rbf, "rb"))
-    loaded_module_poly = pickle.load(open(filename_poly, "rb"))
+    #loaded_module_lin = pickle.load(open(filename_lin, "rb"))
+    #loaded_module_rbf = pickle.load(open(filename_rbf, "rb"))
+    #loaded_module_poly = pickle.load(open(filename_poly, "rb"))
+    
     result = loaded_module_svc.score(X_test, Y_test)
     predict = loaded_module_svc.predict(X_test)
     print("----SVC------")
     print("Prediction", predict)
     print("Y test", Y_test)
     print("result", result)
-    print("-----LIN------")
-    result = loaded_module_lin.score(X_test, Y_test)
-    predict = loaded_module_lin.predict(X_test)
-    print("Prediction", predict)
-    print("Y test", Y_test)
-    print("result", result)
-    print("-----RBF------")
-    result = loaded_module_rbf.score(X_test, Y_test)
-    predict = loaded_module_rbf.predict(X_test)
-    print("Prediction", predict)
-    print("Y test", Y_test)
-    print("result", result)
-    np.save("D:/Research/Oscilloscope/features.npy", features)
-    np.save("D:/Research/Oscilloscope/Y.npy", Y)
-    print("-----POLY------")
-    result_poly = loaded_module_poly.score(X_test, Y_test)
-    predict_poly = loaded_module_poly.predict(X_test)
-    print("Prediction", predict_poly)
-    print("Y test", Y_test)
-    print("result", result_poly)
 
+    #print("-----LIN------")
+    # result = loaded_module_lin.score(X_test, Y_test)
+    # predict = loaded_module_lin.predict(X_test)
+    # print("Prediction", predict)
+    # print("Y test", Y_test)
+    # print("result", result)
+    # print("-----RBF------")
+    # result = loaded_module_rbf.score(X_test, Y_test)
+    # predict = loaded_module_rbf.predict(X_test)
+    # print("Prediction", predict)
+    # print("Y test", Y_test)
+    # print("result", result)
+    # np.save("D:/Research/Oscilloscope/features.npy", features)
+    # np.save("D:/Research/Oscilloscope/Y.npy", Y)
+    # print("-----POLY------")
+    # result_poly = loaded_module_poly.score(X_test, Y_test)
+    # predict_poly = loaded_module_poly.predict(X_test)
+    # print("Prediction", predict_poly)
+    # print("Y test", Y_test)
+    # print("result", result_poly)
+    
     # h = 0.02  # step size in the mesh
-
+    #
     # # create a mesh to plot in
-
+    #
     # X_train_min, X_train_max = X_training[:,0].min() - 1, X_training[:,0].max() + 1
     # Y_train_min, Y_train_max = X_training[:,1].min() - 1, X_training[:,1].max() + 1
     # X_train, yy = np.meshgrid(np.float32(np.arange(X_train_min, X_train_max, h)), np.float32(np.arange(Y_train_min, Y_train_max, h)))
@@ -2715,20 +2774,21 @@ class LumpNav2Logic(ScriptedLoadableModuleLogic, VTKObservationMixin):
     #     'LinearSVC (linear kernel)',
     #       'SVC with RBF kernel',
     #       'SVC with polynomial (degree 3) kernel']
-
+    #
     # for i, clf in enumerate((svc, lin_svc, rbf_svc, poly_svc)):
     #   # Plot the decision boundarY_train. For that, we will assign a color to each
     #   # point in the mesh [X_train_min, X_train_max]X_train[Y_train_min, Y_train_max].
 
+    #
     #   plt.subplot(2, 2, i + 1)
     #   plt.subplots_adjust(wspace=0.4, hspace=0.4)
-
+    #
     #   Z = clf.predict(np.c_[X_train.ravel(), yy.ravel()])
-
+    #
     #   # Put the result into a color plot
     #   Z = Z.reshape(X_train.shape)
     #   plt.contourf(X_train, yy, Z, cmap=plt.cm.coolwarm, alpha=0.8)
-
+    #
     #   # Plot also the training points
     #   plt.scatter(X_training[:,0], X_training[:,1], c = Y_train, cmap=plt.cm.coolwarm)
     #   plt.xlabel('lmr')
@@ -2856,8 +2916,8 @@ class LumpNav2Logic(ScriptedLoadableModuleLogic, VTKObservationMixin):
     return absStdev
 
   def lmrSum(self, channelA, channelB):
-    lmrSum = self.absSum(channelA) - absSum(channelB)
-    return lmrSum
+      lmrSum = (self.absSum(channelB) - self.absSum(channelA))
+      return lmrSum
 
   def lmrMean(self, channelA, channelB):
     lmrMean = (self.absMean(channelA - channelB)) * 10000
