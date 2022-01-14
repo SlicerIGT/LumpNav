@@ -6,7 +6,7 @@
    <rect>
     <x>0</x>
     <y>0</y>
-    <width>602</width>
+    <width>597</width>
     <height>890</height>
    </rect>
   </property>
@@ -96,6 +96,9 @@
      </property>
      <property name="checked">
       <bool>false</bool>
+     </property>
+     <property name="collapsed">
+      <bool>true</bool>
      </property>
      <layout class="QVBoxLayout" name="verticalLayout_3">
       <item>
@@ -196,6 +199,27 @@
           </property>
           <property name="checkable">
            <bool>true</bool>
+          </property>
+         </widget>
+        </item>
+       </layout>
+      </item>
+      <item>
+       <layout class="QHBoxLayout" name="horizontalLayout_14">
+        <item>
+         <widget class="QLabel" name="transferShiftLabel">
+          <property name="text">
+           <string>Shift:</string>
+          </property>
+         </widget>
+        </item>
+        <item>
+         <widget class="QSlider" name="transferFunctionSlider">
+          <property name="sliderPosition">
+           <number>25</number>
+          </property>
+          <property name="orientation">
+           <enum>Qt::Horizontal</enum>
           </property>
          </widget>
         </item>
@@ -437,6 +461,19 @@
         </property>
         <property name="checked">
          <bool>true</bool>
+        </property>
+       </widget>
+      </item>
+      <item>
+       <widget class="QPushButton" name="warningSoundButton">
+        <property name="text">
+         <string>Disable warning sound</string>
+        </property>
+        <property name="checkable">
+         <bool>true</bool>
+        </property>
+        <property name="checked">
+         <bool>false</bool>
         </property>
        </widget>
       </item>

@@ -154,7 +154,6 @@ class LumpNav2Widget(ScriptedLoadableModuleWidget, VTKObservationMixin):
   NEEDLE_CALIBRATION_THRESHOLD_SETTING = "LumpNav2/NeedleCalibrationTresholdMm"
   NEEDLE_CALIBRATION_THRESHOLD_DEFAULT = 1.0
 
-
   def __init__(self, parent=None):
     """
     Called when the user opens the module the first time and the widget is initialized.
@@ -244,6 +243,10 @@ class LumpNav2Widget(ScriptedLoadableModuleWidget, VTKObservationMixin):
     cauteryVisible = slicer.util.settingsValue(self.logic.CAUTERY_VISIBILITY_SETTING, True, converter=slicer.util.toBool)
     self.ui.cauteryVisibilityButton.checked = cauteryVisible
     self.ui.cauteryVisibilityButton.connect('toggled(bool)', self.onCauteryVisibilityToggled)
+    warningSoundEnabled = slicer.util.settingsValue(self.logic.WARNING_SOUND_SETTING, True, converter=slicer.util.toBool)
+    self.ui.warningSoundButton.checked = warningSoundEnabled
+    self.ui.warningSoundButton.connect('toggled(bool)', self.onWarningSoundToggled)
+
     self.ui.displayDistanceButton.connect('toggled(bool)', self.onDisplayDistanceClicked)
     self.ui.exitButton.connect('clicked()', self.onExitButtonClicked)
     self.ui.saveSceneButton.connect('clicked()', self.onSaveSceneClicked)
@@ -260,6 +263,8 @@ class LumpNav2Widget(ScriptedLoadableModuleWidget, VTKObservationMixin):
     self.ui.startStopRecordingButton.connect('toggled(bool)', self.onStartStopRecordingClicked)  
     self.ui.freezeUltrasoundButton.connect('toggled(bool)', self.onFreezeUltrasoundClicked)
     self.pivotSamplingTimer.connect('timeout()', self.onPivotSamplingTimeout)
+    self.logic.lastSliderValue = self.ui.transferFunctionSlider.value
+    self.ui.transferFunctionSlider.connect("valueChanged(int)", self.onTransferSliderValueChanged)
     self.initializeParameterNode() # Make sure parameter node is initialized (needed for module reload)
 
     #navigation
@@ -419,6 +424,10 @@ class LumpNav2Widget(ScriptedLoadableModuleWidget, VTKObservationMixin):
 
     self.updateGUIFromMRML()
 
+  def onWarningSoundToggled(self, toggled):
+    logging.info("onWarningSoundToggled({})".format(toggled))
+    self.logic.setWarningSound(toggled)
+
   def getCauteryVisibility(self):
     return slicer.util.settingsValue(self.logic.CAUTERY_VISIBILITY_SETTING, False, converter=slicer.util.toBool)
 
@@ -455,10 +464,10 @@ class LumpNav2Widget(ScriptedLoadableModuleWidget, VTKObservationMixin):
   def onStartStopRecordingClicked(self, toggled):
     if toggled:
       self.ui.startStopRecordingButton.text = "Stop Ultrasound Recording"
-      self.logic.setUltrasoundSequenceBrowser(toggled)
+      self.logic.onUltrasoundSequenceBrowserClicked(toggled)
     else:
       self.ui.startStopRecordingButton.text = "Start Ultrasound Recording"
-      self.logic.setUltrasoundSequenceBrowser(toggled)
+      self.logic.onUltrasoundSequenceBrowserClicked(toggled)
 
   def onFreezeUltrasoundClicked(self, toggled):
     logging.info("onFreezeUltrasoundClicked")
@@ -472,13 +481,19 @@ class LumpNav2Widget(ScriptedLoadableModuleWidget, VTKObservationMixin):
     #self.logic.setFreezeUltrasoundClicked()
 
   def onStartPlusClicked(self, toggled):
-    plusServerNode = self._parameterNode.GetNodeReference(self.logic.PLUS_SERVER_NODE)
-    if plusServerNode:
-      if toggled == True:
-        plusServerNode.StartServer()
+    # plusServerNode = self._parameterNode.GetNodeReference(self.logic.PLUS_SERVER_NODE)
+    # if plusServerNode:
+    #   if toggled == True:
+    #     plusServerNode.StartServer()
+    #   else:
+    #     # self.ui.startPlusButton.text
+    #     plusServerNode.StopServer()
+    plusRemoteNode = self._parameterNode.GetNodeReference(self.logic.PLUS_REMOTE_NODE)
+    if plusRemoteNode:
+      if toggled:
+        plusRemoteNode.Start()
       else:
-        # self.ui.startPlusButton.text
-        plusServerNode.StopServer()
+        plusRemoteNode.Stop()
 
   def onCustomUiClicked(self, checked):
     self.setCustomStyle(checked)
@@ -486,6 +501,10 @@ class LumpNav2Widget(ScriptedLoadableModuleWidget, VTKObservationMixin):
   def onTrackingSequenceBrowser(self, toggled):
     logging.info("onTrackingSequenceBrowserToggled({})".format(toggled))
     self.logic.setTrackingSequenceBrowser(toggled)
+
+  def onUltrasoundSequenceBrowser(self, toggled):
+    logging.info("onUltrasoundSequenceBrowserToggled({})".format(toggled))
+    self.logic.onUltrasoundSequenceBrowserClicked(toggled)
 
   def onNormalBrightnessClicked(self):
     logging.info("onNormalBrightnessClicked")
@@ -592,6 +611,14 @@ class LumpNav2Widget(ScriptedLoadableModuleWidget, VTKObservationMixin):
     logging.debug('onDeleteAllFiducialsClicked')
     self.logic.setDeleteAllFiducialsClicked()
     self.updateGUIFromParameterNode()
+
+  def onTransferSliderValueChanged(self, value):
+    reconstructionVolume = self._parameterNode.GetNodeReference(self.logic.RECONSTRUCTION_VOLUME)
+    if reconstructionVolume:
+      sliderMin = self.ui.transferFunctionSlider.minimum
+      sliderMax = self.ui.transferFunctionSlider.maximum
+      self.logic.setTransferFunctionValueChanged(value, sliderMin, sliderMax)
+      self.logic.lastSliderValue = value
 
   def getViewNode(self, viewName):
     """
@@ -994,7 +1021,6 @@ class LumpNav2Widget(ScriptedLoadableModuleWidget, VTKObservationMixin):
       if firstVolumeNode:
         self._parameterNode.SetNodeReferenceID("InputVolume", firstVolumeNode.GetID())
 
-
   def setParameterNode(self, inputParameterNode):
     """
     Set and observe parameter node.
@@ -1193,6 +1219,8 @@ class LumpNav2Logic(ScriptedLoadableModuleLogic, VTKObservationMixin):
   TRANSD_TO_REFERENCE = "TransdToReference"
   IMAGE_TO_TRANSD = "ImageToTransd"
   CAUTERYCAMERA_TO_CAUTERY = "CauteryCameraToCautery"
+  TRANSD_TO_NEEDLE = "TransdToNeedle"
+  PREDICTION_TO_NEEDLE = "PredictionToNeedle"
 
 
   # Ultrasound image
@@ -1218,6 +1246,14 @@ class LumpNav2Logic(ScriptedLoadableModuleLogic, VTKObservationMixin):
   CAUTERY_MODEL_FILENAME = "CauteryModel.stl"
   TUMOR_MODEL = "TumorModel"
   STICK_MODEL = "StickModel"
+  WARNING_SOUND_SETTING = "LumpNav2/WarningSoundEnabled"
+
+  # Model reconstruction
+  ROI_NODE = "ROI"
+  AI_MODEL_PATH = "BreastSeg_2021-01-05_model_0.h5"
+  PREDICTION_VOLUME = "Prediction"
+  RECONSTRUCTION_NODE = "ReconstructionNode"
+  RECONSTRUCTION_VOLUME = "ReconstructionVolume"
 
   # Layout codes
 
@@ -1295,6 +1331,13 @@ class LumpNav2Logic(ScriptedLoadableModuleLogic, VTKObservationMixin):
 
     self.saveTime = vtk.vtkTimeStamp()
 
+    self.segmentationLogic = slicer.modules.segmentationunet.widgetRepresentation().self().logic
+    self.firstOutputReady = False
+    self.reconstructionLogic = slicer.modules.volumereconstruction.logic()
+    self.reconstructionActive = False
+    self.transferFunctionPoints = None
+    self.lastSliderValue = 50
+
   def resourcePath(self, filename):
     """
     Returns the full path to the given resource file.
@@ -1317,52 +1360,52 @@ class LumpNav2Logic(ScriptedLoadableModuleLogic, VTKObservationMixin):
     parameterNode.SetAttribute("TipToSurfaceDistanceTextScale", "3")
 
   def addCustomLayouts(self):
-    layout2D3D =\
-    """
-    <layout type="horizontal" split="true">
-      <item splitSize="500">
-        <view class="vtkMRMLViewNode" singletontag="1">
-          <property name="viewlabel" action="default">1</property>
-        </view>
-      </item>
-      <item splitSize="500">
-        <view class="vtkMRMLSliceNode" singletontag="Red">
-          <property name="orientation" action="default">Axial</property>
-          <property name="viewlabel" action="default">R</property>
-          <property name="viewcolor" action="default">#F34A33</property>
-        </view>
-      </item>
-    </layout>
-    """
+    layout2D3D = \
+      """
+      <layout type="horizontal" split="true">
+        <item splitSize="500">
+          <view class="vtkMRMLViewNode" singletontag="1">
+            <property name="viewlabel" action="default">1</property>
+          </view>
+        </item>
+        <item splitSize="500">
+          <view class="vtkMRMLSliceNode" singletontag="Red">
+            <property name="orientation" action="default">Axial</property>
+            <property name="viewlabel" action="default">R</property>
+            <property name="viewcolor" action="default">#F34A33</property>
+          </view>
+        </item>
+      </layout>
+      """
 
     layoutManager = slicer.app.layoutManager()
     if not layoutManager.layoutLogic().GetLayoutNode().SetLayoutDescription(self.LAYOUT_2D3D, layout2D3D):
       layoutManager.layoutLogic().GetLayoutNode().AddLayoutDescription(self.LAYOUT_2D3D, layout2D3D)
 
-    layoutTriple3D =\
-    """
-    <layout type="vertical" split="true">
-      <item splitSize="500">
-        <layout type="horizontal">
-          <item splitSize="500">
-            <view class="vtkMRMLViewNode" singletontag="1">
-              <property name="viewLabel" action="default">1</property>
-            </view>
-          </item>
-          <item splitSize="500">
-            <view class="vtkMRMLViewNode" singletontag="2" type="secondary">
-              <property name="viewLabel" action="default">2</property>
-            </view>
-          </item>
-        </layout>  
-      </item>
-      <item splitSize="500">
-        <view class="vtkMRMLViewNode" singletontag="3" type="tertiary">
-          <property name="viewLabel" action="default">3</property>
-        </view>
-      </item>
-    </layout>
-    """
+    layoutTriple3D = \
+      """
+      <layout type="vertical" split="true">
+        <item splitSize="500">
+          <layout type="horizontal">
+            <item splitSize="500">
+              <view class="vtkMRMLViewNode" singletontag="1">
+                <property name="viewLabel" action="default">1</property>
+              </view>
+            </item>
+            <item splitSize="500">
+              <view class="vtkMRMLViewNode" singletontag="2" type="secondary">
+                <property name="viewLabel" action="default">2</property>
+              </view>
+            </item>
+          </layout>  
+        </item>
+        <item splitSize="500">
+          <view class="vtkMRMLViewNode" singletontag="3" type="tertiary">
+            <property name="viewLabel" action="default">3</property>
+          </view>
+        </item>
+      </layout>
+      """
 
     layoutManager = slicer.app.layoutManager()
     if not layoutManager.layoutLogic().GetLayoutNode().SetLayoutDescription(self.LAYOUT_TRIPLE3D, layoutTriple3D):
@@ -1400,6 +1443,13 @@ class LumpNav2Logic(ScriptedLoadableModuleLogic, VTKObservationMixin):
       needleModel.SetDisplayVisibility(visible)
       settings = qt.QSettings()
       settings.setValue(self.NEEDLE_VISIBILITY_SETTING, "True" if visible else "False")
+
+  def setWarningSound(self, enabled):
+    breachWarningNode = self.getParameterNode().GetNodeReference(self.BREACH_WARNING)
+    if breachWarningNode is not None:
+      breachWarningNode.SetPlayWarningSound(enabled)
+      settings = qt.QSettings()
+      settings.setValue(self.WARNING_SOUND_SETTING, enabled)
 
   def setCauteryVisibilty(self, visible):
     """
@@ -1491,7 +1541,7 @@ class LumpNav2Logic(ScriptedLoadableModuleLogic, VTKObservationMixin):
       stickModel.SetName(self.STICK_MODEL)
       stickModel.GetDisplayNode().VisibilityOff() #defaul is only cautery model, turn stick model off visibility
       parameterNode.SetNodeReferenceID(self.STICK_MODEL, stickModel.GetID())
-    
+
     stickTipToStick = parameterNode.GetNodeReference(self.CAUTERYTIP_TO_CAUTERY)
     stickModel.SetAndObserveTransformNodeID(stickTipToStick.GetID())
 
@@ -1536,6 +1586,7 @@ class LumpNav2Logic(ScriptedLoadableModuleLogic, VTKObservationMixin):
     sequenceLogic = slicer.modules.sequences.logic()
 
     sequenceBrowserTracking = parameterNode.GetNodeReference(self.TRACKING_SEQUENCE_BROWSER)
+
     if sequenceBrowserTracking is None:
       sequenceBrowserTracking = slicer.mrmlScene.AddNewNodeByClass("vtkMRMLSequenceBrowserNode", self.TRACKING_SEQUENCE_BROWSER)
       parameterNode.SetNodeReferenceID(self.TRACKING_SEQUENCE_BROWSER, sequenceBrowserTracking.GetID())
@@ -1558,9 +1609,11 @@ class LumpNav2Logic(ScriptedLoadableModuleLogic, VTKObservationMixin):
     sequenceBrowserTracking.SetRecordingActive(True) # Actually start recording
 
     sequenceBrowserUltrasound = parameterNode.GetNodeReference(self.ULTRASOUND_SEQUENCE_BROWSER)
+
     if sequenceBrowserUltrasound is None:
       sequenceBrowserUltrasound = slicer.mrmlScene.AddNewNodeByClass("vtkMRMLSequenceBrowserNode", self.ULTRASOUND_SEQUENCE_BROWSER)
       parameterNode.SetNodeReferenceID(self.ULTRASOUND_SEQUENCE_BROWSER, sequenceBrowserUltrasound.GetID())
+
     image_Image = parameterNode.GetNodeReference(self.IMAGE_IMAGE)
     sequenceNode = sequenceLogic.AddSynchronizedNode(None, image_Image, sequenceBrowserUltrasound)
     sequenceBrowserUltrasound.SetRecording(sequenceNode, True)
@@ -1639,8 +1692,10 @@ class LumpNav2Logic(ScriptedLoadableModuleLogic, VTKObservationMixin):
     if breachWarningNode is None:
       breachWarningNode = slicer.mrmlScene.AddNewNodeByClass('vtkMRMLBreachWarningNode', self.BREACH_WARNING)
       breachWarningNode.UnRegister(None) # Python variable already holds a reference to it
-      breachWarningNode.SetPlayWarningSound(False)
-      breachWarningNode.SetWarningColor(1,0,0) 
+      breachWarningNode.SetWarningColor(1,0,0)
+      warningSoundEnabled = slicer.util.settingsValue(self.WARNING_SOUND_SETTING, True, converter=slicer.util.toBool)
+      self.setWarningSound(warningSoundEnabled)
+
       tumorModel_Needle = parameterNode.GetNodeReference(self.TUMOR_MODEL)
       breachWarningNode.SetOriginalColor(tumorModel_Needle.GetDisplayNode().GetColor())
       cauteryTipToCautery = parameterNode.GetNodeReference(self.CAUTERYTIP_TO_CAUTERY)
@@ -1768,8 +1823,20 @@ class LumpNav2Logic(ScriptedLoadableModuleLogic, VTKObservationMixin):
       scopeCoagAirVolumeB.CreateDefaultDisplayNodes()
       parameterNode.SetNodeReferenceID(self.SCOPE_COAG_TISSUE_VOLUME_B, scopeCoagAirVolumeB.GetID())
 
-    
+    # Set nodes for segmentation logic
+    self.segmentationLogic.setModelPath(self.resourcePath(self.AI_MODEL_PATH))
+    self.segmentationLogic.setInputImage(parameterNode.GetNodeReference(self.IMAGE_IMAGE))
+    self.segmentationLogic.setOutputImage(parameterNode.GetNodeReference(self.PREDICTION_VOLUME))
+    self.segmentationLogic.setOutputTransform(parameterNode.GetNodeReference(self.PREDICTION_TO_NEEDLE))
 
+    # Start segmentation to speed up prediction on recording start
+    self.segmentationLogic.setupProcess()
+    testImage = np.zeros(shape=(1, 615, 525), dtype="uint8")
+    self.segmentationLogic.livePredictionProcess.volume = testImage
+    for i in range(10):
+      self.segmentationLogic.livePredictionProcess.onStarted()
+      time.sleep(0.1)
+    self.segmentationLogic.stopLiveSegmentation()
 
   def setupTransformHierarchy(self):
     """
@@ -1808,16 +1875,37 @@ class LumpNav2Logic(ScriptedLoadableModuleLogic, VTKObservationMixin):
 
     transdToReference = self.addLinearTransformToScene(self.TRANSD_TO_REFERENCE, parentTransform=referenceToRas)
     imageToTransd = self.addLinearTransformToScene(self.IMAGE_TO_TRANSD, parentTransform=transdToReference)
+    predictionToNeedle = self.addLinearTransformToScene(self.PREDICTION_TO_NEEDLE)
     self.updateImageToTransdFromDepth(self.DEFAULT_US_DEPTH)
 
     imageImage = parameterNode.GetNodeReference(self.IMAGE_IMAGE)
     if imageImage is None:
       imageImage = slicer.mrmlScene.AddNewNodeByClass("vtkMRMLScalarVolumeNode", self.IMAGE_IMAGE)
       imageImage.CreateDefaultDisplayNodes()
-      imageArray = np.zeros((512, 512, 1), dtype="uint8")
+      imageArray = np.zeros((1, 615, 525), dtype="uint8")  # TODO: temporary solution
       slicer.util.updateVolumeFromArray(imageImage, imageArray)
       parameterNode.SetNodeReferenceID(self.IMAGE_IMAGE, imageImage.GetID())
+      # Update prediction volume dimensions when image dimensions change
+      self.imageImageObserverTag = imageImage.AddObserver(slicer.vtkMRMLScalarVolumeNode.ImageDataModifiedEvent,
+                                                          self.onImageImageModified)
     imageImage.SetAndObserveTransformNodeID(imageToTransd.GetID())
+
+    predictionImage = parameterNode.GetNodeReference(self.PREDICTION_VOLUME)
+    if predictionImage is None:
+      predictionImage = slicer.mrmlScene.AddNewNodeByClass("vtkMRMLScalarVolumeNode", self.PREDICTION_VOLUME)
+      predictionImage.CreateDefaultDisplayNodes()
+      predictionDisplayNode = predictionImage.GetDisplayNode()
+      predictionDisplayNode.SetWindow(205)
+      predictionDisplayNode.SetLevel(220)
+      predictionDisplayNode.SetAndObserveColorNodeID("vtkMRMLColorTableNodeGreen")
+      imageArray = np.zeros((1, 615, 525), dtype="uint8")
+      slicer.util.updateVolumeFromArray(predictionImage, imageArray)
+      parameterNode.SetNodeReferenceID(self.PREDICTION_VOLUME, predictionImage.GetID())
+    predictionImage.SetAndObserveTransformNodeID(predictionToNeedle.GetID())
+
+    # TransdToNeedle to display tumour reconstruction in needle coordinate system
+    transdToNeedle = self.addLinearTransformToScene(self.TRANSD_TO_NEEDLE, parentTransform=needleToReference)
+    parameterNode.SetNodeReferenceID(self.TRANSD_TO_NEEDLE, transdToNeedle.GetID())
 
   def updateImageToTransdFromDepth(self, depthMm):
     """
@@ -1908,19 +1996,187 @@ class LumpNav2Logic(ScriptedLoadableModuleLogic, VTKObservationMixin):
     if plusServerLauncherNode.GetNodeReferenceID('plusServerRef') != plusServerNode.GetID():
       plusServerLauncherNode.AddAndObserveServerNode(plusServerNode)
 
-  #def sequenceBrowserSetUp(self):
+    # TODO: may not be the right way to start server?
+    plusRemoteNode = parameterNode.GetNodeReference(self.PLUS_REMOTE_NODE)
+    if not plusRemoteNode:
+      plusRemoteNode = slicer.mrmlScene.AddNewNodeByClass("vtkMRMLIGTLConnectorNode", self.PLUS_REMOTE_NODE)
+      plusRemoteNode.SaveWithSceneOff()
+      parameterNode.SetNodeReferenceID(self.PLUS_REMOTE_NODE, plusRemoteNode.GetID())
+
   def setTrackingSequenceBrowser(self, recording):
-    
     parameterNode = self.getParameterNode()
     sequenceBrowserTracking = parameterNode.GetNodeReference(self.TRACKING_SEQUENCE_BROWSER)
     sequenceBrowserTracking.SetRecordingActive(recording) #stop
 
-  def setUltrasoundSequenceBrowser(self, recording):
+  def onUltrasoundSequenceBrowserClicked(self, toggled):
+    self.setUltrasoundSequenceBrowser(toggled)
+    self.setLivePrediction(toggled)
 
+  def setLivePrediction(self, toggled):
+    logging.info(f"setLivePrediction({toggled})")
+    parameterNode = self.getParameterNode()
+    imageToTransd = parameterNode.GetNodeReference(self.IMAGE_TO_TRANSD)
+    transdToNeedle = parameterNode.GetNodeReference(self.TRANSD_TO_NEEDLE)
+    needleTipToNeedle = parameterNode.GetNodeReference(self.NEEDLETIP_TO_NEEDLE)
+    predictionNode = self.getParameterNode().GetNodeReference(self.PREDICTION_VOLUME)
+
+    if toggled:
+      # Rearrange transform hierarchy so that Needle is effectively world
+      imageToTransd.SetAndObserveTransformNodeID(transdToNeedle.GetID())
+      transdToNeedle.SetAndObserveTransformNodeID(None)
+      needleTipToNeedle.SetAndObserveTransformNodeID(None)
+
+      # Start prediction
+      self.setRegionOfInterestNode(toggled)
+      self.segmentationLogic.setRealTimePrediction(toggled)
+      self.setVolumeReconstruction(toggled)
+
+      # Display prediction in slice view
+      slicer.util.setSliceViewerLayers(foreground=predictionNode, foregroundOpacity=0.5, fit=True)
+
+    else:
+      # Stop prediction
+      self.segmentationLogic.setRealTimePrediction(toggled)
+
+      # Move transforms back
+      transdToReference = parameterNode.GetNodeReference(self.TRANSD_TO_REFERENCE)
+      needleToReference = parameterNode.GetNodeReference(self.NEEDLE_TO_REFERENCE)
+      imageToTransd.SetAndObserveTransformNodeID(transdToReference.GetID())
+      transdToNeedle.SetAndObserveTransformNodeID(needleToReference.GetID())
+      needleTipToNeedle.SetAndObserveTransformNodeID(needleToReference.GetID())
+
+      # If reconstruction is live, moving ROI will automatically move the reconstruction volume
+      roiNode = parameterNode.GetNodeReference(self.ROI_NODE)
+      roiNode.SetAndObserveTransformNodeID(needleToReference.GetID())
+
+      # Hide segmentation cross-section view
+      slicer.util.setSliceViewerLayers(foreground=None)
+
+  def setUltrasoundSequenceBrowser(self, recording):
     parameterNode = self.getParameterNode()
     sequenceBrowserUltrasound = parameterNode.GetNodeReference(self.ULTRASOUND_SEQUENCE_BROWSER)
-    sequenceBrowserUltrasound.SetRecordingActive(recording) #stop
+    sequenceBrowserUltrasound.SetRecordingActive(recording)  # stop
 
+  def setRegionOfInterestNode(self, toggled):
+    if not toggled:
+      return
+
+    parameterNode = self.getParameterNode()
+    roiNode = parameterNode.GetNodeReference(self.ROI_NODE)
+    if roiNode is None:
+      # Create new ROI node
+      roiNode = slicer.mrmlScene.AddNewNodeByClass("vtkMRMLAnnotationROINode", self.ROI_NODE)
+      parameterNode.SetNodeReferenceID(self.ROI_NODE, roiNode.GetID())
+      roiNode.SetDisplayVisibility(False)
+    else:
+      # Move ROI out of transform hierarchy
+      roiNode.SetAndObserveTransformNodeID(None)
+
+    # Set center of ROI to be center of current image
+    imageImage = parameterNode.GetNodeReference(self.IMAGE_IMAGE)
+    bounds = [0, 0, 0, 0, 0, 0]
+    imageImage.GetSliceBounds(bounds, vtk.vtkMatrix4x4())
+    sliceCenter = [(bounds[0] + bounds[1]) / 2, (bounds[2] + bounds[3]) / 2, (bounds[4] + bounds[5]) / 2]
+    roiNode.SetXYZ(sliceCenter)
+    roiNode.SetRadiusXYZ(100, 100, 100)
+    logging.info(f"Added a 10x10x10cm ROI at position: {sliceCenter}")
+
+  def setVolumeReconstruction(self, toggled):
+    parameterNode = self.getParameterNode()
+    reconstructionNode = parameterNode.GetNodeReference(self.RECONSTRUCTION_NODE)
+
+    if toggled:
+      if self.reconstructionActive:
+        return
+
+      logging.info("Starting volume reconstruction")
+      # Set up nodes for live reconstruction
+      if reconstructionNode is None:
+        reconstructionNode = slicer.mrmlScene.AddNewNodeByClass("vtkMRMLVolumeReconstructionNode", self.RECONSTRUCTION_NODE)
+        parameterNode.SetNodeReferenceID(self.RECONSTRUCTION_NODE, reconstructionNode.GetID())
+        reconstructionNode.SetLiveVolumeReconstruction(True)
+        reconstructionNode.SetInterpolationMode(1)  # linear interpolation
+
+      reconstructionNode.SetAndObserveInputVolumeNode(parameterNode.GetNodeReference(self.PREDICTION_VOLUME))
+      reconstructionNode.SetAndObserveInputROINode(parameterNode.GetNodeReference(self.ROI_NODE))
+
+      # Create volume node for reconstruction output
+      reconstructionVolume = parameterNode.GetNodeReference(self.RECONSTRUCTION_VOLUME)
+      if reconstructionVolume is None:
+        reconstructionVolume = slicer.mrmlScene.AddNewNodeByClass("vtkMRMLScalarVolumeNode", self.RECONSTRUCTION_VOLUME)
+        parameterNode.SetNodeReferenceID(self.RECONSTRUCTION_VOLUME, reconstructionVolume.GetID())
+
+      reconstructionNode.SetAndObserveOutputVolumeNode(reconstructionVolume)
+      volRenLogic = slicer.modules.volumerendering.logic()
+      reconstructionDisplayNode = volRenLogic.CreateVolumeRenderingDisplayNode()
+      reconstructionDisplayNode.UnRegister(volRenLogic)
+      slicer.mrmlScene.AddNode(reconstructionDisplayNode)
+      reconstructionVolume.AddAndObserveDisplayNodeID(reconstructionDisplayNode.GetID())
+      volRenLogic.UpdateDisplayNodeFromVolumeNode(reconstructionDisplayNode, reconstructionVolume)
+      reconstructionDisplayNode.SetAndObserveROINodeID(parameterNode.GetNodeReference(self.ROI_NODE).GetID())
+      self.setVolumeRenderingProperty(reconstructionVolume, 210, 220)
+      self.reconstructionLogic.StartLiveVolumeReconstruction(reconstructionNode)
+      self.reconstructionActive = True
+
+    else:
+      logging.info("Stopping volume reconstruction")
+      self.reconstructionLogic.StopLiveVolumeReconstruction(reconstructionNode)
+      self.reconstructionActive = False
+
+  def setVolumeRenderingProperty(self, volumeNode, window, level):
+    # Manually define volume property for volume rendering
+    volRenLogic = slicer.modules.volumerendering.logic()
+    displayNode = volRenLogic.GetFirstVolumeRenderingDisplayNode(volumeNode)
+
+    upper = min(300, level + window / 2)
+    lower = max(0, level - window / 2)
+    p0 = lower
+    p1 = lower + (upper - lower) * 0.5
+    p2 = lower + (upper - lower) * 0.7
+    p3 = upper
+    self.transferFunctionPoints = [p0, p1, p2, p3]
+
+    opacityTransferFunction = vtk.vtkPiecewiseFunction()
+    opacityTransferFunction.AddPoint(p0, 0.0)
+    opacityTransferFunction.AddPoint(p1, 0.0)
+    opacityTransferFunction.AddPoint(p2, 0.4)
+    opacityTransferFunction.AddPoint(p3, 0.6)
+
+    colorTransferFunction = vtk.vtkColorTransferFunction()
+    colorTransferFunction.AddRGBPoint(p0, 0.05, 0.10, 0.00)
+    colorTransferFunction.AddRGBPoint(p1, 0.15, 0.45, 0.00)
+    colorTransferFunction.AddRGBPoint(p2, 0.35, 0.75, 0.00)
+    colorTransferFunction.AddRGBPoint(p3, 0.50, 1.00, 0.00)
+
+    # The property describes how the data will look
+    volumeProperty = displayNode.GetVolumePropertyNode().GetVolumeProperty()
+    volumeProperty.SetColor(colorTransferFunction)
+    volumeProperty.SetScalarOpacity(opacityTransferFunction)
+    volumeProperty.ShadeOn()
+    volumeProperty.SetInterpolationTypeToLinear()
+
+  def setTransferFunctionValueChanged(self, value, min, max):
+    volumeNode = self.getParameterNode().GetNodeReference(self.RECONSTRUCTION_VOLUME)
+    volRenLogic = slicer.modules.volumerendering.logic()
+    displayNode = volRenLogic.GetFirstVolumeRenderingDisplayNode(volumeNode)
+    volumeProperty = displayNode.GetVolumePropertyNode().GetVolumeProperty()
+    opacityTransferFunction = volumeProperty.GetScalarOpacity()
+
+    # Calculate how far relatively to move transfer function points
+    percentagePositionChange = (value - self.lastSliderValue) / (max - min)
+    transferMin, transferMax = opacityTransferFunction.GetRange()
+    amountTransferChange = -((transferMax - transferMin) * percentagePositionChange)
+
+    # Move inner points by calculated amount
+    numInnerPoints = opacityTransferFunction.GetSize()
+    for i in range(1, numInnerPoints - 1):
+      x = self.transferFunctionPoints[i]
+      y = opacityTransferFunction.GetValue(x)
+      opacityTransferFunction.RemovePoint(x)
+      opacityTransferFunction.AddPoint(x + amountTransferChange, y)
+      self.transferFunctionPoints[i] = x + amountTransferChange
+
+    # TODO: also move inner points in color transfer function?
 
   def setDeleteLastFiducialClicked(self, numberOfPoints):
     deleted_coord = [0.0, 0.0, 0.0]
@@ -1942,13 +2198,13 @@ class LumpNav2Logic(ScriptedLoadableModuleLogic, VTKObservationMixin):
     tumorMarkups_Needle = parameterNode.GetNodeReference(self.TUMOR_MARKUPS_NEEDLE)
     tumorMarkups_Needle.RemoveAllMarkups()
     logging.info("Deleted all fiducials")
-    
+
     sphereSource = vtk.vtkSphereSource()
     sphereSource.SetRadius(0.001)
     tumorModel_Needle = parameterNode.GetNodeReference(self.TUMOR_MODEL)
     tumorModel_Needle.SetPolyDataConnection(sphereSource.GetOutputPort())
     tumorModel_Needle.Modified()
-  
+
   def setMarkPointCauteryTipClicked(self):
     parameterNode = self.getParameterNode()
     needleToReference = parameterNode.GetNodeReference(self.NEEDLE_TO_REFERENCE)
@@ -1981,7 +2237,7 @@ class LumpNav2Logic(ScriptedLoadableModuleLogic, VTKObservationMixin):
     else:
       cauteryModel.SetDisplayVisibility(False)
       stickModel.SetDisplayVisibility(True)
-  
+
   def setSelectPointsToEraseClicked(self, pushed):
     logging.info('setSelectPointsToEraseClicked')
     interactionNode = slicer.app.applicationLogic().GetInteractionNode()
@@ -1997,7 +2253,7 @@ class LumpNav2Logic(ScriptedLoadableModuleLogic, VTKObservationMixin):
     else:
       # deactivate placement mode
       interactionNode.SetCurrentInteractionMode(interactionNode.ViewTransform)
-      
+
   def setDisplaySampleGraphButton(self):
     #logging.info('setDisplaySampleGraphButton')
     time, ChA, ChB = self.getOscilloscopeChannels()
@@ -2024,7 +2280,7 @@ class LumpNav2Logic(ScriptedLoadableModuleLogic, VTKObservationMixin):
     return time, ChA, ChB
 
   def scopeSignalModified(self, caller, eventid):
-    
+
     #logging.info('scopeSignalModified')
     plotchart = slicer.mrmlScene.GetFirstNodeByClass('vtkMRMLPlotChartNode')
     plotseries = slicer.mrmlScene.GetFirstNodeByClass('vtkMRMLPlotSeriesNode')
@@ -2044,12 +2300,12 @@ class LumpNav2Logic(ScriptedLoadableModuleLogic, VTKObservationMixin):
     plotViewNode.SetPlotChartNodeID(ChA_ChartNode.GetID())
 
   def setStreamGraphButton(toggled):
-    loggin.info('setStreamGraphButton')
+    logging.info('setStreamGraphButton')
     #if toggled:
-      #add observer
+    #add observer
 
     #else:
-      #remove observer
+    #remove observer
 
   def setNormalBrightnessClicked(self):
     logging.info("setNormalBrightnessClicked")
@@ -2103,7 +2359,7 @@ class LumpNav2Logic(ScriptedLoadableModuleLogic, VTKObservationMixin):
       tumorModel_Needle.SetPolyDataConnection(sphereSource.GetOutputPort())
       tumorModel_Needle.Modified()
       return
-    
+
     points.SetNumberOfPoints(numberOfPoints)
     new_coord = [0.0, 0.0, 0.0]
     for i in range(numberOfPoints):
@@ -2112,7 +2368,7 @@ class LumpNav2Logic(ScriptedLoadableModuleLogic, VTKObservationMixin):
 
     tumorMarkups_Needle.GetNthFiducialPosition(numberOfPoints-1,new_coord)
     logging.info("Placed point at position: %s", new_coord)
-    
+
     cellArray.InsertNextCell(numberOfPoints)
     for i in range(numberOfPoints):
       cellArray.InsertCellPoint(i)
@@ -2141,7 +2397,7 @@ class LumpNav2Logic(ScriptedLoadableModuleLogic, VTKObservationMixin):
     smoother.SetInputConnection(surfaceFilter.GetOutputPort())
     smoother.SetNumberOfSubdivisions(3)
     smoother.Update()
-    
+
     delaunaySmooth = vtk.vtkDelaunay3D()
     delaunaySmooth.SetInputData(smoother.GetOutput())
     delaunaySmooth.Update()
@@ -2206,7 +2462,7 @@ class LumpNav2Logic(ScriptedLoadableModuleLogic, VTKObservationMixin):
       sphereSource.SetRadius(0.001)
       tumorModel_Needle = parameterNode.GetNodeReference(self.TUMOR_MODEL)
       tumorModel_Needle.SetPolyDataConnection(sphereSource.GetOutputPort())
-    elif numberOfPoints > 1 : 
+    elif numberOfPoints > 1 :
       numberOfErasedPoints = eraseMarkups_Needle.GetNumberOfFiducials()
       mostRecentPoint = [0.0,0.0,0.0]
       eraseMarkups_Needle.GetNthFiducialPosition(numberOfErasedPoints-1, mostRecentPoint)
@@ -2214,9 +2470,9 @@ class LumpNav2Logic(ScriptedLoadableModuleLogic, VTKObservationMixin):
       tumorMarkups_Needle = parameterNode.GetNodeReference(self.TUMOR_MARKUPS_NEEDLE)
       tumorMarkups_Needle.RemoveMarkup(closestPoint)
     tumorMarkups_Needle.Modified()
-    self.createTumorFromMarkups() 
+    self.createTumorFromMarkups()
 
-  # returns closest marked point to where eraser fiducial was placed
+    # returns closest marked point to where eraser fiducial was placed
   def returnClosestPoint(self, fiducialNode, erasePoint) :
     closestIndex = 0
     numberOfPoints = fiducialNode.GetNumberOfFiducials()
@@ -2233,7 +2489,7 @@ class LumpNav2Logic(ScriptedLoadableModuleLogic, VTKObservationMixin):
     fiducialNode.GetNthFiducialPosition(closestIndex, fiducialPosition)
     logging.info("Used eraser to remove point at %s", fiducialPosition)
     return closestIndex
-  
+
   def createMatrixFromString(self, transformMatrixString):
     transformMatrix = vtk.vtkMatrix4x4()
     transformMatrixArray = list(map(float, transformMatrixString.split(' ')))
@@ -2248,13 +2504,13 @@ class LumpNav2Logic(ScriptedLoadableModuleLogic, VTKObservationMixin):
     eraserPoint = np.array(point2)
     distance = np.linalg.norm(tumorFiducialPoint-eraserPoint)
     return distance
-  
+
   def onBreachWarningNodeChanged(self, observer, eventid) :
     self.showDistanceToTumor()
-  
+
   def showDistanceToTumor(self) :
     return
-    if self.hideDistance : 
+    if self.hideDistance :
       return
     for i in range (0,3) : # There will always be three threeD views mapped in layout when the navigation panel is toggled
       view = slicer.app.layoutManager().threeDWidget(i).threeDView()
@@ -2264,14 +2520,14 @@ class LumpNav2Logic(ScriptedLoadableModuleLogic, VTKObservationMixin):
         view.setCornerAnnotationText("{0:.1f}mm".format(self.breachWarningNode.GetClosestDistanceToModelFromToolTip()))
       else :
         view.setCornerAnnotationText("{0:.2f}mm".format(self.breachWarningNode.GetClosestDistanceToModelFromToolTip()))
-  
+
   def setCollectOff(self, recording):
     #logging.info("setCollectOff")
     parameterNode = self.getParameterNode()
     sequenceBrowserUltrasound = parameterNode.GetNodeReference(self.COLLECT_OFF_SEQUENCE_BROWSER)
     sequenceBrowserUltrasound.SetRecordingActive(recording) #stop
     return
-    
+
   def setCollectCutAir(self, recording):
     #logging.info("setCollectCutAir")
     parameterNode = self.getParameterNode()
@@ -2376,6 +2632,7 @@ class LumpNav2Logic(ScriptedLoadableModuleLogic, VTKObservationMixin):
       featureCollectCutTissue[i][5] = self.maximum(ChB)
       collectCutTissueSeqBr.SelectNextItem()
       signal_Signal = parameterNode.GetNodeReference(self.SIGNAL_SIGNAL)
+
     np.save("D:/Research/Oscilloscope/featureCollectCutTissue.npy", featureCollectCutTissue)
     np.save("D:/Research/Oscilloscope/channelACollectCutTissue.npy", channelACollectCutTissue)
     np.save("D:/Research/Oscilloscope/channelBCollectCutTissue.npy", channelBCollectCutTissue)
@@ -2402,6 +2659,7 @@ class LumpNav2Logic(ScriptedLoadableModuleLogic, VTKObservationMixin):
       featureCollectCoagAir[i][5] = self.maximum(ChB)
       collectCoagAirSeqBr.SelectNextItem()
       signal_Signal = parameterNode.GetNodeReference(self.SIGNAL_SIGNAL)
+
     np.save("D:/Research/Oscilloscope/featureCollectCoagAir.npy", featureCollectCoagAir)
     np.save("D:/Research/Oscilloscope/channelACollectCoagAir.npy", channelACollectCoagAir)
     np.save("D:/Research/Oscilloscope/channelBCollectCoagAir.npy", channelBCollectCoagAir)
@@ -2441,6 +2699,7 @@ class LumpNav2Logic(ScriptedLoadableModuleLogic, VTKObservationMixin):
     Y = np.append(Y, Y_CollectCutTissue)
     Y = np.append(Y, Y_CollectCoagAir)
     Y = np.append(Y, Y_CollectCoagTissue)
+
     np.save("D:/Research/Oscilloscope/Y_collections.npy", Y)
 
     print("collect off")
@@ -2481,6 +2740,7 @@ class LumpNav2Logic(ScriptedLoadableModuleLogic, VTKObservationMixin):
     print("Prediction", predict)
     print("Y test", Y_test)
     print("result", result)
+
     #print("-----LIN------")
     # result = loaded_module_lin.score(X_test, Y_test)
     # predict = loaded_module_lin.predict(X_test)
@@ -2502,8 +2762,6 @@ class LumpNav2Logic(ScriptedLoadableModuleLogic, VTKObservationMixin):
     # print("Y test", Y_test)
     # print("result", result_poly)
     
-
-
     # h = 0.02  # step size in the mesh
     #
     # # create a mesh to plot in
@@ -2520,6 +2778,7 @@ class LumpNav2Logic(ScriptedLoadableModuleLogic, VTKObservationMixin):
     # for i, clf in enumerate((svc, lin_svc, rbf_svc, poly_svc)):
     #   # Plot the decision boundarY_train. For that, we will assign a color to each
     #   # point in the mesh [X_train_min, X_train_max]X_train[Y_train_min, Y_train_max].
+
     #
     #   plt.subplot(2, 2, i + 1)
     #   plt.subplots_adjust(wspace=0.4, hspace=0.4)
@@ -2544,7 +2803,7 @@ class LumpNav2Logic(ScriptedLoadableModuleLogic, VTKObservationMixin):
     #   handles, labels =  plt.gca().get_legend_handles_labels()
     #   d_rev = {y:x for x,y in d.items()}
     #   plt.legend(handles, list(map(d_rev.get, [int(i) for i in d_rev])))
-    #
+
     # plt.savefig('/Users/Josh Ehrlich/Desktop/SVM.png')
 
     # #save arrays as volume  
@@ -2619,56 +2878,68 @@ class LumpNav2Logic(ScriptedLoadableModuleLogic, VTKObservationMixin):
     feat[0][1] = mMeanTest
     predict = cauterySVMModel.predict(feat)
     print("Prediction", predict)
-    
+
   def mean(self, channel):
-      mean = np.mean(channel)
-      return mean
+    mean = np.mean(channel)
+    return mean
 
   def fft(self, channel):
-      frequency = np.mean((np.fft.fft(channel))).real
-      return frequency
+    frequency = np.mean((np.fft.fft(channel))).real
+    return frequency
 
   def testFreq(self, channel):
-      testFreq = sy.fft(channel).real
-      return testFreq
+    testFreq = sy.fft(channel).real
+    return testFreq
 
   def minumum(self, channel):
-      minimum = np.minimum(channel)
-      return minimum
+    minimum = np.minimum(channel)
+    return minimum
 
   def maximum(self, channel):
-      maximum = np.amax(channel)
-      return maximum
+    maximum = np.amax(channel)
+    return maximum
 
   def absSum(self, channel):
-      absSum = np.sum(np.absolute(channel))
-      return absSum
+    absSum = np.sum(np.absolute(channel))
+    return absSum
 
   def absMean(self, channel):
-      absMean = np.mean(np.absolute(channel))
-      return absMean
-      
+    absMean = np.mean(np.absolute(channel))
+    return absMean
+
   def stdev(self, channel):
-      stdev = np.std(channeL)
-      return stdev
-      
+    stdev = np.std(channeL)
+    return stdev
+
   def absStdev(self, channel):
-      absStdev = ((np.std(np.absolute(channel))) * 100)
-      return absStdev
+    absStdev = ((np.std(np.absolute(channel))) * 100)
+    return absStdev
 
   def lmrSum(self, channelA, channelB):
       lmrSum = (self.absSum(channelB) - self.absSum(channelA))
       return lmrSum
 
   def lmrMean(self, channelA, channelB):
-      lmrMean = (self.absMean(channelA - channelB)) * 10000
-      return lmrMean
+    lmrMean = (self.absMean(channelA - channelB)) * 10000
+    return lmrMean
 
   def mMean(self, channelA, channelB):
-      mMean = (self.absMean(channelA) * self.absSum(channelB)) * 100
-      return mMean
+    mMean = (self.absMean(channelA) * self.absSum(channelB)) * 100
+    return mMean
 
-#
+  def onImageImageModified(self, observer, eventid):
+    self.updatePredictionImageDimensions()
+
+  def updatePredictionImageDimensions(self):
+    parameterNode = self.getParameterNode()
+    imageImage = parameterNode.GetNodeReference(self.IMAGE_IMAGE)
+    imageDimensions = imageImage.GetImageData().GetDimensions()
+    predictionImage = parameterNode.GetNodeReference(self.PREDICTION_VOLUME)
+    predictionData = predictionImage.GetImageData()
+    if predictionData.GetDimensions() != imageDimensions:
+      predictionData.SetDimensions(imageDimensions)
+
+  #
 # LumpNav2Test
 #
 
