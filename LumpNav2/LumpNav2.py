@@ -337,6 +337,7 @@ class LumpNav2Widget(ScriptedLoadableModuleWidget, VTKObservationMixin):
       self.onStopPivotCalibration()  # calibration completed
   
   def onExitButtonClicked(self):
+    self.segmentationLogic.setRealTimePrediction(False)
     mainwindow = slicer.util.mainWindow()
     mainwindow.close()
 
@@ -459,12 +460,19 @@ class LumpNav2Widget(ScriptedLoadableModuleWidget, VTKObservationMixin):
       slicer.app.layoutManager().setLayout(6)
 
   def onNavigationCollapsed(self, collapsed):
+    """
+    Called when the navigation tab is collapsed or expanded
+    """
+
+    if collapsed == True:
+      self.logic.setBreachWarningOn(False)
     if collapsed == False:
       self.ui.toolsCollapsibleButton.collapsed = True
       self.ui.contouringCollapsibleButton.collapsed = True
       self.onThreeDViewButton(False)
       interactionNode = slicer.app.applicationLogic().GetInteractionNode()
       interactionNode.SetCurrentInteractionMode(interactionNode.ViewTransform)
+      self.logic.setBreachWarningOn(True)
       self.updateGUIFromParameterNode()
 
   def onThreeDViewButton(self, toggled):
@@ -1706,7 +1714,7 @@ class LumpNav2Logic(ScriptedLoadableModuleLogic, VTKObservationMixin):
 
     if breachWarningNode is None:
       breachWarningNode = slicer.mrmlScene.AddNewNodeByClass('vtkMRMLBreachWarningNode', self.BREACH_WARNING)
-      breachWarningNode.UnRegister(None) # Python variable already holds a reference to it
+      # breachWarningNode.UnRegister(None) # Python variable already holds a reference to it
       breachWarningNode.SetWarningColor(1,0,0)
       warningSoundEnabled = slicer.util.settingsValue(self.WARNING_SOUND_SETTING, True, converter=slicer.util.toBool)
       self.setWarningSound(warningSoundEnabled)
@@ -1714,7 +1722,8 @@ class LumpNav2Logic(ScriptedLoadableModuleLogic, VTKObservationMixin):
       tumorModel_Needle = parameterNode.GetNodeReference(self.TUMOR_MODEL)
       breachWarningNode.SetOriginalColor(tumorModel_Needle.GetDisplayNode().GetColor())
       cauteryTipToCautery = parameterNode.GetNodeReference(self.CAUTERYTIP_TO_CAUTERY)
-      breachWarningNode.SetAndObserveToolTransformNodeId(cauteryTipToCautery.GetID())
+      # breachWarningNode.SetAndObserveToolTransformNodeId(cauteryTipToCautery.GetID())
+      breachWarningNode.SetAndObserveToolTransformNodeId(None)
       breachWarningNode.SetAndObserveWatchedModelNodeID(tumorModel_Needle.GetID())
       breachWarningNodeObserver = breachWarningNode.AddObserver(vtk.vtkCommand.ModifiedEvent, self.onBreachWarningNodeChanged)
       breachWarningLogic = slicer.modules.breachwarning.logic()
@@ -1844,14 +1853,9 @@ class LumpNav2Logic(ScriptedLoadableModuleLogic, VTKObservationMixin):
     self.segmentationLogic.setOutputImage(parameterNode.GetNodeReference(self.PREDICTION_VOLUME))
     self.segmentationLogic.setOutputTransform(parameterNode.GetNodeReference(self.PREDICTION_TO_NEEDLE))
 
-    # Start segmentation to speed up prediction on recording start
-    self.segmentationLogic.setupProcess()
-    testImage = np.zeros(shape=(1, 615, 525), dtype="uint8")
-    self.segmentationLogic.livePredictionProcess.volume = testImage
-    for i in range(10):
-      self.segmentationLogic.livePredictionProcess.onStarted()
-      time.sleep(0.1)
-    self.segmentationLogic.stopLiveSegmentation()
+    # Start segmentation to avoid delay when user starts recording
+    self.segmentationLogic.setRealTimePrediction(True)
+    self.segmentationLogic.pausePrediction()
 
   def setupTransformHierarchy(self):
     """
@@ -2025,7 +2029,11 @@ class LumpNav2Logic(ScriptedLoadableModuleLogic, VTKObservationMixin):
 
   def onUltrasoundSequenceBrowserClicked(self, toggled):
     self.setUltrasoundSequenceBrowser(toggled)
-    self.setLivePrediction(toggled)
+    # self.setLivePrediction(toggled)
+    if toggled:
+      self.segmentationLogic.resumePrediction()
+    else:
+      self.segmentationLogic.pausePrediction()
 
   def setLivePrediction(self, toggled):
     logging.info(f"setLivePrediction({toggled})")
@@ -2043,7 +2051,8 @@ class LumpNav2Logic(ScriptedLoadableModuleLogic, VTKObservationMixin):
 
       # Start prediction
       self.setRegionOfInterestNode(toggled)
-      self.segmentationLogic.setRealTimePrediction(toggled)
+      self.segmentationLogic.resumePrediction()
+      # self.segmentationLogic.setRealTimePrediction(toggled)
       self.setVolumeReconstruction(toggled)
 
       # Display prediction in slice view
@@ -2321,6 +2330,18 @@ class LumpNav2Logic(ScriptedLoadableModuleLogic, VTKObservationMixin):
 
     #else:
     #remove observer
+
+  def setBreachWarningOn(self, active):
+    """
+    Turns breach warning on or off
+    """
+    paramterNode = self.getParameterNode()
+    breachWarningNode = paramterNode.GetNodeReference(self.BREACH_WARNING)
+    if active == True:
+      cauteryTipToCautery = paramterNode.GetNodeReference(self.CAUTERYTIP_TO_CAUTERY)
+      breachWarningNode.SetAndObserveToolTransformNodeId(cauteryTipToCautery)
+    else:
+      breachWarningNode.SetAndObserveToolTransformNodeId(None)
 
   def setNormalBrightnessClicked(self):
     logging.info("setNormalBrightnessClicked")
