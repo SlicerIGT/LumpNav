@@ -2339,7 +2339,7 @@ class LumpNav2Logic(ScriptedLoadableModuleLogic, VTKObservationMixin):
     breachWarningNode = paramterNode.GetNodeReference(self.BREACH_WARNING)
     if active == True:
       cauteryTipToCautery = paramterNode.GetNodeReference(self.CAUTERYTIP_TO_CAUTERY)
-      breachWarningNode.SetAndObserveToolTransformNodeId(cauteryTipToCautery)
+      breachWarningNode.SetAndObserveToolTransformNodeId(cauteryTipToCautery.GetID())
     else:
       breachWarningNode.SetAndObserveToolTransformNodeId(None)
 
@@ -2541,7 +2541,7 @@ class LumpNav2Logic(ScriptedLoadableModuleLogic, VTKObservationMixin):
     distance = np.linalg.norm(tumorFiducialPoint-eraserPoint)
     return distance
 
-  def onBreachWarningNodeChanged(self, observer, eventid) :
+  def onBreachWarningNodeChanged(self, observer, eventid):
     self.showDistanceToTumor()
 
   def showDistanceToTumor(self) :

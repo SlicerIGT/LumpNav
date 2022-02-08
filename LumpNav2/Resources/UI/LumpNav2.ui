@@ -205,25 +205,7 @@
        </layout>
       </item>
       <item>
-       <layout class="QHBoxLayout" name="horizontalLayout_14">
-        <item>
-         <widget class="QLabel" name="transferShiftLabel">
-          <property name="text">
-           <string>Shift:</string>
-          </property>
-         </widget>
-        </item>
-        <item>
-         <widget class="QSlider" name="transferFunctionSlider">
-          <property name="sliderPosition">
-           <number>25</number>
-          </property>
-          <property name="orientation">
-           <enum>Qt::Horizontal</enum>
-          </property>
-         </widget>
-        </item>
-       </layout>
+       <layout class="QHBoxLayout" name="horizontalLayout_14"/>
       </item>
      </layout>
     </widget>
@@ -238,6 +220,9 @@
      </property>
      <property name="checked">
       <bool>false</bool>
+     </property>
+     <property name="collapsed">
+      <bool>true</bool>
      </property>
      <layout class="QVBoxLayout" name="verticalLayout_4">
       <item>
@@ -365,7 +350,25 @@
        </layout>
       </item>
       <item>
-       <layout class="QHBoxLayout" name="horizontalLayout_10"/>
+       <layout class="QHBoxLayout" name="horizontalLayout_10">
+        <item>
+         <widget class="QLabel" name="transferShiftLabel">
+          <property name="text">
+           <string>Shift:</string>
+          </property>
+         </widget>
+        </item>
+        <item>
+         <widget class="QSlider" name="transferFunctionSlider">
+          <property name="sliderPosition">
+           <number>25</number>
+          </property>
+          <property name="orientation">
+           <enum>Qt::Horizontal</enum>
+          </property>
+         </widget>
+        </item>
+       </layout>
       </item>
       <item>
        <layout class="QHBoxLayout" name="horizontalLayout_11"/>
