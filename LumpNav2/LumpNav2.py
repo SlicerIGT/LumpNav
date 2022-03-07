@@ -1098,19 +1098,19 @@ class LumpNav2Widget(ScriptedLoadableModuleWidget, VTKObservationMixin):
     if needleModel is not None:
       if needleModel.GetDisplayVisibility():
         self.ui.needleVisibilityButton.checked = True
-        self.ui.needleVisibilityButton.text = "Hide needle model"
+        #self.ui.needleVisibilityButton.text = "Hide needle model"
       else:
         self.ui.needleVisibilityButton.checked = False
-        self.ui.needleVisibilityButton.text = "Show needle model"
+        #self.ui.needleVisibilityButton.text = "Show needle model"
 
     cauteryModel = self._parameterNode.GetNodeReference(self.logic.CAUTERY_MODEL)
     if cauteryModel is not None:
       if cauteryModel.GetDisplayVisibility():
         self.ui.cauteryVisibilityButton.checked = True
-        self.ui.cauteryVisibilityButton.text = "Hide cautery model"
+        #self.ui.cauteryVisibilityButton.text = "Hide cautery model"
       else:
         self.ui.cauteryVisibilityButton.checked = False
-        self.ui.cauteryVisibilityButton.text = "Show cautery model"
+        #self.ui.cauteryVisibilityButton.text = "Show cautery model"
 
     trackingSqBr = self._parameterNode.GetNodeReference(self.logic.TRACKING_SEQUENCE_BROWSER)
     if trackingSqBr is not None:
