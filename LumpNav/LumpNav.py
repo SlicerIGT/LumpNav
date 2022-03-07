@@ -1102,7 +1102,8 @@ class LumpNavGuidelet(Guidelet):
     #glyph.SetScaleModeToScaleByVector()
     #glyph.SetScaleFactor(0.25)
     delaunay.SetInputConnection(glyph.GetOutputPort())
-
+    print("delaunay")
+    print(delaunay)
     surfaceFilter = vtk.vtkDataSetSurfaceFilter()
     surfaceFilter.SetInputConnection(delaunay.GetOutputPort())
 
@@ -1114,14 +1115,17 @@ class LumpNavGuidelet(Guidelet):
     delaunaySmooth = vtk.vtkDelaunay3D()
     delaunaySmooth.SetInputData(smoother.GetOutput())
     delaunaySmooth.Update()
-
+    print("delaySmooth")
+    print(delaunaySmooth)
     smoothSurfaceFilter = vtk.vtkDataSetSurfaceFilter()
     smoothSurfaceFilter.SetInputConnection(delaunaySmooth.GetOutputPort())
-
+    print("smoothSurface")
+    print(smoothSurfaceFilter)
     normals = vtk.vtkPolyDataNormals()
     normals.SetInputConnection(smoothSurfaceFilter.GetOutputPort())
     normals.SetFeatureAngle(100.0)
-
+    print("normals")
+    print(normals)
     self.tumorModel_Needle.SetPolyDataConnection(normals.GetOutputPort())
 
     self.tumorModel_Needle.Modified()
