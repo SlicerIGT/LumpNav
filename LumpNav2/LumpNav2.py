@@ -247,6 +247,7 @@ class LumpNav2Widget(ScriptedLoadableModuleWidget, VTKObservationMixin):
 
     self.ui.customUiButton.connect('toggled(bool)', self.onCustomUiClicked)
     self.ui.startPlusButton.connect('toggled(bool)', self.onStartPlusClicked)
+    self.ui.displayRASButton.connect('toggled(bool)', self.onDisplayRASClicked)
     self.ui.toolsCollapsibleButton.connect('contentsCollapsed(bool)', self.onToolsCollapsed)
     self.ui.contouringCollapsibleButton.connect('contentsCollapsed(bool)', self.onContouringCollapsed)
     self.ui.navigationCollapsibleButton.connect('contentsCollapsed(bool)', self.onNavigationCollapsed)
@@ -505,6 +506,14 @@ class LumpNav2Widget(ScriptedLoadableModuleWidget, VTKObservationMixin):
         plusRemoteNode.Start()
       else:
         plusRemoteNode.Stop()
+
+  def onDisplayRASClicked(self, toggled):
+    parameterNode = self._parameterNode
+    RASMarkups = parameterNode.GetNodeReference(self.logic.RAS_MARKUPS)
+    if toggled:
+      RASMarkups.SetDisplayVisibility(1)
+    else:
+      RASMarkups.SetDisplayVisibility(0)
 
   def onCustomUiClicked(self, checked):
     self.setCustomStyle(checked)
@@ -804,7 +813,9 @@ class LumpNav2Widget(ScriptedLoadableModuleWidget, VTKObservationMixin):
     self.viewpointLogic.getViewpointForViewNode(viewNode).autoCenterSetSafeXMaximum(widthViewCoordLimits)
     self.viewpointLogic.getViewpointForViewNode(viewNode).autoCenterSetSafeYMinimum(-heightViewCoordLimits)
     self.viewpointLogic.getViewpointForViewNode(viewNode).autoCenterSetSafeYMaximum(heightViewCoordLimits)
-    # self.viewpointLogic.getViewpointForViewNode(viewNode).autoCenterSetModelNode(self.logic.tumorModel_Needle)
+    parameterNode = self._parameterNode
+    tumorModel = parameterNode.GetNodeReference(self.logic.TUMOR_MODEL)
+    self.viewpointLogic.getViewpointForViewNode(viewNode).autoCenterSetModelNode(tumorModel)
     self.viewpointLogic.getViewpointForViewNode(viewNode).autoCenterStart()
 
   def disableViewpointInViewNode(self,viewNode):
@@ -1239,6 +1250,8 @@ class LumpNav2Logic(ScriptedLoadableModuleLogic, VTKObservationMixin):
   TUMOR_MARKUPS_NEEDLE = "TumorMarkups_Needle"
   BREACH_WARNING = "LumpNavBreachWarning"
 
+  RAS_MARKUPS = "DirectionMarkups_RAS"
+
   def __init__(self):
     """
     Called when the logic class is instantiated. Can be used for initializing member variables.
@@ -1512,6 +1525,21 @@ class LumpNav2Logic(ScriptedLoadableModuleLogic, VTKObservationMixin):
     self.addObserver(tumorMarkups_Needle, slicer.vtkMRMLMarkupsNode.PointPositionDefinedEvent, self.onTumorMarkupsNodeModified)
 
     parameterNode.SetNodeReferenceID(self.TUMOR_MARKUPS_NEEDLE, tumorMarkups_Needle.GetID())
+
+    RASMarkups = parameterNode.GetNodeReference(self.RAS_MARKUPS)
+    if RASMarkups is None:
+      RASMarkups = slicer.mrmlScene.AddNewNodeByClass("vtkMRMLMarkupsFiducialNode", self.RAS_MARKUPS)
+      RASMarkups.CreateDefaultDisplayNodes()
+      RASMarkups.GetDisplayNode().SetTextScale(5)
+      RASMarkups.AddFiducial(10, 0, 0,"RIGHT")
+      RASMarkups.AddFiducial(0, 10, 0, "ANTERIOR")
+      RASMarkups.AddFiducial(0, 0, 10, "SUPERIOR")
+      RASMarkups.AddFiducial(-10, 0, 0,"LEFT")
+      RASMarkups.AddFiducial(0, -10, 0, "POSTERIOR")
+      RASMarkups.AddFiducial(0, 0, -10, "INFERIOR")
+      RASMarkups.LockedOn()
+      RASMarkups.SetDisplayVisibility(0)
+      parameterNode.SetNodeReferenceID(self.RAS_MARKUPS, RASMarkups.GetID())
 
     # OpenIGTLink connection
 
