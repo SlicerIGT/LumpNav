@@ -1531,6 +1531,7 @@ class LumpNav2Logic(ScriptedLoadableModuleLogic, VTKObservationMixin):
       RASMarkups = slicer.mrmlScene.AddNewNodeByClass("vtkMRMLMarkupsFiducialNode", self.RAS_MARKUPS)
       RASMarkups.CreateDefaultDisplayNodes()
       RASMarkups.GetDisplayNode().SetTextScale(5)
+      RASMarkups.GetDisplayNode().SetGlyphScale(5)
       RASMarkups.AddFiducial(10, 0, 0,"RIGHT")
       RASMarkups.AddFiducial(0, 10, 0, "ANTERIOR")
       RASMarkups.AddFiducial(0, 0, 10, "SUPERIOR")
@@ -1542,7 +1543,8 @@ class LumpNav2Logic(ScriptedLoadableModuleLogic, VTKObservationMixin):
       parameterNode.SetNodeReferenceID(self.RAS_MARKUPS, RASMarkups.GetID())
 
     # OpenIGTLink connection
-
+    
+    #PLUS Server
     self.setupPlusServer()
 
     sequenceLogic = slicer.modules.sequences.logic()
