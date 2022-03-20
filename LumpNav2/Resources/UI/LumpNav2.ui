@@ -6,8 +6,8 @@
    <rect>
     <x>0</x>
     <y>0</y>
-    <width>597</width>
-    <height>890</height>
+    <width>509</width>
+    <height>747</height>
    </rect>
   </property>
   <property name="cursor">
@@ -219,10 +219,10 @@
       <string>Navigation</string>
      </property>
      <property name="checked">
-      <bool>false</bool>
+      <bool>true</bool>
      </property>
      <property name="collapsed">
-      <bool>true</bool>
+      <bool>false</bool>
      </property>
      <layout class="QVBoxLayout" name="verticalLayout_4">
       <item>
@@ -371,10 +371,28 @@
        </layout>
       </item>
       <item>
-       <layout class="QHBoxLayout" name="horizontalLayout_11"/>
-      </item>
-      <item>
-       <layout class="QHBoxLayout" name="horizontalLayout_12"/>
+       <layout class="QHBoxLayout" name="horizontalLayout_11">
+        <item>
+         <widget class="QPushButton" name="breachLocationButton">
+          <property name="text">
+           <string>Display tumor breach</string>
+          </property>
+          <property name="checkable">
+           <bool>true</bool>
+          </property>
+          <property name="checked">
+           <bool>true</bool>
+          </property>
+         </widget>
+        </item>
+        <item>
+         <widget class="QPushButton" name="deleteTumorBreachButton">
+          <property name="text">
+           <string>Delete tumor breach</string>
+          </property>
+         </widget>
+        </item>
+       </layout>
       </item>
       <item>
        <widget class="ctkCollapsibleButton" name="contourAdjustmentCollpsibleButton">
