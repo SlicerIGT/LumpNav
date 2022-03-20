@@ -295,6 +295,8 @@ class LumpNav2Widget(ScriptedLoadableModuleWidget, VTKObservationMixin):
     self.ui.deleteLastFiducialNavigationButton.connect('clicked()', self.onDeleteLastFiducialClicked)
     self.ui.toolModelButton.connect('toggled(bool)', self.onToolModelClicked)
     self.ui.threeDViewButton.connect('toggled(bool)', self.onThreeDViewButton)
+    self.ui.breachLocationButton.connect('toggled(bool)', self.onBreachLocationButtonClicked)
+    self.ui.deleteTumorBreachButton.connect('clicked()', self.onDeleteTumorBreachButtonClicked)
 
     # Add custom layouts
     self.logic.addCustomLayouts()
@@ -480,6 +482,19 @@ class LumpNav2Widget(ScriptedLoadableModuleWidget, VTKObservationMixin):
     else:
       self.ui.startStopRecordingButton.text = "Start Ultrasound Recording"
       self.logic.onUltrasoundSequenceBrowserClicked(toggled)
+
+  def onBreachLocationButtonClicked(self, toggled):
+    parameterNode = self._parameterNode
+    breachMarkups_Needle = parameterNode.GetNodeReference(self.logic.BREACH_MARKUPS_NEEDLE)
+    if toggled:
+      breachMarkups_Needle.SetDisplayVisibility(1)
+    else:
+      breachMarkups_Needle.SetDisplayVisibility(0)
+
+  def onDeleteTumorBreachButtonClicked(self):
+    parameterNode = self._parameterNode
+    breachMarkups_Needle = parameterNode.GetNodeReference(self.logic.BREACH_MARKUPS_NEEDLE)
+    breachMarkups_Needle.RemoveAllMarkups()
 
   def onFreezeUltrasoundClicked(self, toggled):
     logging.info("onFreezeUltrasoundClicked")
@@ -1210,6 +1225,10 @@ class LumpNav2Logic(ScriptedLoadableModuleLogic, VTKObservationMixin):
   CONTOUR_UNSELECTED = "ContourUnselected"
   POINTS_UNSELECTED = "PointsUnselected"
 
+  DISPLAY_BREACH_STATUS = "DisplayBreachStatus"
+  DISPLAY_BREACH_LOCATION = "DisplayBreachLocation"
+  DISPLAY_BREACH_HIDDEN = "DisplayBreachHidden"
+  BREACH_STATUS = "BreachStatus"
   # Ultrasound image
 
   IMAGE_IMAGE = "Image_Image"
@@ -1256,6 +1275,7 @@ class LumpNav2Logic(ScriptedLoadableModuleLogic, VTKObservationMixin):
   ULTRASOUND_SEQUENCE_BROWSER = "UltrasoundSequenceBrowser"
   TUMOR_MARKUPS_NEEDLE = "TumorMarkups_Needle"
   BREACH_WARNING = "LumpNavBreachWarning"
+  BREACH_MARKUPS_NEEDLE = "BreachMarkups_Needle"
 
   RAS_MARKUPS = "DirectionMarkups_RAS"
 
@@ -1525,6 +1545,7 @@ class LumpNav2Logic(ScriptedLoadableModuleLogic, VTKObservationMixin):
       tumorMarkups_Needle.CreateDefaultDisplayNodes()
       tumorMarkups_Needle.GetDisplayNode().SetTextScale(0)
       tumorMarkups_Needle.LockedOn()
+      parameterNode.SetNodeReferenceID(self.TUMOR_MARKUPS_NEEDLE, tumorMarkups_Needle.GetID())
     tumorMarkups_Needle.SetAndObserveTransformNodeID(needleToReference.GetID())
     self.removeObservers(method=self.onTumorMarkupsNodeModified)
     self.addObserver(tumorMarkups_Needle, slicer.vtkMRMLMarkupsNode.PointPositionDefinedEvent, self.modifyPoints)
@@ -1609,9 +1630,23 @@ class LumpNav2Logic(ScriptedLoadableModuleLogic, VTKObservationMixin):
       breachWarningNode.SetAndObserveWatchedModelNodeID(tumorModel_Needle.GetID())
       breachWarningNodeObserver = breachWarningNode.AddObserver(vtk.vtkCommand.ModifiedEvent, self.onBreachWarningNodeChanged)
       breachWarningLogic = slicer.modules.breachwarning.logic()
-      # Line properties can only be set after the line is creaed (made visible at least once)
+      # Line properties can only be set after the line is created (made visible at least once)
       breachWarningLogic.SetLineToClosestPointVisibility(False, breachWarningNode)
       parameterNode.SetNodeReferenceID(self.BREACH_WARNING, breachWarningNode.GetID())
+      parameterNode.SetParameter(self.DISPLAY_BREACH_STATUS, self.DISPLAY_BREACH_LOCATION)
+      parameterNode.SetParameter(self.BREACH_STATUS, "False")
+
+    breachMarkups_Needle = parameterNode.GetNodeReference(self.BREACH_MARKUPS_NEEDLE)
+    if breachMarkups_Needle is None:
+      breachMarkups_Needle = slicer.mrmlScene.AddNewNodeByClass("vtkMRMLMarkupsFiducialNode", self.BREACH_MARKUPS_NEEDLE)
+      breachMarkups_Needle.CreateDefaultDisplayNodes()
+      breachMarkups_Needle.GetDisplayNode().SetGlyphScale(7)
+      breachMarkups_Needle.GetDisplayNode().SetTextScale(7)
+      breachMarkups_Needle.GetDisplayNode().SetColor(1,0,0)
+      breachMarkups_Needle.LockedOn()
+      breachMarkups_Needle.SetDisplayVisibility(1)
+      parameterNode.SetNodeReferenceID(self.BREACH_MARKUPS_NEEDLE, breachMarkups_Needle.GetID())
+    breachMarkups_Needle.SetAndObserveTransformNodeID(needleToReference.GetID())
 
     cauteryCameraToCautery =  parameterNode.GetNodeReference(self.CAUTERYCAMERA_TO_CAUTERY)
     if cauteryCameraToCautery is None:
@@ -2229,6 +2264,16 @@ class LumpNav2Logic(ScriptedLoadableModuleLogic, VTKObservationMixin):
 
   def onBreachWarningNodeChanged(self, observer, eventid):
     self.showDistanceToTumor()
+    parameterNode = self.getParameterNode()
+    breachWarningNode = parameterNode.GetNodeReference(self.BREACH_WARNING)
+    if (breachWarningNode.GetClosestDistanceToModelFromToolTip() < 0):
+      if parameterNode.GetParameter(self.BREACH_STATUS) == "False":
+        breachLocation = breachWarningNode.GetClosestPointOnModel()
+        breachMarkups_Needle = parameterNode.GetNodeReference(self.BREACH_MARKUPS_NEEDLE)
+        breachMarkups_Needle.AddFiducial(breachLocation[0], breachLocation[1], breachLocation[2], "BREACH!")
+      parameterNode.SetParameter(self.BREACH_STATUS, "True")
+    else:
+      parameterNode.SetParameter(self.BREACH_STATUS, "False")
 
   def showDistanceToTumor(self) :
     return
