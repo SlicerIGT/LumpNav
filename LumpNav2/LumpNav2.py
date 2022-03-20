@@ -1202,6 +1202,13 @@ class LumpNav2Logic(ScriptedLoadableModuleLogic, VTKObservationMixin):
   TRANSD_TO_NEEDLE = "TransdToNeedle"
   PREDICTION_TO_NEEDLE = "PredictionToNeedle"
 
+  CONTOUR_STATUS = "ContourStatus"
+  CONTOUR_ADDING = "ContourAdding"
+  POINTS_STATUS = "PointsStatus"
+  POINTS_ADDING = "PointsAdding"
+  POINTS_ERASING = "PointsErasing"
+  CONTOUR_UNSELECTED = "ContourUnselected"
+  POINTS_UNSELECTED = "PointsUnselected"
 
   # Ultrasound image
 
@@ -1545,7 +1552,7 @@ class LumpNav2Logic(ScriptedLoadableModuleLogic, VTKObservationMixin):
     # OpenIGTLink connection
     
     #PLUS Server
-    self.setupPlusServer()
+    #self.setupPlusServer()
 
     sequenceLogic = slicer.modules.sequences.logic()
 
@@ -2184,51 +2191,8 @@ class LumpNav2Logic(ScriptedLoadableModuleLogic, VTKObservationMixin):
       tumorMarkups_Needle.GetNthFiducialPosition(numberOfPoints - 1, mostRecentPoint)
       closestPoint = self.returnClosestPoint(tumorMarkups_Needle, mostRecentPoint)
       tumorMarkups_Needle.RemoveMarkup(closestPoint)
-      tumorMarkups_Needle.RemoveMarkup(0)
+      tumorMarkups_Needle.RemoveMarkup(tumorMarkups_Needle.GetNumberOfFiducials()-1)
       self.createTumorFromMarkups()
-
-  def setRemoveFiducialPoint(self):
-
-    #TODO: Remove function
-    parameterNode = self.getParameterNode()
-    tumorMarkups_Needle = parameterNode.GetNodeReference(self.TUMOR_MARKUPS_NEEDLE)
-    if self.eraserFlag == False :
-      self.eraserFlag = True
-      return
-    self.eraserFlag = False
-
-    #place point
-    #locate closest point
-    #erase last placed point and closest point
-    numberOfPoints = tumorMarkups_Needle.GetNumberOfFiducials()
-    fiducialPosition = [0.0,0.0,0.0]
-    tumorMarkups_Needle.GetNthFiducialPosition(0, fiducialPosition)
-    logging.info("Used eraser to remove point at %s", fiducialPosition)
-    tumorMarkups_Needle.RemoveMarkup(0)
-
-
-    if numberOfPoints == 1 :
-      #self.deleteLastFiducialButton.setEnabled(False)
-      #self.deleteAllFiducialsButton.setEnabled(False)
-      #self.deleteLastFiducialNavigationButton.setEnabled(False)
-      #self.selectPointsToEraseButton.setEnabled(False)
-      #self.selectPointsToEraseButton.setChecked(False)
-      tumorMarkups_Needle.GetNthFiducialPosition(0,fiducialPosition)
-      logging.info("Used eraser to remove point at %s", fiducialPosition)
-      tumorMarkups_Needle.RemoveMarkup(0)
-      sphereSource = vtk.vtkSphereSource()
-      sphereSource.SetRadius(0.001)
-      tumorModel_Needle = parameterNode.GetNodeReference(self.TUMOR_MODEL)
-      tumorModel_Needle.SetPolyDataConnection(sphereSource.GetOutputPort())
-    elif numberOfPoints > 1 :
-      numberOfErasedPoints = eraseMarkups_Needle.GetNumberOfFiducials()
-      mostRecentPoint = [0.0,0.0,0.0]
-      eraseMarkups_Needle.GetNthFiducialPosition(numberOfErasedPoints-1, mostRecentPoint)
-      closestPoint = self.returnClosestPoint(tumorMarkups_Needle, mostRecentPoint)
-      tumorMarkups_Needle = parameterNode.GetNodeReference(self.TUMOR_MARKUPS_NEEDLE)
-      tumorMarkups_Needle.RemoveMarkup(closestPoint)
-    tumorMarkups_Needle.Modified()
-    self.createTumorFromMarkups()
 
     # returns closest marked point to where eraser fiducial was placed
   def returnClosestPoint(self, fiducialNode, erasePoint) :
@@ -2238,7 +2202,7 @@ class LumpNav2Logic(ScriptedLoadableModuleLogic, VTKObservationMixin):
     fiducialNode.GetNthFiducialPosition(0, closestPosition)
     distanceToClosest = self.returnDistance(closestPosition, erasePoint)
     fiducialPosition = [0.0,0.0,0.0]
-    for fiducialIndex in range(1, numberOfPoints) :
+    for fiducialIndex in range(0, numberOfPoints-1) :
       fiducialNode.GetNthFiducialPosition(fiducialIndex, fiducialPosition)
       distanceToPoint = self.returnDistance(fiducialPosition, erasePoint)
       if distanceToPoint < distanceToClosest :
