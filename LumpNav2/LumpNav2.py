@@ -1253,6 +1253,7 @@ class LumpNav2Logic(ScriptedLoadableModuleLogic, VTKObservationMixin):
   TUMOR_MODEL = "TumorModel"
   STICK_MODEL = "StickModel"
   WARNING_SOUND_SETTING = "LumpNav2/WarningSoundEnabled"
+  NEEDLETIP_TO_NEEDLE_SETTING = "NeedleTipToNeedleSetting"
 
   # Model reconstruction
   ROI_NODE = "ROI"
@@ -1488,8 +1489,25 @@ class LumpNav2Logic(ScriptedLoadableModuleLogic, VTKObservationMixin):
     needleVisible = slicer.util.settingsValue(self.NEEDLE_VISIBILITY_SETTING, True, converter=slicer.util.toBool)
     needleModel.SetDisplayVisibility(needleVisible)
 
+    import json
     needleTipToNeedle = parameterNode.GetNodeReference(self.NEEDLETIP_TO_NEEDLE)
     needleModel.SetAndObserveTransformNodeID(needleTipToNeedle.GetID())
+
+    settings = qt.QSettings()
+    needleTipToNeedle_settings = slicer.util.settingsValue(self.NEEDLETIP_TO_NEEDLE_SETTING, "")
+    if needleTipToNeedle_settings == "":
+      needleTipToNeedle_settings = slicer.util.arrayFromTransformMatrix(needleTipToNeedle)
+      needleTipToNeedle_settings = needleTipToNeedle_settings.tolist()
+      needleTipToNeedle_settings = json.dumps(needleTipToNeedle_settings)
+      settings.setValue(self.NEEDLETIP_TO_NEEDLE_SETTING, needleTipToNeedle_settings)
+    else:
+      needleTipToNeedle_settings = json.loads(needleTipToNeedle_settings)
+      needleTipToNeedle_settings = np.array(needleTipToNeedle_settings)
+      needleTipToNeedle_settings = slicer.util.vtkMatrixFromArray(needleTipToNeedle_settings)
+      needleTipToNeedle.SetMatrixTransformToParent(needleTipToNeedle_settings)
+    self.addObserver(needleTipToNeedle, slicer.vtkMRMLLinearTransformNode.TransformModifiedEvent, self.needleTipToNeedleModified)
+
+
 
     # Cautery model
 
@@ -2299,6 +2317,16 @@ class LumpNav2Logic(ScriptedLoadableModuleLogic, VTKObservationMixin):
     predictionData = predictionImage.GetImageData()
     if predictionData.GetDimensions() != imageDimensions:
       predictionData.SetDimensions(imageDimensions)
+
+  def needleTipToNeedleModified(self, observer, eventid):
+    settings = qt.QSettings()
+    parameterNode = self.getParameterNode()
+    import json
+    needleTipToNeedle = parameterNode.GetNodeReference(self.NEEDLETIP_TO_NEEDLE)
+    needleTipToNeedle_settings = slicer.util.arrayFromTransformMatrix(needleTipToNeedle)
+    needleTipToNeedle_settings = needleTipToNeedle_settings.tolist()
+    needleTipToNeedle_settings = json.dumps(needleTipToNeedle_settings)
+    settings.setValue(self.NEEDLETIP_TO_NEEDLE_SETTING, needleTipToNeedle_settings)
 
   #
 # LumpNav2Test
