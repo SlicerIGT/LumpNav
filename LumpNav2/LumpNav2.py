@@ -1591,7 +1591,7 @@ class LumpNav2Logic(ScriptedLoadableModuleLogic, VTKObservationMixin):
     # OpenIGTLink connection
     
     #PLUS Server
-    #self.setupPlusServer()
+    self.setupPlusServer()
 
     sequenceLogic = slicer.modules.sequences.logic()
 
@@ -2319,9 +2319,10 @@ class LumpNav2Logic(ScriptedLoadableModuleLogic, VTKObservationMixin):
       predictionData.SetDimensions(imageDimensions)
 
   def needleTipToNeedleModified(self, observer, eventid):
+    logging.debug('needleTipToNeedleModified')
+    import json
     settings = qt.QSettings()
     parameterNode = self.getParameterNode()
-    import json
     needleTipToNeedle = parameterNode.GetNodeReference(self.NEEDLETIP_TO_NEEDLE)
     needleTipToNeedle_settings = slicer.util.arrayFromTransformMatrix(needleTipToNeedle)
     needleTipToNeedle_settings = needleTipToNeedle_settings.tolist()
