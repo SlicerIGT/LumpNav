@@ -829,13 +829,6 @@ class LumpNav2Widget(ScriptedLoadableModuleWidget, VTKObservationMixin):
       self.ui.bottomAutoCenterCameraButton.setChecked(False)
     self.ui.bottomAutoCenterCameraButton.blockSignals(blockSignalState)
 
-    #blockSignalState = self.ui.bottomBullseyeCameraButton.blockSignals(True)
-    #if (self.viewpointLogic.getViewpointForViewNode(centerViewNode).isCurrentModeBullseye()):
-    #  self.ui.bottomBullseyeCameraButton.setChecked(True)
-    #else:
-    #  self.ui.bottomBullseyeCameraButton.setChecked(False)
-    #self.ui.bottomBullseyeCameraButton.blockSignals(blockSignalState)
-
   def setCustomStyle(self, visible):
     """
     Applies UI customization. Hide Slicer widgets and apply custom stylesheet.
@@ -1011,7 +1004,6 @@ class LumpNav2Widget(ScriptedLoadableModuleWidget, VTKObservationMixin):
     self._updatingGUIFromParameterNode = True
 
     # Read parameter nodes and update GUI accordingly
-    # ...
 
     # If new MRML nodes are referenced, update observers
 
@@ -1062,12 +1054,6 @@ class LumpNav2Widget(ScriptedLoadableModuleWidget, VTKObservationMixin):
       self.ui.deleteLastFiducialNavigationButton.setEnabled(False)
       self.ui.selectPointsToEraseButton.setChecked(False)
       self.ui.selectPointsToEraseButton.setEnabled(False)
-    
-    # interactionNode = slicer.app.applicationLogic().GetInteractionNode()
-    # if interactionNode.GetInteractionModeAsString() == "Place" and self.ui.selectPointsToEraseButton.isChecked() == False:
-    #   self.ui.markPointsButton.setChecked(True)
-    # else:
-    #   self.ui.markPointsButton.setChecked(False)
 
   def updateGUIFromMRML(self, caller=None, event=None):
     """
@@ -1094,10 +1080,8 @@ class LumpNav2Widget(ScriptedLoadableModuleWidget, VTKObservationMixin):
     if cauteryModel is not None:
       if cauteryModel.GetDisplayVisibility():
         self.ui.cauteryVisibilityButton.checked = True
-        #self.ui.cauteryVisibilityButton.text = "Hide cautery model"
       else:
         self.ui.cauteryVisibilityButton.checked = False
-        #self.ui.cauteryVisibilityButton.text = "Show cautery model"
 
     trackingSqBr = self._parameterNode.GetNodeReference(self.logic.TRACKING_SEQUENCE_BROWSER)
     if trackingSqBr is not None:
