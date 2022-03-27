@@ -521,17 +521,17 @@
         </property>
        </widget>
       </item>
+      <item>
+       <widget class="QPushButton" name="displayRASButton">
+        <property name="text">
+         <string>Display RAS</string>
+        </property>
+        <property name="checkable">
+         <bool>true</bool>
+        </property>
+       </widget>
+      </item>
      </layout>
-    </widget>
-   </item>
-   <item>
-    <widget class="QPushButton" name="displayRASButton">
-     <property name="text">
-      <string>Display RAS</string>
-     </property>
-     <property name="checkable">
-      <bool>true</bool>
-     </property>
     </widget>
    </item>
    <item>
