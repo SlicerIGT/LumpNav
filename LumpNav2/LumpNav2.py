@@ -508,13 +508,6 @@ class LumpNav2Widget(ScriptedLoadableModuleWidget, VTKObservationMixin):
     #self.logic.setFreezeUltrasoundClicked()
 
   def onStartPlusClicked(self, toggled):
-    # plusServerNode = self._parameterNode.GetNodeReference(self.logic.PLUS_SERVER_NODE)
-    # if plusServerNode:
-    #   if toggled == True:
-    #     plusServerNode.StartServer()
-    #   else:
-    #     # self.ui.startPlusButton.text
-    #     plusServerNode.StopServer()
     plusRemoteNode = self._parameterNode.GetNodeReference(self.logic.PLUS_REMOTE_NODE)
     if plusRemoteNode:
       if toggled:
@@ -575,38 +568,6 @@ class LumpNav2Widget(ScriptedLoadableModuleWidget, VTKObservationMixin):
       self._parameterNode.SetParameter(self.logic.POINTS_STATUS, self.logic.POINTS_UNSELECTED)
       interactionNode.SetCurrentInteractionMode(interactionNode.ViewTransform)
     self._updatingGui = False
-
-    '''
-    # if self._updatingGui == True:
-    #   return
-    # self._updatingGui = True
-    # if toggled:
-    #   self._parameterNode.SetParameter(self.logic.CONTOUR_STATUS, self.logic.CONTOUR_ERASING)
-    #   self.ui.markPointsButton.setChecked(False)
-    # else:
-    #   self._parameterNode.SetParameter(self.logic.CONTOUR_STATUS, self.logic.CONTOUR_UNSELECTED)
-    # self._updatingGui = False
-    # TODO: add this to function call from widget
-    if self._updatingGui == True:
-      return
-    self._updatingGui = True
-    parameterNode = self.getParmeterNode()
-    interactionNode = slicer.app.applicationLogic().GetInteractionNode()
-    if changePoints:
-      interactionNode.SetPlaceModePersistence(1)
-      interactionNode.SetCurrentInteractionMode(interactionNode.Place)
-      selectionNode = slicer.app.applicationLogic().GetSelectionNode()
-      selectionNode.SetReferenceActivePlaceNodeClassName("vtkMRMLMarkupsFiducialNode")
-      tumorMarkups_Needle = parameterNode.GetNodeReference(self.logic.TUMOR_MARKUPS_NEEDLE)
-      selectionNode.SetActivePlaceNodeID(tumorMarkups_Needle.GetID())
-      parameterNode.SetParameter(self.logic.CONTOUR_STATUS, self.logic.CONTOUR_ADDING)
-      parameterNode.SetParameter(self.logic.POINTS_STATUS, self.logic.POINTS_ERASING)
-    else:  # deactivate placement mode
-      parameterNode.SetParameter(self.logic.CONTOUR_STATUS, self.logic.CONTOUR_UNSELECTED)
-      interactionNode.SetCurrentInteractionMode(interactionNode.ViewTransform)
-    # TODO: add those after modifyPoints function call line in widget class
-    self._updatingGui = False
-    '''
 
   def onMarkPointsToggled(self, toggled):
     if self._updatingGui == True:
@@ -1591,7 +1552,7 @@ class LumpNav2Logic(ScriptedLoadableModuleLogic, VTKObservationMixin):
     # OpenIGTLink connection
     
     #PLUS Server
-    self.setupPlusServer()
+    #self.setupPlusServer()
 
     sequenceLogic = slicer.modules.sequences.logic()
 
