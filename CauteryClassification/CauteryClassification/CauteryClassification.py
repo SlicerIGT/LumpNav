@@ -36,6 +36,20 @@ except:
 
 import pickle
 
+from pandas.io.formats.format import buffer_put_lines
+import numpy as np
+from sklearn import svm
+import matplotlib.pyplot as plt
+from sklearn.model_selection import train_test_split
+from sklearn.cluster import KMeans
+import pandas as pd
+from mlxtend.plotting import plot_decision_regions
+from sklearn.decomposition import PCA
+from sklearn.manifold import TSNE
+from sklearn.ensemble import RandomForestClassifier
+from scipy.fft import fft, ifft, rfft, rfftfreq
+from scipy.signal import detrend, resample
+
 #
 # CauteryClassification
 #
@@ -164,7 +178,7 @@ class CauteryClassificationWidget(ScriptedLoadableModuleWidget, VTKObservationMi
     self.initializeParameterNode()
 
     # Oscilloscope
-    self.ui.displaySampleGraphButton.connect('clicked()', self.onDisplaySampleGraphButton)
+    self.ui.displayFftResults.connect('clicked()', self.displayFftResults)
     self.ui.streamGraphButton.connect('toggled(bool)', self.onStreamGraphButton)
     self.ui.collectOffButton.connect('toggled(bool)', self.onCollectOffToggled)
     self.ui.collectCutAirButton.connect('toggled(bool)', self.onCollectCutAirToggled)
@@ -172,7 +186,7 @@ class CauteryClassificationWidget(ScriptedLoadableModuleWidget, VTKObservationMi
     self.ui.collectCoagAirButton.connect('toggled(bool)', self.onCollectCoagAirToggled)
     self.ui.collectCoagTissueButton.connect('toggled(bool)', self.onCollectCoagTissueToggled)
     self.ui.trainAndImplementModelButton.connect('clicked()', self.onTrainAndImplementModelClicked)
-    self.ui.useBaseModelButton.connect('toggled(bool)', self.onUseBaseModelClicked)
+    self.ui.useModelButton.connect('toggled(bool)', self.onUseModelClicked)
     self.ui.resetModelButton.connect('clicked()', self.onResetModelClicked)
 
   def cleanup(self):
@@ -280,9 +294,9 @@ class CauteryClassificationWidget(ScriptedLoadableModuleWidget, VTKObservationMi
 
     self._parameterNode.EndModify(wasModified)
 
-  def onDisplaySampleGraphButton(self):
+  def displayFftResults(self):
     logging.info('onDisplaySampleGraphButton')
-    self.logic.setDisplaySampleGraphButton()
+    self.logic.displayFftResults()
 
   def onStreamGraphButton(self, toggled):
     logging.info('onStreamGraphButton')
@@ -313,9 +327,9 @@ class CauteryClassificationWidget(ScriptedLoadableModuleWidget, VTKObservationMi
     self.logic.setTrainAndImplementModel()
     return
 
-  def onUseBaseModelClicked(self, toggled):
-    logging.info('onUseBaseModelClicked')
-    self.logic.setUseBaseModelClicked(toggled)
+  def onUseModelClicked(self, toggled):
+    logging.info('onUseModelClicked')
+    self.logic.setUseModelClicked(toggled)
 
     return
   def onResetModelClicked(self):
@@ -640,8 +654,12 @@ class CauteryClassificationLogic(ScriptedLoadableModuleLogic, VTKObservationMixi
       plusRemoteNode.SaveWithSceneOff()
       parameterNode.SetNodeReferenceID(self.PLUS_REMOTE_NODE, plusRemoteNode.GetID())
 
-  def setDisplaySampleGraphButton(self):
+  def displayFftResults(self):
     #logging.info('setDisplaySampleGraphButton')
+
+    time, ChA, ChB = self.getOscilloscopeChannels()
+    print(self.fftFreqAmpSingle(ChA))
+    '''
     time, ChA, ChB = self.getOscilloscopeChannels()
     time = np.array(time)
     ChA = np.transpose(np.array(ChA))
@@ -652,6 +670,7 @@ class CauteryClassificationLogic(ScriptedLoadableModuleLogic, VTKObservationMixi
     plt.ylabel("Voltage (V)")
     plt.savefig("D:\Research\Oscilloscope\Saved Burns\Saved Figures\ChA_Array.png")
     plt.clf()
+    '''
 
   def getOscilloscopeChannels(self):
     #logging.info("getOscilloscopeChannels")
@@ -685,6 +704,10 @@ class CauteryClassificationLogic(ScriptedLoadableModuleLogic, VTKObservationMixi
     plotViewNode = plotWidget.mrmlPlotViewNode()
     plotViewNode.SetPlotChartNodeID(ChA_ChartNode.GetID())
 
+    import time
+    print("time:", time.time())
+
+
   def setStreamGraphButton(toggled):
     logging.info('setStreamGraphButton')
     #if toggled:
@@ -698,7 +721,7 @@ class CauteryClassificationLogic(ScriptedLoadableModuleLogic, VTKObservationMixi
     """
     if not parameterNode.GetParameter("Threshold"):
       parameterNode.SetParameter("Threshold", "100.0")
-    if not parameterNode.GetParameter("Invert"):
+    if not parameterNode.GetParameter("Inver t"):
       parameterNode.SetParameter("Invert", "false")
 
   def setCollectOff(self, recording):
@@ -752,8 +775,8 @@ class CauteryClassificationLogic(ScriptedLoadableModuleLogic, VTKObservationMixi
       # TODO: take this outside the for loop
       featureCollectOff[i][0] = self.lmrSum(ChA, ChB)
       featureCollectOff[i][1] = self.maximum(ChB)
-      featureCollectOff[i][2] = self.absSum(ChA)
-      featureCollectOff[i][3] = self.absSum(ChB)
+      featureCollectOff[i][2] = self.fftPeakFreq(ChA)
+      featureCollectOff[i][3] = self.fftPeakAmp(ChA)
       featureCollectOff[i][4] = self.absSum(ChA)
       featureCollectOff[i][5] = self.absSum(ChB)
       item = collectOffSeqBr.SelectNextItem()
@@ -778,8 +801,8 @@ class CauteryClassificationLogic(ScriptedLoadableModuleLogic, VTKObservationMixi
       channelBCollectCutAir[i] = ChB
       featureCollectCutAir[i][0] = self.lmrSum(ChA, ChB)
       featureCollectCutAir[i][1] = self.maximum(ChB)
-      featureCollectCutAir[i][2] = self.absSum(ChA)
-      featureCollectCutAir[i][3] = self.absSum(ChB)
+      featureCollectCutAir[i][2] = self.fftPeakFreq(ChA)
+      featureCollectCutAir[i][3] = self.fftPeakAmp(ChA)
       featureCollectCutAir[i][4] = self.lmrSum(ChA, ChB)
       featureCollectCutAir[i][5] = self.maximum(ChB)
       collectCutAirSeqBr.SelectNextItem()
@@ -804,8 +827,8 @@ class CauteryClassificationLogic(ScriptedLoadableModuleLogic, VTKObservationMixi
       channelBCollectCutTissue[i] = ChB
       featureCollectCutTissue[i][0] = self.lmrSum(ChA, ChB)
       featureCollectCutTissue[i][1] = self.maximum(ChB)
-      featureCollectCutTissue[i][2] = self.absSum(ChA)
-      featureCollectCutTissue[i][3] = self.absSum(ChB)
+      featureCollectCutTissue[i][2] = self.fftPeakFreq(ChA)
+      featureCollectCutTissue[i][3] = self.fftPeakAmp(ChA)
       featureCollectCutTissue[i][4] = self.maximum(ChB)
       featureCollectCutTissue[i][5] = self.maximum(ChB)
       collectCutTissueSeqBr.SelectNextItem()
@@ -831,8 +854,8 @@ class CauteryClassificationLogic(ScriptedLoadableModuleLogic, VTKObservationMixi
       channelBCollectCoagAir[i] = ChB
       featureCollectCoagAir[i][0] = self.lmrSum(ChA, ChB)
       featureCollectCoagAir[i][1] = self.maximum(ChB)
-      featureCollectCoagAir[i][2] = self.absSum(ChA)
-      featureCollectCoagAir[i][3] = self.absSum(ChB)
+      featureCollectCoagAir[i][2] = self.fftPeakFreq(ChA)
+      featureCollectCoagAir[i][3] = self.fftPeakAmp(ChA)
       featureCollectCoagAir[i][4] = self.lmrSum(ChA, ChB)
       featureCollectCoagAir[i][5] = self.maximum(ChB)
       collectCoagAirSeqBr.SelectNextItem()
@@ -858,8 +881,8 @@ class CauteryClassificationLogic(ScriptedLoadableModuleLogic, VTKObservationMixi
       channelBCollectCoagTissue[i] = ChB
       featureCollectCoagTissue[i][0] = self.lmrSum(ChA, ChB)
       featureCollectCoagTissue[i][1] = self.maximum(ChB)
-      featureCollectCoagTissue[i][2] = self.absSum(ChA)
-      featureCollectCoagTissue[i][3] = self.absSum(ChB)
+      featureCollectCoagTissue[i][2] = self.fftPeakFreq(ChA)
+      featureCollectCoagTissue[i][3] = self.fftPeakAmp(ChA)
       featureCollectCoagTissue[i][4] = self.lmrSum(ChA, ChB)
       featureCollectCoagTissue[i][5] = self.maximum(ChB)
       collectCoagTissueSeqBr.SelectNextItem()
@@ -869,10 +892,10 @@ class CauteryClassificationLogic(ScriptedLoadableModuleLogic, VTKObservationMixi
     np.save("D:/Research/Oscilloscope/channelBCollectCoagTissue.npy", channelBCollectCoagTissue)
 
     # append arrays, build X and Y\
-    features = np.append(featureCollectOff[:, :2], featureCollectCutAir[:, :2], axis=0)
-    features = np.append(features, featureCollectCutTissue[:, :2], axis=0)
-    features = np.append(features, featureCollectCoagAir[:, :2], axis=0)
-    features = np.append(features, featureCollectCoagTissue[:, :2], axis=0)
+    features = np.append(featureCollectOff[:, 2:5], featureCollectCutAir[:, 2:5], axis=0)
+    features = np.append(features, featureCollectCutTissue[:, 2:5], axis=0)
+    features = np.append(features, featureCollectCoagAir[:, 2:5], axis=0)
+    features = np.append(features, featureCollectCoagTissue[:, 2:5], axis=0)
     Y = np.append(Y_CollectOff, Y_CollectCutAir)
     Y = np.append(Y, Y_CollectCutTissue)
     Y = np.append(Y, Y_CollectCoagAir)
@@ -892,8 +915,8 @@ class CauteryClassificationLogic(ScriptedLoadableModuleLogic, VTKObservationMixi
     logging.info("buildScopeModel")
     X_training, X_test, Y_train, Y_test = train_test_split(features, Y, test_size=0.2)
 
-    svc = svm.LinearSVC().fit(X_training,
-                              Y_train)  # svm.SVC(kernel = 'poly').fit(X_training, Y_train) #kernel = 'linear', C=1.0
+    ##svc = svm.LinearSVC().fit(X_training, Y_train)
+    svc = svm.SVC(kernel = 'linear', decision_function_shape='ovo').fit(X_training, Y_train) #kernel = 'linear', C=1.0
     # lin =
     # rbf = svm.SVC(kernel = 'rbf', gamma = 0.9, C=1.0).fit(X_training, Y_train)
     # poly = svm.SVC(kernel = 'poly', degree = 3, C = 1.0).fit(X_training, Y_train)
@@ -1030,16 +1053,16 @@ class CauteryClassificationLogic(ScriptedLoadableModuleLogic, VTKObservationMixi
   #   scopeCoagTissueVolumeB = parameterNode.GetNodeReference(self.SCOPE_COAG_TISSUE_VOLUME_B)
   #   scopeCoagTissueArrayB = slicer.util.arrayFromVolume(scopeCoagTissueVolumeB)
 
-  def setUseBaseModelClicked(self, clicked):
+  def setUseModelClicked(self, clicked):
     parameterNode = self.getParameterNode()
     signal_Signal = parameterNode.GetNodeReference(self.SIGNAL_SIGNAL)
     if clicked:
-      self.addObserver(signal_Signal, slicer.vtkMRMLScalarVolumeNode.ImageDataModifiedEvent, self.useBaseModelModified)
+      self.addObserver(signal_Signal, slicer.vtkMRMLScalarVolumeNode.ImageDataModifiedEvent, self.useModelModified)
     else:
       self.removeObserver(signal_Signal, slicer.vtkMRMLScalarVolumeNode.ImageDataModifiedEvent,
-                          self.useBaseModelModified)
+                          self.useModelModified)
 
-  def useBaseModelModified(self, observer, eventID):
+  def useModelModified(self, observer, eventID):
     # TODO: how do I non-specific to my computer file paths
     filename = "D:\Research\Oscilloscope\cauteryModelSVM_svc_78accuracy.sav"
     import pickle
@@ -1106,6 +1129,45 @@ class CauteryClassificationLogic(ScriptedLoadableModuleLogic, VTKObservationMixi
   def mMean(self, channelA, channelB):
     mMean = (self.absMean(channelA) * self.absSum(channelB)) * 100
     return mMean
+
+  def fftFreqAmpSingle(self, channelA):
+    fs = 4e3
+    x = channelA
+    x = detrend(x)
+    x = resample(x, int(fs * 0.1))
+    t = np.linspace(0, 0.1, int(fs * 0.1))
+    F = rfftfreq(len(x), 1 / fs)
+    X = np.abs(rfft(x))
+    maxFreq = np.max(X)
+    index = np.where(X == maxFreq)
+    amplitude = F[index][0]
+    return [maxFreq,amplitude]
+
+  def fftPeakFreq(self, channelA):
+    fs = 4e3
+    x = channelA
+    x = detrend(x)
+    x = resample(x, int(fs * 0.1))
+    t = np.linspace(0, 0.1, int(fs * 0.1))
+    F = rfftfreq(len(x), 1 / fs)
+    X = np.abs(rfft(x))
+    maxFreq = np.max(X)
+    index = np.where(X == maxFreq)
+    amplitude = F[index][0]
+    return maxFreq
+
+  def fftPeakAmp(self, channelA):
+    fs = 4e3
+    x = channelA
+    x = detrend(x)
+    x = resample(x, int(fs * 0.1))
+    t = np.linspace(0, 0.1, int(fs * 0.1))
+    F = rfftfreq(len(x), 1 / fs)
+    X = np.abs(rfft(x))
+    maxFreq = np.max(X)
+    index = np.where(X == maxFreq)
+    amplitude = F[index][0]
+    return amplitude
 
   def process(self, inputVolume, outputVolume, imageThreshold, invert=False, showResult=True):
     """
