@@ -248,6 +248,7 @@ class LumpNav2Widget(ScriptedLoadableModuleWidget, VTKObservationMixin):
     self.ui.customUiButton.connect('toggled(bool)', self.onCustomUiClicked)
     self.ui.startPlusButton.connect('toggled(bool)', self.onStartPlusClicked)
     self.ui.displayRASButton.connect('toggled(bool)', self.onDisplayRASClicked)
+    self.ui.displayCauteryStateButton.connect('toggled(bool)', self.onDisplayCauteryStateClicked)
     self.ui.toolsCollapsibleButton.connect('contentsCollapsed(bool)', self.onToolsCollapsed)
     self.ui.contouringCollapsibleButton.connect('contentsCollapsed(bool)', self.onContouringCollapsed)
     self.ui.navigationCollapsibleButton.connect('contentsCollapsed(bool)', self.onNavigationCollapsed)
@@ -266,6 +267,7 @@ class LumpNav2Widget(ScriptedLoadableModuleWidget, VTKObservationMixin):
     self.ui.displayDistanceButton.connect('toggled(bool)', self.onDisplayDistanceClicked)
     self.ui.exitButton.connect('clicked()', self.onExitButtonClicked)
     self.ui.saveSceneButton.connect('clicked()', self.onSaveSceneClicked)
+
 
     #contouring
     self.ui.normalBrightnessButton.connect('clicked()', self.onNormalBrightnessClicked)
@@ -522,6 +524,10 @@ class LumpNav2Widget(ScriptedLoadableModuleWidget, VTKObservationMixin):
       RASMarkups.SetDisplayVisibility(1)
     else:
       RASMarkups.SetDisplayVisibility(0)
+
+  def onDisplayCauteryStateClicked(self, toggled):
+    logging.info("onDisplayCauteryStateClicked({})".format(toggled))
+    self.logic.setDisplayCauteryStateClicked(toggled)
 
   def onCustomUiClicked(self, checked):
     self.setCustomStyle(checked)
@@ -2273,6 +2279,14 @@ class LumpNav2Logic(ScriptedLoadableModuleLogic, VTKObservationMixin):
     needleTipToNeedle_settings = needleTipToNeedle_settings.tolist()
     needleTipToNeedle_settings = json.dumps(needleTipToNeedle_settings)
     settings.setValue(self.NEEDLETIP_TO_NEEDLE_SETTING, needleTipToNeedle_settings)
+
+
+  def setDisplayCauteryStateClicked(self, pressed):
+    parameterNode = self.getParameterNode()
+    import CauteryClassification
+    cauteryClassificationLogic = CauteryClassification.CauteryClassificationLogic()
+    cauteryClassificationLogic.setup()
+    cauteryClassificationLogic.setUseModelClicked(pressed)
 
   #
 # LumpNav2Test
