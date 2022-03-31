@@ -18,9 +18,9 @@
      </property>
      <layout class="QVBoxLayout" name="verticalLayout_3">
       <item>
-       <widget class="QPushButton" name="displaySampleGraphButton">
+       <widget class="QPushButton" name="displayFftResults">
         <property name="text">
-         <string>displaySampleGraphButton</string>
+         <string>displayFftResults</string>
         </property>
        </widget>
       </item>
@@ -89,9 +89,9 @@
        </widget>
       </item>
       <item>
-       <widget class="QPushButton" name="useBaseModelButton">
+       <widget class="QPushButton" name="useModelButton">
         <property name="text">
-         <string>useBaseModelButton</string>
+         <string>useModelButton</string>
         </property>
        </widget>
       </item>
