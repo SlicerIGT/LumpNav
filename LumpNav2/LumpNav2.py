@@ -295,6 +295,8 @@ class LumpNav2Widget(ScriptedLoadableModuleWidget, VTKObservationMixin):
     self.ui.deleteLastFiducialNavigationButton.connect('clicked()', self.onDeleteLastFiducialClicked)
     self.ui.toolModelButton.connect('toggled(bool)', self.onToolModelClicked)
     self.ui.threeDViewButton.connect('toggled(bool)', self.onThreeDViewButton)
+    self.ui.breachLocationButton.connect('toggled(bool)', self.onBreachLocationButtonClicked)
+    self.ui.deleteTumorBreachButton.connect('clicked()', self.onDeleteTumorBreachButtonClicked)
 
     # Add custom layouts
     self.logic.addCustomLayouts()
@@ -481,6 +483,19 @@ class LumpNav2Widget(ScriptedLoadableModuleWidget, VTKObservationMixin):
       self.ui.startStopRecordingButton.text = "Start Ultrasound Recording"
       self.logic.onUltrasoundSequenceBrowserClicked(toggled)
 
+  def onBreachLocationButtonClicked(self, toggled):
+    parameterNode = self._parameterNode
+    breachMarkups_Needle = parameterNode.GetNodeReference(self.logic.BREACH_MARKUPS_NEEDLE)
+    if toggled:
+      breachMarkups_Needle.SetDisplayVisibility(1)
+    else:
+      breachMarkups_Needle.SetDisplayVisibility(0)
+
+  def onDeleteTumorBreachButtonClicked(self):
+    parameterNode = self._parameterNode
+    breachMarkups_Needle = parameterNode.GetNodeReference(self.logic.BREACH_MARKUPS_NEEDLE)
+    breachMarkups_Needle.RemoveAllMarkups()
+
   def onFreezeUltrasoundClicked(self, toggled):
     logging.info("onFreezeUltrasoundClicked")
     plusServerNode = self._parameterNode.GetNodeReference(self.logic.PLUS_SERVER_NODE)
@@ -493,13 +508,6 @@ class LumpNav2Widget(ScriptedLoadableModuleWidget, VTKObservationMixin):
     #self.logic.setFreezeUltrasoundClicked()
 
   def onStartPlusClicked(self, toggled):
-    # plusServerNode = self._parameterNode.GetNodeReference(self.logic.PLUS_SERVER_NODE)
-    # if plusServerNode:
-    #   if toggled == True:
-    #     plusServerNode.StartServer()
-    #   else:
-    #     # self.ui.startPlusButton.text
-    #     plusServerNode.StopServer()
     plusRemoteNode = self._parameterNode.GetNodeReference(self.logic.PLUS_REMOTE_NODE)
     if plusRemoteNode:
       if toggled:
@@ -560,38 +568,6 @@ class LumpNav2Widget(ScriptedLoadableModuleWidget, VTKObservationMixin):
       self._parameterNode.SetParameter(self.logic.POINTS_STATUS, self.logic.POINTS_UNSELECTED)
       interactionNode.SetCurrentInteractionMode(interactionNode.ViewTransform)
     self._updatingGui = False
-
-    '''
-    # if self._updatingGui == True:
-    #   return
-    # self._updatingGui = True
-    # if toggled:
-    #   self._parameterNode.SetParameter(self.logic.CONTOUR_STATUS, self.logic.CONTOUR_ERASING)
-    #   self.ui.markPointsButton.setChecked(False)
-    # else:
-    #   self._parameterNode.SetParameter(self.logic.CONTOUR_STATUS, self.logic.CONTOUR_UNSELECTED)
-    # self._updatingGui = False
-    # TODO: add this to function call from widget
-    if self._updatingGui == True:
-      return
-    self._updatingGui = True
-    parameterNode = self.getParmeterNode()
-    interactionNode = slicer.app.applicationLogic().GetInteractionNode()
-    if changePoints:
-      interactionNode.SetPlaceModePersistence(1)
-      interactionNode.SetCurrentInteractionMode(interactionNode.Place)
-      selectionNode = slicer.app.applicationLogic().GetSelectionNode()
-      selectionNode.SetReferenceActivePlaceNodeClassName("vtkMRMLMarkupsFiducialNode")
-      tumorMarkups_Needle = parameterNode.GetNodeReference(self.logic.TUMOR_MARKUPS_NEEDLE)
-      selectionNode.SetActivePlaceNodeID(tumorMarkups_Needle.GetID())
-      parameterNode.SetParameter(self.logic.CONTOUR_STATUS, self.logic.CONTOUR_ADDING)
-      parameterNode.SetParameter(self.logic.POINTS_STATUS, self.logic.POINTS_ERASING)
-    else:  # deactivate placement mode
-      parameterNode.SetParameter(self.logic.CONTOUR_STATUS, self.logic.CONTOUR_UNSELECTED)
-      interactionNode.SetCurrentInteractionMode(interactionNode.ViewTransform)
-    # TODO: add those after modifyPoints function call line in widget class
-    self._updatingGui = False
-    '''
 
   def onMarkPointsToggled(self, toggled):
     if self._updatingGui == True:
@@ -853,13 +829,6 @@ class LumpNav2Widget(ScriptedLoadableModuleWidget, VTKObservationMixin):
       self.ui.bottomAutoCenterCameraButton.setChecked(False)
     self.ui.bottomAutoCenterCameraButton.blockSignals(blockSignalState)
 
-    #blockSignalState = self.ui.bottomBullseyeCameraButton.blockSignals(True)
-    #if (self.viewpointLogic.getViewpointForViewNode(centerViewNode).isCurrentModeBullseye()):
-    #  self.ui.bottomBullseyeCameraButton.setChecked(True)
-    #else:
-    #  self.ui.bottomBullseyeCameraButton.setChecked(False)
-    #self.ui.bottomBullseyeCameraButton.blockSignals(blockSignalState)
-
   def setCustomStyle(self, visible):
     """
     Applies UI customization. Hide Slicer widgets and apply custom stylesheet.
@@ -1035,7 +1004,6 @@ class LumpNav2Widget(ScriptedLoadableModuleWidget, VTKObservationMixin):
     self._updatingGUIFromParameterNode = True
 
     # Read parameter nodes and update GUI accordingly
-    # ...
 
     # If new MRML nodes are referenced, update observers
 
@@ -1086,12 +1054,6 @@ class LumpNav2Widget(ScriptedLoadableModuleWidget, VTKObservationMixin):
       self.ui.deleteLastFiducialNavigationButton.setEnabled(False)
       self.ui.selectPointsToEraseButton.setChecked(False)
       self.ui.selectPointsToEraseButton.setEnabled(False)
-    
-    # interactionNode = slicer.app.applicationLogic().GetInteractionNode()
-    # if interactionNode.GetInteractionModeAsString() == "Place" and self.ui.selectPointsToEraseButton.isChecked() == False:
-    #   self.ui.markPointsButton.setChecked(True)
-    # else:
-    #   self.ui.markPointsButton.setChecked(False)
 
   def updateGUIFromMRML(self, caller=None, event=None):
     """
@@ -1118,10 +1080,8 @@ class LumpNav2Widget(ScriptedLoadableModuleWidget, VTKObservationMixin):
     if cauteryModel is not None:
       if cauteryModel.GetDisplayVisibility():
         self.ui.cauteryVisibilityButton.checked = True
-        #self.ui.cauteryVisibilityButton.text = "Hide cautery model"
       else:
         self.ui.cauteryVisibilityButton.checked = False
-        #self.ui.cauteryVisibilityButton.text = "Show cautery model"
 
     trackingSqBr = self._parameterNode.GetNodeReference(self.logic.TRACKING_SEQUENCE_BROWSER)
     if trackingSqBr is not None:
@@ -1202,7 +1162,18 @@ class LumpNav2Logic(ScriptedLoadableModuleLogic, VTKObservationMixin):
   TRANSD_TO_NEEDLE = "TransdToNeedle"
   PREDICTION_TO_NEEDLE = "PredictionToNeedle"
 
+  CONTOUR_STATUS = "ContourStatus"
+  CONTOUR_ADDING = "ContourAdding"
+  POINTS_STATUS = "PointsStatus"
+  POINTS_ADDING = "PointsAdding"
+  POINTS_ERASING = "PointsErasing"
+  CONTOUR_UNSELECTED = "ContourUnselected"
+  POINTS_UNSELECTED = "PointsUnselected"
 
+  DISPLAY_BREACH_STATUS = "DisplayBreachStatus"
+  DISPLAY_BREACH_LOCATION = "DisplayBreachLocation"
+  DISPLAY_BREACH_HIDDEN = "DisplayBreachHidden"
+  BREACH_STATUS = "BreachStatus"
   # Ultrasound image
 
   IMAGE_IMAGE = "Image_Image"
@@ -1227,6 +1198,7 @@ class LumpNav2Logic(ScriptedLoadableModuleLogic, VTKObservationMixin):
   TUMOR_MODEL = "TumorModel"
   STICK_MODEL = "StickModel"
   WARNING_SOUND_SETTING = "LumpNav2/WarningSoundEnabled"
+  NEEDLETIP_TO_NEEDLE_SETTING = "NeedleTipToNeedleSetting"
 
   # Model reconstruction
   ROI_NODE = "ROI"
@@ -1249,6 +1221,7 @@ class LumpNav2Logic(ScriptedLoadableModuleLogic, VTKObservationMixin):
   ULTRASOUND_SEQUENCE_BROWSER = "UltrasoundSequenceBrowser"
   TUMOR_MARKUPS_NEEDLE = "TumorMarkups_Needle"
   BREACH_WARNING = "LumpNavBreachWarning"
+  BREACH_MARKUPS_NEEDLE = "BreachMarkups_Needle"
 
   RAS_MARKUPS = "DirectionMarkups_RAS"
 
@@ -1461,8 +1434,25 @@ class LumpNav2Logic(ScriptedLoadableModuleLogic, VTKObservationMixin):
     needleVisible = slicer.util.settingsValue(self.NEEDLE_VISIBILITY_SETTING, True, converter=slicer.util.toBool)
     needleModel.SetDisplayVisibility(needleVisible)
 
+    import json
     needleTipToNeedle = parameterNode.GetNodeReference(self.NEEDLETIP_TO_NEEDLE)
     needleModel.SetAndObserveTransformNodeID(needleTipToNeedle.GetID())
+
+    settings = qt.QSettings()
+    needleTipToNeedle_settings = slicer.util.settingsValue(self.NEEDLETIP_TO_NEEDLE_SETTING, "")
+    if needleTipToNeedle_settings == "":
+      needleTipToNeedle_settings = slicer.util.arrayFromTransformMatrix(needleTipToNeedle)
+      needleTipToNeedle_settings = needleTipToNeedle_settings.tolist()
+      needleTipToNeedle_settings = json.dumps(needleTipToNeedle_settings)
+      settings.setValue(self.NEEDLETIP_TO_NEEDLE_SETTING, needleTipToNeedle_settings)
+    else:
+      needleTipToNeedle_settings = json.loads(needleTipToNeedle_settings)
+      needleTipToNeedle_settings = np.array(needleTipToNeedle_settings)
+      needleTipToNeedle_settings = slicer.util.vtkMatrixFromArray(needleTipToNeedle_settings)
+      needleTipToNeedle.SetMatrixTransformToParent(needleTipToNeedle_settings)
+    self.addObserver(needleTipToNeedle, slicer.vtkMRMLLinearTransformNode.TransformModifiedEvent, self.needleTipToNeedleModified)
+
+
 
     # Cautery model
 
@@ -1518,6 +1508,7 @@ class LumpNav2Logic(ScriptedLoadableModuleLogic, VTKObservationMixin):
       tumorMarkups_Needle.CreateDefaultDisplayNodes()
       tumorMarkups_Needle.GetDisplayNode().SetTextScale(0)
       tumorMarkups_Needle.LockedOn()
+      parameterNode.SetNodeReferenceID(self.TUMOR_MARKUPS_NEEDLE, tumorMarkups_Needle.GetID())
     tumorMarkups_Needle.SetAndObserveTransformNodeID(needleToReference.GetID())
     self.removeObservers(method=self.onTumorMarkupsNodeModified)
     self.addObserver(tumorMarkups_Needle, slicer.vtkMRMLMarkupsNode.PointPositionDefinedEvent, self.modifyPoints)
@@ -1531,6 +1522,7 @@ class LumpNav2Logic(ScriptedLoadableModuleLogic, VTKObservationMixin):
       RASMarkups = slicer.mrmlScene.AddNewNodeByClass("vtkMRMLMarkupsFiducialNode", self.RAS_MARKUPS)
       RASMarkups.CreateDefaultDisplayNodes()
       RASMarkups.GetDisplayNode().SetTextScale(5)
+      RASMarkups.GetDisplayNode().SetGlyphScale(5)
       RASMarkups.AddFiducial(10, 0, 0,"RIGHT")
       RASMarkups.AddFiducial(0, 10, 0, "ANTERIOR")
       RASMarkups.AddFiducial(0, 0, 10, "SUPERIOR")
@@ -1542,8 +1534,9 @@ class LumpNav2Logic(ScriptedLoadableModuleLogic, VTKObservationMixin):
       parameterNode.SetNodeReferenceID(self.RAS_MARKUPS, RASMarkups.GetID())
 
     # OpenIGTLink connection
-
-    self.setupPlusServer()
+    
+    #PLUS Server
+    #self.setupPlusServer()
 
     sequenceLogic = slicer.modules.sequences.logic()
 
@@ -1600,9 +1593,23 @@ class LumpNav2Logic(ScriptedLoadableModuleLogic, VTKObservationMixin):
       breachWarningNode.SetAndObserveWatchedModelNodeID(tumorModel_Needle.GetID())
       breachWarningNodeObserver = breachWarningNode.AddObserver(vtk.vtkCommand.ModifiedEvent, self.onBreachWarningNodeChanged)
       breachWarningLogic = slicer.modules.breachwarning.logic()
-      # Line properties can only be set after the line is creaed (made visible at least once)
+      # Line properties can only be set after the line is created (made visible at least once)
       breachWarningLogic.SetLineToClosestPointVisibility(False, breachWarningNode)
       parameterNode.SetNodeReferenceID(self.BREACH_WARNING, breachWarningNode.GetID())
+      parameterNode.SetParameter(self.DISPLAY_BREACH_STATUS, self.DISPLAY_BREACH_LOCATION)
+      parameterNode.SetParameter(self.BREACH_STATUS, "False")
+
+    breachMarkups_Needle = parameterNode.GetNodeReference(self.BREACH_MARKUPS_NEEDLE)
+    if breachMarkups_Needle is None:
+      breachMarkups_Needle = slicer.mrmlScene.AddNewNodeByClass("vtkMRMLMarkupsFiducialNode", self.BREACH_MARKUPS_NEEDLE)
+      breachMarkups_Needle.CreateDefaultDisplayNodes()
+      breachMarkups_Needle.GetDisplayNode().SetGlyphScale(7)
+      breachMarkups_Needle.GetDisplayNode().SetTextScale(7)
+      breachMarkups_Needle.GetDisplayNode().SetColor(1,0,0)
+      breachMarkups_Needle.LockedOn()
+      breachMarkups_Needle.SetDisplayVisibility(1)
+      parameterNode.SetNodeReferenceID(self.BREACH_MARKUPS_NEEDLE, breachMarkups_Needle.GetID())
+    breachMarkups_Needle.SetAndObserveTransformNodeID(needleToReference.GetID())
 
     cauteryCameraToCautery =  parameterNode.GetNodeReference(self.CAUTERYCAMERA_TO_CAUTERY)
     if cauteryCameraToCautery is None:
@@ -2182,51 +2189,8 @@ class LumpNav2Logic(ScriptedLoadableModuleLogic, VTKObservationMixin):
       tumorMarkups_Needle.GetNthFiducialPosition(numberOfPoints - 1, mostRecentPoint)
       closestPoint = self.returnClosestPoint(tumorMarkups_Needle, mostRecentPoint)
       tumorMarkups_Needle.RemoveMarkup(closestPoint)
-      tumorMarkups_Needle.RemoveMarkup(0)
+      tumorMarkups_Needle.RemoveMarkup(tumorMarkups_Needle.GetNumberOfFiducials()-1)
       self.createTumorFromMarkups()
-
-  def setRemoveFiducialPoint(self):
-
-    #TODO: Remove function
-    parameterNode = self.getParameterNode()
-    tumorMarkups_Needle = parameterNode.GetNodeReference(self.TUMOR_MARKUPS_NEEDLE)
-    if self.eraserFlag == False :
-      self.eraserFlag = True
-      return
-    self.eraserFlag = False
-
-    #place point
-    #locate closest point
-    #erase last placed point and closest point
-    numberOfPoints = tumorMarkups_Needle.GetNumberOfFiducials()
-    fiducialPosition = [0.0,0.0,0.0]
-    tumorMarkups_Needle.GetNthFiducialPosition(0, fiducialPosition)
-    logging.info("Used eraser to remove point at %s", fiducialPosition)
-    tumorMarkups_Needle.RemoveMarkup(0)
-
-
-    if numberOfPoints == 1 :
-      #self.deleteLastFiducialButton.setEnabled(False)
-      #self.deleteAllFiducialsButton.setEnabled(False)
-      #self.deleteLastFiducialNavigationButton.setEnabled(False)
-      #self.selectPointsToEraseButton.setEnabled(False)
-      #self.selectPointsToEraseButton.setChecked(False)
-      tumorMarkups_Needle.GetNthFiducialPosition(0,fiducialPosition)
-      logging.info("Used eraser to remove point at %s", fiducialPosition)
-      tumorMarkups_Needle.RemoveMarkup(0)
-      sphereSource = vtk.vtkSphereSource()
-      sphereSource.SetRadius(0.001)
-      tumorModel_Needle = parameterNode.GetNodeReference(self.TUMOR_MODEL)
-      tumorModel_Needle.SetPolyDataConnection(sphereSource.GetOutputPort())
-    elif numberOfPoints > 1 :
-      numberOfErasedPoints = eraseMarkups_Needle.GetNumberOfFiducials()
-      mostRecentPoint = [0.0,0.0,0.0]
-      eraseMarkups_Needle.GetNthFiducialPosition(numberOfErasedPoints-1, mostRecentPoint)
-      closestPoint = self.returnClosestPoint(tumorMarkups_Needle, mostRecentPoint)
-      tumorMarkups_Needle = parameterNode.GetNodeReference(self.TUMOR_MARKUPS_NEEDLE)
-      tumorMarkups_Needle.RemoveMarkup(closestPoint)
-    tumorMarkups_Needle.Modified()
-    self.createTumorFromMarkups()
 
     # returns closest marked point to where eraser fiducial was placed
   def returnClosestPoint(self, fiducialNode, erasePoint) :
@@ -2236,7 +2200,7 @@ class LumpNav2Logic(ScriptedLoadableModuleLogic, VTKObservationMixin):
     fiducialNode.GetNthFiducialPosition(0, closestPosition)
     distanceToClosest = self.returnDistance(closestPosition, erasePoint)
     fiducialPosition = [0.0,0.0,0.0]
-    for fiducialIndex in range(1, numberOfPoints) :
+    for fiducialIndex in range(0, numberOfPoints-1) :
       fiducialNode.GetNthFiducialPosition(fiducialIndex, fiducialPosition)
       distanceToPoint = self.returnDistance(fiducialPosition, erasePoint)
       if distanceToPoint < distanceToClosest :
@@ -2263,6 +2227,16 @@ class LumpNav2Logic(ScriptedLoadableModuleLogic, VTKObservationMixin):
 
   def onBreachWarningNodeChanged(self, observer, eventid):
     self.showDistanceToTumor()
+    parameterNode = self.getParameterNode()
+    breachWarningNode = parameterNode.GetNodeReference(self.BREACH_WARNING)
+    if (breachWarningNode.GetClosestDistanceToModelFromToolTip() < 0):
+      if parameterNode.GetParameter(self.BREACH_STATUS) == "False":
+        breachLocation = breachWarningNode.GetClosestPointOnModel()
+        breachMarkups_Needle = parameterNode.GetNodeReference(self.BREACH_MARKUPS_NEEDLE)
+        breachMarkups_Needle.AddFiducial(breachLocation[0], breachLocation[1], breachLocation[2], "BREACH!")
+      parameterNode.SetParameter(self.BREACH_STATUS, "True")
+    else:
+      parameterNode.SetParameter(self.BREACH_STATUS, "False")
 
   def showDistanceToTumor(self) :
     return
@@ -2288,6 +2262,17 @@ class LumpNav2Logic(ScriptedLoadableModuleLogic, VTKObservationMixin):
     predictionData = predictionImage.GetImageData()
     if predictionData.GetDimensions() != imageDimensions:
       predictionData.SetDimensions(imageDimensions)
+
+  def needleTipToNeedleModified(self, observer, eventid):
+    logging.debug('needleTipToNeedleModified')
+    import json
+    settings = qt.QSettings()
+    parameterNode = self.getParameterNode()
+    needleTipToNeedle = parameterNode.GetNodeReference(self.NEEDLETIP_TO_NEEDLE)
+    needleTipToNeedle_settings = slicer.util.arrayFromTransformMatrix(needleTipToNeedle)
+    needleTipToNeedle_settings = needleTipToNeedle_settings.tolist()
+    needleTipToNeedle_settings = json.dumps(needleTipToNeedle_settings)
+    settings.setValue(self.NEEDLETIP_TO_NEEDLE_SETTING, needleTipToNeedle_settings)
 
   #
 # LumpNav2Test
