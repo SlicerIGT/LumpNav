@@ -1063,24 +1063,37 @@ class CauteryClassificationLogic(ScriptedLoadableModuleLogic, VTKObservationMixi
                           self.useModelModified)
 
   def useModelModified(self, observer, eventID):
-    # TODO: how do I non-specific to my computer file paths
-    filename = "D:\Research\Oscilloscope\cauteryModelSVM_svc_78accuracy.sav"
-    import pickle
-    cauterySVMModel = pickle.load(open(filename, "rb"))
+    #TODO: is there a better way to load and run the model?
+    scriptPath = os.path.dirname(os.path.abspath(__file__))
+    modelsPath = str(scriptPath) + "\Models"
+    fileName_SVM = modelsPath + "\chicken_20000_SVM.sav"
+    fileName_RF = modelsPath + "\chicken_20000_RF.sav"
+    svm = pickle.load(open(fileName_SVM, "rb"))
+    rf = pickle.load(open(fileName_RF, "rb"))
     parameterNode = self.getParameterNode()
     oscilloscopeVolume = parameterNode.GetNodeReference(self.SIGNAL_SIGNAL)
     oscilloscopeArray = slicer.util.arrayFromVolume(oscilloscopeVolume)
-    # TODO: create parameter node reference for arrays.
-    time = oscilloscopeArray[0, 0]
-    ChA = np.transpose(oscilloscopeArray[0, 1])
-    ChB = np.transpose(oscilloscopeArray[0, 2])
-    feat = np.empty([1, 2])
-    lmrMeanTest = self.lmrMean(ChA, ChB)
-    mMeanTest = self.mMean(ChA, ChB)
-    feat[0][0] = lmrMeanTest
-    feat[0][1] = mMeanTest
-    predict = cauterySVMModel.predict(feat)
-    print("Prediction", predict)
+    oscilloscopeArray = slicer.util.arrayFromVolume(oscilloscopeVolume)
+    ChA = oscilloscopeArray[0, 1]
+    fs = 4e3
+    x = ChA
+    x = detrend(x)
+    x = resample(x, int(fs * 0.1))
+    t = np.linspace(0, 0.1, int(fs * 0.1))
+    F = rfftfreq(len(x), 1 / fs)
+    X = np.abs(rfft(x))
+    maxFreq = np.max(X)
+    index = np.where(X == maxFreq)
+    amplitude = F[index][0]
+    sumX = np.sum(X)
+    features = np.empty([1, 2])
+    features[0][0] = sumX
+    features[0][1] = amplitude
+    print(sumX, amplitude)
+    predict_svm = svm.predict(features)
+    predict_rf = rf.predict(features)
+    print("Prediction", predict_svm)
+    print("Prediction", predict_rf)
 
   def mean(self, channel):
     mean = np.mean(channel)
