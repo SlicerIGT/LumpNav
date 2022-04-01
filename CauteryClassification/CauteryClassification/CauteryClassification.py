@@ -1066,8 +1066,8 @@ class CauteryClassificationLogic(ScriptedLoadableModuleLogic, VTKObservationMixi
     #TODO: is there a better way to load and run the model?
     scriptPath = os.path.dirname(os.path.abspath(__file__))
     modelsPath = str(scriptPath) + "\Models"
-    fileName_SVM = modelsPath + "\chicken_20000_SVM.sav"
-    fileName_RF = modelsPath + "\chicken_20000_RF.sav"
+    fileName_SVM = modelsPath + "\April1_apple_40W_20000_SVM.sav"
+    fileName_RF = modelsPath + "\April1_apple_40W_20000_RF.sav"
     svm = pickle.load(open(fileName_SVM, "rb"))
     rf = pickle.load(open(fileName_RF, "rb"))
     parameterNode = self.getParameterNode()
@@ -1077,19 +1077,21 @@ class CauteryClassificationLogic(ScriptedLoadableModuleLogic, VTKObservationMixi
     ChA = oscilloscopeArray[0, 1]
     fs = 4e3
     x = ChA
-    x = detrend(x)
-    x = resample(x, int(fs * 0.1))
+    maxVoltage = np.max(x)
+    X = detrend(x)
+    X = resample(X, int(fs * 0.1))
     t = np.linspace(0, 0.1, int(fs * 0.1))
-    F = rfftfreq(len(x), 1 / fs)
-    X = np.abs(rfft(x))
+    F = rfftfreq(len(X), 1 / fs)
+    X = np.abs(rfft(X))
     maxFreq = np.max(X)
     index = np.where(X == maxFreq)
     amplitude = F[index][0]
     sumX = np.sum(X)
-    features = np.empty([1, 2])
-    features[0][0] = sumX
-    features[0][1] = amplitude
-    print(sumX, amplitude)
+    features = np.empty([1, 3])
+    features[0][0] = maxVoltage
+    features[0][1] = maxFreq
+    features[0][2] = amplitude
+    print(maxVoltage, maxFreq, amplitude)
     predict_svm = svm.predict(features)
     predict_rf = rf.predict(features)
     print("Prediction", predict_svm)
