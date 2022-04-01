@@ -7,6 +7,9 @@ import vtk, qt, ctk, slicer
 import logging
 from slicer.ScriptedLoadableModule import *
 from slicer.util import VTKObservationMixin
+import pickle
+from scipy.fft import fft, ifft, rfft, rfftfreq
+from scipy.signal import detrend, resample
 from vtk.util import numpy_support
 
 try:
@@ -2285,8 +2288,10 @@ class LumpNav2Logic(ScriptedLoadableModuleLogic, VTKObservationMixin):
     parameterNode = self.getParameterNode()
     import CauteryClassification
     cauteryClassificationLogic = CauteryClassification.CauteryClassificationLogic()
+    #cauteryClassificationLogic.init()
     cauteryClassificationLogic.setup()
     cauteryClassificationLogic.setUseModelClicked(pressed)
+
 
   #
 # LumpNav2Test
