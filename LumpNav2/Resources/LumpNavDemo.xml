@@ -100,15 +100,15 @@
         <Transform Name="ProbeToTracker" />
         <Transform Name="ReferenceToTracker" />
         <Transform Name="NeedleToTracker" />
-	    <Transform Name="CauteryToTracker" />
+	      <Transform Name="CauteryToTracker" />
         
         <Transform Name="TransdToReference" /> <!-- Depth-independent (mm to mm) ultrasound image tracking -->
         
         <Transform Name="NeedleToProbe" />    <!-- For Image to Probe calibration with needle as stylus -->
         <Transform Name="CauteryToNeedle" />  <!-- For cautery calibration in sterile field -->
         
-		<Transform Name="NeedleToReference" />
-		<Transform Name="ImageToReference" /> <!-- Only for debugging! -->
+		    <Transform Name="NeedleToReference" />
+		    <Transform Name="ImageToReference" /> <!-- Only for debugging! -->
         <Transform Name="ProbeToReference" />
         <Transform Name="CauteryToReference" />
       </TransformNames>
