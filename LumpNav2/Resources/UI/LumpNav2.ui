@@ -7,7 +7,7 @@
     <x>0</x>
     <y>0</y>
     <width>509</width>
-    <height>747</height>
+    <height>891</height>
    </rect>
   </property>
   <property name="cursor">
@@ -91,6 +91,9 @@
    </item>
    <item>
     <widget class="ctkCollapsibleButton" name="contouringCollapsibleButton">
+     <property name="enabled">
+      <bool>true</bool>
+     </property>
      <property name="text">
       <string>Tumor contouring</string>
      </property>
@@ -350,27 +353,6 @@
        </layout>
       </item>
       <item>
-       <layout class="QHBoxLayout" name="horizontalLayout_10">
-        <item>
-         <widget class="QLabel" name="transferShiftLabel">
-          <property name="text">
-           <string>Shift:</string>
-          </property>
-         </widget>
-        </item>
-        <item>
-         <widget class="QSlider" name="transferFunctionSlider">
-          <property name="sliderPosition">
-           <number>25</number>
-          </property>
-          <property name="orientation">
-           <enum>Qt::Horizontal</enum>
-          </property>
-         </widget>
-        </item>
-       </layout>
-      </item>
-      <item>
        <layout class="QHBoxLayout" name="horizontalLayout_11">
         <item>
          <widget class="QPushButton" name="breachLocationButton">
@@ -389,6 +371,34 @@
          <widget class="QPushButton" name="deleteTumorBreachButton">
           <property name="text">
            <string>Delete tumor breach</string>
+          </property>
+         </widget>
+        </item>
+       </layout>
+      </item>
+      <item>
+       <layout class="QHBoxLayout" name="horizontalLayout_10">
+        <item>
+         <widget class="QLabel" name="label_3">
+          <property name="text">
+           <string>Segmentation threshold:</string>
+          </property>
+         </widget>
+        </item>
+        <item>
+         <widget class="QSlider" name="segmentationThresholdSlider">
+          <property name="maximum">
+           <number>305</number>
+          </property>
+          <property name="orientation">
+           <enum>Qt::Horizontal</enum>
+          </property>
+         </widget>
+        </item>
+        <item>
+         <widget class="QLabel" name="thresholdSliderValue">
+          <property name="text">
+           <string>100%</string>
           </property>
          </widget>
         </item>
@@ -541,6 +551,16 @@
      </property>
      <property name="text">
       <string>Display cautery state</string>
+     </property>
+     <property name="checkable">
+      <bool>true</bool>
+     </property>
+    </widget>
+   </item>
+   <item>
+    <widget class="QPushButton" name="segmentationVisibility">
+     <property name="text">
+      <string>Show AI Segmentation</string>
      </property>
      <property name="checkable">
       <bool>true</bool>

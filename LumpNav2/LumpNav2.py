@@ -283,9 +283,9 @@ class LumpNav2Widget(ScriptedLoadableModuleWidget, VTKObservationMixin):
     self.ui.markPointCauteryTipButton.connect('clicked()', self.onMarkPointCauteryTipClicked)
     self.ui.startStopRecordingButton.connect('toggled(bool)', self.onStartStopRecordingClicked)  
     self.ui.freezeUltrasoundButton.connect('toggled(bool)', self.onFreezeUltrasoundClicked)
+    self.ui.segmentationVisibility.connect('toggled(bool)', self.onSegmentationVisibilityToggled)
     self.pivotSamplingTimer.connect('timeout()', self.onPivotSamplingTimeout)
-    self.logic.lastSliderValue = self.ui.transferFunctionSlider.value
-    self.ui.transferFunctionSlider.connect("valueChanged(int)", self.onTransferSliderValueChanged)
+    self.ui.segmentationThresholdSlider.connect("valueChanged(int)", self.onSegmentationThresholdChanged)
     self.initializeParameterNode() # Make sure parameter node is initialized (needed for module reload)
 
     #navigation
@@ -617,13 +617,20 @@ class LumpNav2Widget(ScriptedLoadableModuleWidget, VTKObservationMixin):
     self.logic.setDeleteAllFiducialsClicked()
     self.updateGUIFromParameterNode()
 
-  def onTransferSliderValueChanged(self, value):
+  def onSegmentationVisibilityToggled(self, toggled):
+    logging.debug("onSegmentationVisibilityToggled")
+    if toggled:
+      self.ui.segmentationVisibility.text = "Hide AI Segmentation"
+    else:
+      self.ui.segmentationVisibility.text = "Show AI Segmentation"
+    self.logic.setSegmentationVisibility(toggled)
+
+  def onSegmentationThresholdChanged(self, value):
+    pct = value / (255 + 50) * -100 + 100
+    self.ui.thresholdSliderValue.text =str(round(pct)) + "%"
     reconstructionVolume = self._parameterNode.GetNodeReference(self.logic.RECONSTRUCTION_VOLUME)
     if reconstructionVolume:
-      sliderMin = self.ui.transferFunctionSlider.minimum
-      sliderMax = self.ui.transferFunctionSlider.maximum
-      self.logic.setTransferFunctionValueChanged(value, sliderMin, sliderMax)
-      self.logic.lastSliderValue = value
+      self.logic.setVolumeRenderingProperty(reconstructionVolume, 50, value - 50 / 2)
 
   def getViewNode(self, viewName):
     """
@@ -1818,7 +1825,7 @@ class LumpNav2Logic(ScriptedLoadableModuleLogic, VTKObservationMixin):
 
   def onUltrasoundSequenceBrowserClicked(self, toggled):
     self.setUltrasoundSequenceBrowser(toggled)
-    # self.setLivePrediction(toggled)
+    self.setLivePrediction(toggled)
     if toggled:
       self.segmentationLogic.resumePrediction()
     else:
@@ -1844,12 +1851,10 @@ class LumpNav2Logic(ScriptedLoadableModuleLogic, VTKObservationMixin):
       # self.segmentationLogic.setRealTimePrediction(toggled)
       self.setVolumeReconstruction(toggled)
 
-      # Display prediction in slice view
-      slicer.util.setSliceViewerLayers(foreground=predictionNode, foregroundOpacity=0.5, fit=True)
-
     else:
       # Stop prediction
-      self.segmentationLogic.setRealTimePrediction(toggled)
+      self.segmentationLogic.pausePrediction()
+      # self.segmentationLogic.setRealTimePrediction(toggled)
 
       # Move transforms back
       transdToReference = parameterNode.GetNodeReference(self.TRANSD_TO_REFERENCE)
@@ -1862,13 +1867,23 @@ class LumpNav2Logic(ScriptedLoadableModuleLogic, VTKObservationMixin):
       roiNode = parameterNode.GetNodeReference(self.ROI_NODE)
       roiNode.SetAndObserveTransformNodeID(needleToReference.GetID())
 
-      # Hide segmentation cross-section view
-      slicer.util.setSliceViewerLayers(foreground=None)
-
   def setUltrasoundSequenceBrowser(self, recording):
     parameterNode = self.getParameterNode()
     sequenceBrowserUltrasound = parameterNode.GetNodeReference(self.ULTRASOUND_SEQUENCE_BROWSER)
     sequenceBrowserUltrasound.SetRecordingActive(recording)  # stop
+
+  def setSegmentationVisibility(self, toggled):
+    parameterNode = self.getParameterNode()
+    segmentationVolume = parameterNode.GetNodeReference(self.RECONSTRUCTION_VOLUME)
+    if segmentationVolume is not None:
+      if toggled:
+        slicer.util.setSliceViewerLayers(foreground=segmentationVolume, foregroundOpacity=0.5)
+        segmentationVolume.SetDisplayVisibility(True)
+      else:
+        slicer.util.setSliceViewerLayers(foreground=None)
+        segmentationVolume.SetDisplayVisibility(False)
+    else:
+      logging.warning("setSegmentationVisibility() called but no cautery model found")
 
   def setRegionOfInterestNode(self, toggled):
     if not toggled:
@@ -1918,6 +1933,7 @@ class LumpNav2Logic(ScriptedLoadableModuleLogic, VTKObservationMixin):
       if reconstructionVolume is None:
         reconstructionVolume = slicer.mrmlScene.AddNewNodeByClass("vtkMRMLScalarVolumeNode", self.RECONSTRUCTION_VOLUME)
         parameterNode.SetNodeReferenceID(self.RECONSTRUCTION_VOLUME, reconstructionVolume.GetID())
+      reconstructionVolume.SetDisplayVisibility(False)
 
       reconstructionNode.SetAndObserveOutputVolumeNode(reconstructionVolume)
       volRenLogic = slicer.modules.volumerendering.logic()
@@ -1941,19 +1957,19 @@ class LumpNav2Logic(ScriptedLoadableModuleLogic, VTKObservationMixin):
     volRenLogic = slicer.modules.volumerendering.logic()
     displayNode = volRenLogic.GetFirstVolumeRenderingDisplayNode(volumeNode)
 
-    upper = min(300, level + window / 2)
-    lower = max(0, level - window / 2)
+    upper = min(265, level + window / 2)
+    lower = max(3, level - window / 2)
     p0 = lower
-    p1 = lower + (upper - lower) * 0.5
-    p2 = lower + (upper - lower) * 0.7
+    p1 = lower + (upper - lower) * 0.15
+    p2 = lower + (upper - lower) * 0.4
     p3 = upper
     self.transferFunctionPoints = [p0, p1, p2, p3]
 
     opacityTransferFunction = vtk.vtkPiecewiseFunction()
     opacityTransferFunction.AddPoint(p0, 0.0)
-    opacityTransferFunction.AddPoint(p1, 0.0)
-    opacityTransferFunction.AddPoint(p2, 0.4)
-    opacityTransferFunction.AddPoint(p3, 0.6)
+    opacityTransferFunction.AddPoint(p1, 0.2)
+    opacityTransferFunction.AddPoint(p2, 0.6)
+    opacityTransferFunction.AddPoint(p3, 0.1)
 
     colorTransferFunction = vtk.vtkColorTransferFunction()
     colorTransferFunction.AddRGBPoint(p0, 0.05, 0.10, 0.00)
@@ -1967,29 +1983,6 @@ class LumpNav2Logic(ScriptedLoadableModuleLogic, VTKObservationMixin):
     volumeProperty.SetScalarOpacity(opacityTransferFunction)
     volumeProperty.ShadeOn()
     volumeProperty.SetInterpolationTypeToLinear()
-
-  def setTransferFunctionValueChanged(self, value, min, max):
-    volumeNode = self.getParameterNode().GetNodeReference(self.RECONSTRUCTION_VOLUME)
-    volRenLogic = slicer.modules.volumerendering.logic()
-    displayNode = volRenLogic.GetFirstVolumeRenderingDisplayNode(volumeNode)
-    volumeProperty = displayNode.GetVolumePropertyNode().GetVolumeProperty()
-    opacityTransferFunction = volumeProperty.GetScalarOpacity()
-
-    # Calculate how far relatively to move transfer function points
-    percentagePositionChange = (value - self.lastSliderValue) / (max - min)
-    transferMin, transferMax = opacityTransferFunction.GetRange()
-    amountTransferChange = -((transferMax - transferMin) * percentagePositionChange)
-
-    # Move inner points by calculated amount
-    numInnerPoints = opacityTransferFunction.GetSize()
-    for i in range(1, numInnerPoints - 1):
-      x = self.transferFunctionPoints[i]
-      y = opacityTransferFunction.GetValue(x)
-      opacityTransferFunction.RemovePoint(x)
-      opacityTransferFunction.AddPoint(x + amountTransferChange, y)
-      self.transferFunctionPoints[i] = x + amountTransferChange
-
-    # TODO: also move inner points in color transfer function?
 
   def setDeleteLastFiducialClicked(self, numberOfPoints):
     deleted_coord = [0.0, 0.0, 0.0]
