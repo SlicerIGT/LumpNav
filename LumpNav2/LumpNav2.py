@@ -627,7 +627,7 @@ class LumpNav2Widget(ScriptedLoadableModuleWidget, VTKObservationMixin):
 
   def onSegmentationThresholdChanged(self, value):
     pct = value / (255 + 50) * -100 + 100
-    self.ui.thresholdSliderValue.text =str(round(pct)) + "%"
+    self.ui.thresholdSliderValue.text = str(round(pct)) + "%"
     reconstructionVolume = self._parameterNode.GetNodeReference(self.logic.RECONSTRUCTION_VOLUME)
     if reconstructionVolume:
       self.logic.setVolumeRenderingProperty(reconstructionVolume, 50, value - 50 / 2)
@@ -1874,16 +1874,17 @@ class LumpNav2Logic(ScriptedLoadableModuleLogic, VTKObservationMixin):
 
   def setSegmentationVisibility(self, toggled):
     parameterNode = self.getParameterNode()
-    segmentationVolume = parameterNode.GetNodeReference(self.RECONSTRUCTION_VOLUME)
-    if segmentationVolume is not None:
+    segmentationVolume = parameterNode.GetNodeReference(self.PREDICTION_VOLUME)
+    reconstructionVolume = parameterNode.GetNodeReference(self.RECONSTRUCTION_VOLUME)
+    if segmentationVolume is not None and reconstructionVolume is not None:
       if toggled:
         slicer.util.setSliceViewerLayers(foreground=segmentationVolume, foregroundOpacity=0.5)
-        segmentationVolume.SetDisplayVisibility(True)
+        reconstructionVolume.SetDisplayVisibility(True)
       else:
         slicer.util.setSliceViewerLayers(foreground=None)
-        segmentationVolume.SetDisplayVisibility(False)
+        reconstructionVolume.SetDisplayVisibility(False)
     else:
-      logging.warning("setSegmentationVisibility() called but no cautery model found")
+      logging.warning("setSegmentationVisibility() called but no segmentation volume found")
 
   def setRegionOfInterestNode(self, toggled):
     if not toggled:
@@ -1943,7 +1944,7 @@ class LumpNav2Logic(ScriptedLoadableModuleLogic, VTKObservationMixin):
       reconstructionVolume.AddAndObserveDisplayNodeID(reconstructionDisplayNode.GetID())
       volRenLogic.UpdateDisplayNodeFromVolumeNode(reconstructionDisplayNode, reconstructionVolume)
       reconstructionDisplayNode.SetAndObserveROINodeID(parameterNode.GetNodeReference(self.ROI_NODE).GetID())
-      self.setVolumeRenderingProperty(reconstructionVolume, 210, 220)
+      self.setVolumeRenderingProperty(reconstructionVolume, 50, 220)
       self.reconstructionLogic.StartLiveVolumeReconstruction(reconstructionNode)
       self.reconstructionActive = True
 
@@ -1958,7 +1959,7 @@ class LumpNav2Logic(ScriptedLoadableModuleLogic, VTKObservationMixin):
     displayNode = volRenLogic.GetFirstVolumeRenderingDisplayNode(volumeNode)
 
     upper = min(265, level + window / 2)
-    lower = max(3, level - window / 2)
+    lower = max(0, level - window / 2)
     p0 = lower
     p1 = lower + (upper - lower) * 0.15
     p2 = lower + (upper - lower) * 0.4
@@ -1967,15 +1968,15 @@ class LumpNav2Logic(ScriptedLoadableModuleLogic, VTKObservationMixin):
 
     opacityTransferFunction = vtk.vtkPiecewiseFunction()
     opacityTransferFunction.AddPoint(p0, 0.0)
-    opacityTransferFunction.AddPoint(p1, 0.2)
+    opacityTransferFunction.AddPoint(p1, 0.3)
     opacityTransferFunction.AddPoint(p2, 0.6)
-    opacityTransferFunction.AddPoint(p3, 0.1)
+    opacityTransferFunction.AddPoint(p3, 1.0)
 
     colorTransferFunction = vtk.vtkColorTransferFunction()
-    colorTransferFunction.AddRGBPoint(p0, 0.05, 0.10, 0.00)
-    colorTransferFunction.AddRGBPoint(p1, 0.15, 0.45, 0.00)
-    colorTransferFunction.AddRGBPoint(p2, 0.35, 0.75, 0.00)
-    colorTransferFunction.AddRGBPoint(p3, 0.50, 1.00, 0.00)
+    colorTransferFunction.AddRGBPoint(p0, 0.25, 0.10, 0.00)
+    colorTransferFunction.AddRGBPoint(p1, 0.15, 0.20, 0.00)
+    colorTransferFunction.AddRGBPoint(p2, 0.05, 0.35, 0.00)
+    colorTransferFunction.AddRGBPoint(p3, 0.00, 0.50, 0.00)
 
     # The property describes how the data will look
     volumeProperty = displayNode.GetVolumePropertyNode().GetVolumeProperty()

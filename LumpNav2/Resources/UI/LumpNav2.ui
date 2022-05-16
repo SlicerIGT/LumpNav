@@ -390,6 +390,9 @@
           <property name="maximum">
            <number>305</number>
           </property>
+          <property name="sliderPosition">
+           <number>245</number>
+          </property>
           <property name="orientation">
            <enum>Qt::Horizontal</enum>
           </property>
@@ -398,7 +401,7 @@
         <item>
          <widget class="QLabel" name="thresholdSliderValue">
           <property name="text">
-           <string>100%</string>
+           <string>20%</string>
           </property>
          </widget>
         </item>
