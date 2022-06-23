@@ -26,3 +26,10 @@ Transforms to be sent from the PLUS server to Slicer (via OpenIGTLink) are:
 - ReferenceToTracker
 
 ImageToTransducer should be computed by LumpNav.
+
+## Setting up the hardware
+
+1. Ensure the Telemed MicrUs EXT-1H ultrasound system is connected to a power source and to the computer via USB.
+2. Ensre the Ascension TrakStar unit is also plugged into a power source and to the computer.
+3. Connect the ultrasound transmitter box to the TrakStar unit (labeled "Transmitter").
+4. Connect the ultrasound probe to the Telemed ultrasound sytem.
