@@ -1,5 +1,6 @@
 import os
 import time
+import json
 
 import numpy as np
 import vtk, qt, ctk, slicer
@@ -7,10 +8,6 @@ import vtk, qt, ctk, slicer
 import logging
 from slicer.ScriptedLoadableModule import *
 from slicer.util import VTKObservationMixin
-import pickle
-from scipy.fft import fft, ifft, rfft, rfftfreq
-from scipy.signal import detrend, resample
-from vtk.util import numpy_support
 
 try:
   import matplotlib.pyplot as plt
@@ -24,20 +21,11 @@ except:
   slicer.util.pip_install('scikit-learn')
   from sklearn import datasets
 
-from sklearn import svm
-from sklearn import metrics    			
-from sklearn.model_selection import train_test_split
-from sklearn.metrics import plot_roc_curve
-from sklearn.multiclass import OneVsRestClassifier
-from sklearn.metrics import roc_curve, auc
-
 try:
   from mlxtend.plotting import plot_decision_regions
 except:
   slicer.util.pip_install('mlxtend')
   from mlxtend.plotting import plot_decision_regions
-
-import pickle
 
 #
 # LumpNav2
@@ -171,6 +159,7 @@ class LumpNav2Widget(ScriptedLoadableModuleWidget, VTKObservationMixin):
   CAUTERY_CALIBRATION_THRESHOLD_DEFAULT = 1.0
   NEEDLE_CALIBRATION_THRESHOLD_SETTING = "LumpNav2/NeedleCalibrationTresholdMm"
   NEEDLE_CALIBRATION_THRESHOLD_DEFAULT = 1.0
+  FONT_SIZE_DEFAULT = 20
 
   def __init__(self, parent=None):
     """
@@ -485,10 +474,10 @@ class LumpNav2Widget(ScriptedLoadableModuleWidget, VTKObservationMixin):
   def onStartStopRecordingClicked(self, toggled):
     if toggled:
       self.ui.startStopRecordingButton.text = "Stop Ultrasound Recording"
-      self.logic.onUltrasoundSequenceBrowserClicked(toggled)
     else:
       self.ui.startStopRecordingButton.text = "Start Ultrasound Recording"
-      self.logic.onUltrasoundSequenceBrowserClicked(toggled)
+    self.ui.markPointsButton.checked = False
+    self.logic.onUltrasoundSequenceBrowserClicked(toggled)
 
   def onBreachLocationButtonClicked(self, toggled):
     parameterNode = self._parameterNode
@@ -606,7 +595,7 @@ class LumpNav2Widget(ScriptedLoadableModuleWidget, VTKObservationMixin):
     self.logic.setMarkPointCauteryTipClicked()
   
   def onDeleteLastFiducialClicked(self):
-    logging.debug('onDeleteLastFiducialClicked')
+    logging.info('onDeleteLastFiducialClicked')
     if self.ui.markPointsButton.isChecked() : # ensures point placed doesn't get logged twice
       self.ui.markPointsButton.click()
     self.updateGUIFromParameterNode()
@@ -615,12 +604,12 @@ class LumpNav2Widget(ScriptedLoadableModuleWidget, VTKObservationMixin):
     self.logic.setDeleteLastFiducialClicked(numberOfPoints)
 
   def onDeleteAllFiducialsClicked(self):
-    logging.debug('onDeleteAllFiducialsClicked')
+    logging.info('onDeleteAllFiducialsClicked')
     self.logic.setDeleteAllFiducialsClicked()
     self.updateGUIFromParameterNode()
 
   def onSegmentationVisibilityToggled(self, toggled):
-    logging.debug("onSegmentationVisibilityToggled")
+    logging.info("onSegmentationVisibilityToggled")
     if toggled:
       self.ui.segmentationVisibility.text = "Hide AI Segmentation"
     else:
@@ -643,7 +632,7 @@ class LumpNav2Widget(ScriptedLoadableModuleWidget, VTKObservationMixin):
     return viewNode
 
   def onLeftBreastButtonClicked(self):
-    logging.debug("onLeftButtonClicked")
+    logging.info("onLeftButtonClicked")
     self.ui.rightBreastButton.setEnabled(True)
     self.ui.rightBreastButton.setChecked(False)
     self.ui.leftBreastButton.setEnabled(False)
@@ -671,15 +660,15 @@ class LumpNav2Widget(ScriptedLoadableModuleWidget, VTKObservationMixin):
     cameraNode1.ResetClippingRange()
 
   def onRightBreastButtonClicked(self):
-    logging.debug("onRightButtonClicked")
+    logging.info("onRightButtonClicked")
     self.ui.rightBreastButton.setEnabled(False)
     self.ui.leftBreastButton.setEnabled(True)
     self.ui.leftBreastButton.setChecked(False)
-    if not self.ui.leftAutoCenterCameraButton.isChecked() :
+    if not self.ui.leftAutoCenterCameraButton.isChecked():
       self.onAutoCenterButtonClicked('View1')
-    if not self.ui.rightAutoCenterCameraButton.isChecked() :
+    if not self.ui.rightAutoCenterCameraButton.isChecked():
       self.onAutoCenterButtonClicked('View2')
-    if not self.ui.bottomAutoCenterCameraButton.isChecked() :
+    if not self.ui.bottomAutoCenterCameraButton.isChecked():
       self.onAutoCenterButtonClicked('View3')
     cameraNode1 = self.getCamera('View1')
     cameraNode2 = self.getCamera('View2')
@@ -706,6 +695,9 @@ class LumpNav2Widget(ScriptedLoadableModuleWidget, VTKObservationMixin):
         parameterNode = self._parameterNode
         breachWarningNode = parameterNode.GetNodeReference(self.logic.BREACH_WARNING)
         view.setCornerAnnotationText("{0:.2f}mm".format(breachWarningNode.GetClosestDistanceToModelFromToolTip()))
+        view.cornerAnnotation().SetMaximumFontSize(self.FONT_SIZE_DEFAULT)
+        view.cornerAnnotation().SetMinimumFontSize(self.FONT_SIZE_DEFAULT)
+        view.cornerAnnotation().SetNonlinearFontScaleFactor(1)
         view.forceRender()
     else:
         for i in range(3):  # Clear all text
@@ -715,7 +707,7 @@ class LumpNav2Widget(ScriptedLoadableModuleWidget, VTKObservationMixin):
         return
 
   def onIncreaseDistanceFontSizeClicked(self):
-    logging.debug("onIncreaseDistanceFontSizeClicked")
+    logging.info("onIncreaseDistanceFontSizeClicked")
     for i in range(3):
       view = slicer.app.layoutManager().threeDWidget(i).threeDView()
       fontSize = view.cornerAnnotation().GetMaximumFontSize() + 1
@@ -725,7 +717,7 @@ class LumpNav2Widget(ScriptedLoadableModuleWidget, VTKObservationMixin):
       view.forceRender()
 
   def onDecreaseDistanceFontSizeClicked(self):
-    logging.debug("onDecreaseDistanceFontSizeClicked")
+    logging.info("onDecreaseDistanceFontSizeClicked")
     for i in range(3):
       view = slicer.app.layoutManager().threeDWidget(i).threeDView()
       fontSize = view.cornerAnnotation().GetMaximumFontSize() - 1
@@ -1439,11 +1431,9 @@ class LumpNav2Logic(ScriptedLoadableModuleLogic, VTKObservationMixin):
       logging.warning('Logic not found for Volume Reslice Driver')
 
     # Create models
-
     createModelsLogic = slicer.modules.createmodels.logic()
 
     # Needle model
-
     needleModel = parameterNode.GetNodeReference(self.NEEDLE_MODEL)
     if needleModel is None:
       needleModel = createModelsLogic.CreateNeedle(60.0, 1.0, 2.0, 0)
@@ -1455,7 +1445,6 @@ class LumpNav2Logic(ScriptedLoadableModuleLogic, VTKObservationMixin):
     needleVisible = slicer.util.settingsValue(self.NEEDLE_VISIBILITY_SETTING, True, converter=slicer.util.toBool)
     needleModel.SetDisplayVisibility(needleVisible)
 
-    import json
     needleTipToNeedle = parameterNode.GetNodeReference(self.NEEDLETIP_TO_NEEDLE)
     needleModel.SetAndObserveTransformNodeID(needleTipToNeedle.GetID())
 
@@ -1549,10 +1538,6 @@ class LumpNav2Logic(ScriptedLoadableModuleLogic, VTKObservationMixin):
       RASMarkups.SetDisplayVisibility(0)
       parameterNode.SetNodeReferenceID(self.RAS_MARKUPS, RASMarkups.GetID())
 
-    # OpenIGTLink connection
-    # PLUS Server
-    # self.setupPlusServer()
-
     sequenceLogic = slicer.modules.sequences.logic()
 
     sequenceBrowserTracking = parameterNode.GetNodeReference(self.TRACKING_SEQUENCE_BROWSER)
@@ -1596,7 +1581,7 @@ class LumpNav2Logic(ScriptedLoadableModuleLogic, VTKObservationMixin):
     if breachWarningNode is None:
       breachWarningNode = slicer.mrmlScene.AddNewNodeByClass('vtkMRMLBreachWarningNode', self.BREACH_WARNING)
       # breachWarningNode.UnRegister(None) # Python variable already holds a reference to it
-      breachWarningNode.SetWarningColor(1,0,0)
+      breachWarningNode.SetWarningColor(1, 0, 0)
       warningSoundEnabled = slicer.util.settingsValue(self.WARNING_SOUND_SETTING, True, converter=slicer.util.toBool)
       self.setWarningSound(warningSoundEnabled)
 
@@ -1645,6 +1630,9 @@ class LumpNav2Logic(ScriptedLoadableModuleLogic, VTKObservationMixin):
     cauteryCameraToCautery.SetAndObserveTransformNodeID(cauteryToReference.GetID())
 
     self.usFrozen = False
+
+    # OpenIGTLink connection
+    # self.setupPlusServer()
 
     # Set nodes for segmentation logic
     self.segmentationLogic.setModelPath(self.resourcePath(self.AI_MODEL_PATH))
@@ -1822,7 +1810,7 @@ class LumpNav2Logic(ScriptedLoadableModuleLogic, VTKObservationMixin):
   def setTrackingSequenceBrowser(self, recording):
     parameterNode = self.getParameterNode()
     sequenceBrowserTracking = parameterNode.GetNodeReference(self.TRACKING_SEQUENCE_BROWSER)
-    sequenceBrowserTracking.SetRecordingActive(recording) #stop
+    sequenceBrowserTracking.SetRecordingActive(recording)  # stop
 
   def onUltrasoundSequenceBrowserClicked(self, toggled):
     self.setUltrasoundSequenceBrowser(toggled)
@@ -1934,7 +1922,6 @@ class LumpNav2Logic(ScriptedLoadableModuleLogic, VTKObservationMixin):
       if reconstructionVolume is None:
         reconstructionVolume = slicer.mrmlScene.AddNewNodeByClass("vtkMRMLScalarVolumeNode", self.RECONSTRUCTION_VOLUME)
         parameterNode.SetNodeReferenceID(self.RECONSTRUCTION_VOLUME, reconstructionVolume.GetID())
-      reconstructionVolume.SetDisplayVisibility(False)
 
       reconstructionNode.SetAndObserveOutputVolumeNode(reconstructionVolume)
       volRenLogic = slicer.modules.volumerendering.logic()
@@ -1945,6 +1932,7 @@ class LumpNav2Logic(ScriptedLoadableModuleLogic, VTKObservationMixin):
       volRenLogic.UpdateDisplayNodeFromVolumeNode(reconstructionDisplayNode, reconstructionVolume)
       reconstructionDisplayNode.SetAndObserveROINodeID(parameterNode.GetNodeReference(self.ROI_NODE).GetID())
       self.setVolumeRenderingProperty(reconstructionVolume, 50, 220)
+      reconstructionVolume.SetDisplayVisibility(False)
       self.reconstructionLogic.StartLiveVolumeReconstruction(reconstructionNode)
       self.reconstructionActive = True
 
@@ -2212,8 +2200,7 @@ class LumpNav2Logic(ScriptedLoadableModuleLogic, VTKObservationMixin):
         transformMatrix.SetElement(r,c, transformMatrixArray[r*4+c])
     return transformMatrix
 
-  def returnDistance(self, point1, point2) :
-    import numpy as np
+  def returnDistance(self, point1, point2):
     tumorFiducialPoint = np.array(point1)
     eraserPoint = np.array(point2)
     distance = np.linalg.norm(tumorFiducialPoint-eraserPoint)
