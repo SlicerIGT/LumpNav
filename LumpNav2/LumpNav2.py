@@ -494,14 +494,7 @@ class LumpNav2Widget(ScriptedLoadableModuleWidget, VTKObservationMixin):
 
   def onFreezeUltrasoundClicked(self, toggled):
     logging.info("onFreezeUltrasoundClicked")
-    plusServerNode = self._parameterNode.GetNodeReference(self.logic.PLUS_SERVER_NODE)
-    if toggled:
-      self.ui.freezeUltrasoundButton.text = "Un-Freeze"
-      plusServerNode.StartServer()
-    else:
-      self.ui.freezeUltrasoundButton.text = "Freeze"
-      plusServerNode.StopServer()
-    # self.logic.setFreezeUltrasoundClicked()
+    self.logic.setFreezeUltrasoundClicked(toggled)
 
   def onStartPlusClicked(self, toggled):
     plusRemoteNode = self._parameterNode.GetNodeReference(self.logic.PLUS_REMOTE_NODE)
@@ -1513,6 +1506,7 @@ class LumpNav2Logic(ScriptedLoadableModuleLogic, VTKObservationMixin):
       tumorMarkups_Needle.CreateDefaultDisplayNodes()
       tumorMarkups_Needle.GetDisplayNode().SetTextScale(0)
       tumorMarkups_Needle.LockedOn()
+      tumorMarkups_Needle.GetDisplayNode().VisibilityOff()
       parameterNode.SetNodeReferenceID(self.TUMOR_MARKUPS_NEEDLE, tumorMarkups_Needle.GetID())
     tumorMarkups_Needle.SetAndObserveTransformNodeID(needleToReference.GetID())
     self.removeObservers(method=self.onTumorMarkupsNodeModified)
@@ -1561,7 +1555,7 @@ class LumpNav2Logic(ScriptedLoadableModuleLogic, VTKObservationMixin):
     sequenceNode = sequenceLogic.AddSynchronizedNode(None, cauteryTipToCautery, sequenceBrowserTracking)
     sequenceBrowserTracking.SetRecording(sequenceNode, True)
     sequenceBrowserTracking.SetPlayback(sequenceNode, True)
-    sequenceBrowserTracking.SetRecordingActive(True) # Actually start recording
+    sequenceBrowserTracking.SetRecordingActive(True)  # Actually start recording
 
     sequenceBrowserUltrasound = parameterNode.GetNodeReference(self.ULTRASOUND_SEQUENCE_BROWSER)
 
@@ -1577,25 +1571,23 @@ class LumpNav2Logic(ScriptedLoadableModuleLogic, VTKObservationMixin):
 
     # Set up breach warning node
     breachWarningNode = parameterNode.GetNodeReference(self.BREACH_WARNING)
-
     if breachWarningNode is None:
       breachWarningNode = slicer.mrmlScene.AddNewNodeByClass('vtkMRMLBreachWarningNode', self.BREACH_WARNING)
-      # breachWarningNode.UnRegister(None) # Python variable already holds a reference to it
       breachWarningNode.SetWarningColor(1, 0, 0)
-      warningSoundEnabled = slicer.util.settingsValue(self.WARNING_SOUND_SETTING, True, converter=slicer.util.toBool)
-      self.setWarningSound(warningSoundEnabled)
 
       tumorModel_Needle = parameterNode.GetNodeReference(self.TUMOR_MODEL)
       breachWarningNode.SetOriginalColor(tumorModel_Needle.GetDisplayNode().GetColor())
       cauteryTipToCautery = parameterNode.GetNodeReference(self.CAUTERYTIP_TO_CAUTERY)
-      # breachWarningNode.SetAndObserveToolTransformNodeId(cauteryTipToCautery.GetID())
-      breachWarningNode.SetAndObserveToolTransformNodeId(None)
+      breachWarningNode.SetAndObserveToolTransformNodeId(cauteryTipToCautery.GetID())
       breachWarningNode.SetAndObserveWatchedModelNodeID(tumorModel_Needle.GetID())
       breachWarningNodeObserver = breachWarningNode.AddObserver(vtk.vtkCommand.ModifiedEvent, self.onBreachWarningNodeChanged)
-      breachWarningLogic = slicer.modules.breachwarning.logic()
-      # Line properties can only be set after the line is created (made visible at least once)
-      breachWarningLogic.SetLineToClosestPointVisibility(False, breachWarningNode)
       parameterNode.SetNodeReferenceID(self.BREACH_WARNING, breachWarningNode.GetID())
+      warningSoundEnabled = slicer.util.settingsValue(self.WARNING_SOUND_SETTING, True, converter=slicer.util.toBool)
+      self.setWarningSound(warningSoundEnabled)
+
+      # Line properties can only be set after the line is created (made visible at least once)
+      breachWarningLogic = slicer.modules.breachwarning.logic()
+      breachWarningLogic.SetLineToClosestPointVisibility(False, breachWarningNode)
       parameterNode.SetParameter(self.DISPLAY_BREACH_STATUS, self.DISPLAY_BREACH_LOCATION)
       parameterNode.SetParameter(self.BREACH_STATUS, "False")
 
@@ -1603,9 +1595,9 @@ class LumpNav2Logic(ScriptedLoadableModuleLogic, VTKObservationMixin):
     if breachMarkups_Needle is None:
       breachMarkups_Needle = slicer.mrmlScene.AddNewNodeByClass("vtkMRMLMarkupsFiducialNode", self.BREACH_MARKUPS_NEEDLE)
       breachMarkups_Needle.CreateDefaultDisplayNodes()
-      breachMarkups_Needle.GetDisplayNode().SetGlyphScale(7)
-      breachMarkups_Needle.GetDisplayNode().SetTextScale(7)
-      breachMarkups_Needle.GetDisplayNode().SetColor(1,0,0)
+      breachMarkups_Needle.GetDisplayNode().SetGlyphScale(5)
+      breachMarkups_Needle.GetDisplayNode().SetTextScale(0)
+      breachMarkups_Needle.GetDisplayNode().SetColor(1, 0, 0)
       breachMarkups_Needle.LockedOn()
       breachMarkups_Needle.SetDisplayVisibility(1)
       parameterNode.SetNodeReferenceID(self.BREACH_MARKUPS_NEEDLE, breachMarkups_Needle.GetID())
@@ -2010,11 +2002,10 @@ class LumpNav2Logic(ScriptedLoadableModuleLogic, VTKObservationMixin):
     tumorMarkups_Needle.AddFiducial(cauteryTipToNeedle.GetElement(0,3), cauteryTipToNeedle.GetElement(1,3), cauteryTipToNeedle.GetElement(2,3))
     logging.info("Tumor point placed at cautery tip, (%s, %s, %s)", cauteryTipToNeedle.GetElement(0,3), cauteryTipToNeedle.GetElement(1,3), cauteryTipToNeedle.GetElement(2,3))
 
-  def setFreezeUltrasoundClicked(self):
-    self.usFrozen = not self.usFrozen
+  def setFreezeUltrasoundClicked(self, toggled):
     parameterNode = self.getParameterNode()
     plusServerNode = parameterNode.GetNodeReference(self.PLUS_SERVER_NODE)
-    if self.usFrozen:
+    if toggled:
       # self.guideletParent.connectorNode.Stop()
       plusServerNode.StopServer()
     else:
@@ -2197,7 +2188,7 @@ class LumpNav2Logic(ScriptedLoadableModuleLogic, VTKObservationMixin):
     transformMatrixArray = list(map(float, transformMatrixString.split(' ')))
     for r in range(4):
       for c in range(4):
-        transformMatrix.SetElement(r,c, transformMatrixArray[r*4+c])
+        transformMatrix.SetElement(r, c, transformMatrixArray[r*4+c])
     return transformMatrix
 
   def returnDistance(self, point1, point2):
@@ -2212,12 +2203,43 @@ class LumpNav2Logic(ScriptedLoadableModuleLogic, VTKObservationMixin):
     parameterNode = self.getParameterNode()
     breachWarningNode = parameterNode.GetNodeReference(self.BREACH_WARNING)
     if breachWarningNode.GetClosestDistanceToModelFromToolTip() < 0:
+      # Display breach warning text in corner of view
+      for i in range(3):
+        view = slicer.app.layoutManager().threeDWidget(i).threeDView()
+        view.cornerAnnotation().SetText(vtk.vtkCornerAnnotation.LowerLeft, "BREACH!")
+        textProperty = view.cornerAnnotation().GetTextProperty()
+        textProperty.SetColor(1, 0, 0)
+        view.forceRender()
+
+      # Add fiducial at tumor breach location
       if parameterNode.GetParameter(self.BREACH_STATUS) == "False":
-        breachLocation = breachWarningNode.GetClosestPointOnModel()
+        # Get cautery tip transform
+        cn = slicer.mrmlScene.GetFirstNodeByName('CauteryTipToCautery')
+        cauteryTipToRASMatrix = vtk.vtkMatrix4x4()
+        cn.GetMatrixTransformToWorld(cauteryTipToRASMatrix)
+        # Get needle tip transform
+        nn = slicer.mrmlScene.GetFirstNodeByName('NeedleTipToNeedle')
+        needleTipToRASMatrix = vtk.vtkMatrix4x4()
+        nn.GetMatrixTransformToWorld(needleTipToRASMatrix)
+
+        # Get coordinate of cautery tip in needle coordinate system and plot
+        RASToNeedleTip = vtk.vtkMatrix4x4()
+        vtk.vtkMatrix4x4.Invert(needleTipToRASMatrix, RASToNeedleTip)
+        cauteryTipToNeedleTip = vtk.vtkMatrix4x4()
+        vtk.vtkMatrix4x4.Multiply4x4(RASToNeedleTip, cauteryTipToRASMatrix, cauteryTipToNeedleTip)
+        cauteryTip_needleTip = cauteryTipToNeedleTip.MultiplyFloatPoint([0, 0, 0, 1])
         breachMarkups_Needle = parameterNode.GetNodeReference(self.BREACH_MARKUPS_NEEDLE)
-        breachMarkups_Needle.AddFiducial(breachLocation[0], breachLocation[1], breachLocation[2], "BREACH!")
-      parameterNode.SetParameter(self.BREACH_STATUS, "True")
+        breachMarkups_Needle.AddFiducial(cauteryTip_needleTip[0], cauteryTip_needleTip[1], cauteryTip_needleTip[2], "")
+        parameterNode.SetParameter(self.BREACH_STATUS, "True")
+
     else:
+      # Remove corner annotation
+      for i in range(3):
+        view = slicer.app.layoutManager().threeDWidget(i).threeDView()
+        view.cornerAnnotation().SetText(vtk.vtkCornerAnnotation.LowerLeft, "")
+        textProperty = view.cornerAnnotation().GetTextProperty()
+        textProperty.SetColor(1, 1, 1)
+        view.forceRender()
       parameterNode.SetParameter(self.BREACH_STATUS, "False")
 
   def showDistanceToTumor(self):

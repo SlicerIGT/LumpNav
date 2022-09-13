@@ -504,7 +504,7 @@
       <item>
        <widget class="QPushButton" name="warningSoundButton">
         <property name="text">
-         <string>Disable warning sound</string>
+         <string>Breach warning sound</string>
         </property>
         <property name="checkable">
          <bool>true</bool>
