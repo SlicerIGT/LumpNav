@@ -236,7 +236,6 @@ class LumpNav2Widget(ScriptedLoadableModuleWidget, VTKObservationMixin):
     self.addObserver(slicer.mrmlScene, slicer.mrmlScene.EndCloseEvent, self.onSceneEndClose)
 
     # QT connections
-
     self.ui.customUiButton.connect('toggled(bool)', self.onCustomUiClicked)
     self.ui.startPlusButton.connect('toggled(bool)', self.onStartPlusClicked)
     self.ui.displayRASButton.connect('toggled(bool)', self.onDisplayRASClicked)
@@ -313,7 +312,7 @@ class LumpNav2Widget(ScriptedLoadableModuleWidget, VTKObservationMixin):
     self.pivotCalibrationMode = self.PIVOT_CALIBRATION
     self.ui.cauteryCalibrationButton.setEnabled(False)
     self.pivotCalibrationResultNode = toolTipToToolTransformNode
-    self.pivotCalibrationLogic.SetAndObserveTransformNode(toolToReferenceTransformNode);
+    self.pivotCalibrationLogic.SetAndObserveTransformNode(toolToReferenceTransformNode)
     self.pivotCalibrationStopTime = time.time() + self.PIVOT_CALIBRATION_TIME_SEC
     self.pivotCalibrationLogic.SetRecordingState(True)
     self.onPivotSamplingTimeout()
@@ -541,11 +540,10 @@ class LumpNav2Widget(ScriptedLoadableModuleWidget, VTKObservationMixin):
 
   def onErasePointsToggled(self, toggled):
     logging.info("onErasePointsToggled")
-    if self._updatingGuiTrue:
+    if self._updatingGui:
       return
     self._updatingGui = True
-    if self.ui.markPointsButton.isChecked() : # ensures point placed doesn't get logged twice
-      self.ui.markPointsButton.click()
+    self.ui.markPointsButton.setChecked(False)
     interactionNode = slicer.app.applicationLogic().GetInteractionNode()
     if toggled:  # activate placement mode
       self._parameterNode.SetParameter(self.logic.CONTOUR_STATUS, self.logic.CONTOUR_ADDING)
@@ -589,9 +587,6 @@ class LumpNav2Widget(ScriptedLoadableModuleWidget, VTKObservationMixin):
   
   def onDeleteLastFiducialClicked(self):
     logging.info('onDeleteLastFiducialClicked')
-    if self.ui.markPointsButton.isChecked() : # ensures point placed doesn't get logged twice
-      self.ui.markPointsButton.click()
-    self.updateGUIFromParameterNode()
     tumorMarkups_Needle = self._parameterNode.GetNodeReference(self.logic.TUMOR_MARKUPS_NEEDLE)
     numberOfPoints = tumorMarkups_Needle.GetNumberOfFiducials()
     self.logic.setDeleteLastFiducialClicked(numberOfPoints)
@@ -687,15 +682,16 @@ class LumpNav2Widget(ScriptedLoadableModuleWidget, VTKObservationMixin):
         view = slicer.app.layoutManager().threeDWidget(i).threeDView()
         parameterNode = self._parameterNode
         breachWarningNode = parameterNode.GetNodeReference(self.logic.BREACH_WARNING)
-        view.setCornerAnnotationText("{0:.2f}mm".format(breachWarningNode.GetClosestDistanceToModelFromToolTip()))
+        view.cornerAnnotation().SetText(vtk.vtkCornerAnnotation.UpperLeft,
+                                        f"{breachWarningNode.GetClosestDistanceToModelFromToolTip():.2f}")
         view.cornerAnnotation().SetMaximumFontSize(self.FONT_SIZE_DEFAULT)
         view.cornerAnnotation().SetMinimumFontSize(self.FONT_SIZE_DEFAULT)
         view.cornerAnnotation().SetNonlinearFontScaleFactor(1)
         view.forceRender()
     else:
-        for i in range(3):  # Clear all text
+        for i in range(3):  # Clear distance text
           view = slicer.app.layoutManager().threeDWidget(i).threeDView()
-          view.cornerAnnotation().ClearAllTexts()
+          view.cornerAnnotation().SetText(vtk.vtkCornerAnnotation.UpperLeft, "")
           view.forceRender()
         return
 
@@ -755,23 +751,17 @@ class LumpNav2Widget(ScriptedLoadableModuleWidget, VTKObservationMixin):
 
   def onLeftAutoCenterCameraButtonClicked(self, pushed):
     logging.info("onLeftAutoCenterButtonClicked")
-    self.ui.rightAutoCenterCameraButton.setChecked(False)
-    self.ui.bottomAutoCenterCameraButton.setChecked(False)
     self.onAutoCenterButtonClicked('View1')
 
   def onRightAutoCenterCameraButtonClicked(self, pushed):
     logging.info("onRightAutoCenterCameraButtomClicked")
-    self.ui.leftAutoCenterCameraButton.setChecked(False)
-    self.ui.bottomAutoCenterCameraButton.setChecked(False)
     self.onAutoCenterButtonClicked('View2')
 
   def onBottomAutoCenterCameraButtonClicked(self, pushed):
     logging.info("onBottomAutoCenterCameraButtonClicked")
-    self.ui.rightAutoCenterCameraButton.setChecked(False)
-    self.ui.leftAutoCenterCameraButton.setChecked(False)
     self.onAutoCenterButtonClicked('View3')
 
-  def onAutoCenterButtonClicked(self,viewName):
+  def onAutoCenterButtonClicked(self, viewName):
     viewNode = self.getViewNode(viewName)
     logging.debug("onAutoCenterButtonClicked")
     if self.viewpointLogic.getViewpointForViewNode(viewNode).isCurrentModeAutoCenter():
@@ -2024,22 +2014,6 @@ class LumpNav2Logic(ScriptedLoadableModuleLogic, VTKObservationMixin):
       cauteryModel.SetDisplayVisibility(False)
       stickModel.SetDisplayVisibility(True)
 
-  def setSelectPointsToEraseClicked(self, pushed):
-    logging.info('setSelectPointsToEraseClicked')
-    interactionNode = slicer.app.applicationLogic().GetInteractionNode()
-    if pushed:
-      # activate placement mode
-      selectionNode = slicer.app.applicationLogic().GetSelectionNode()
-      selectionNode.SetReferenceActivePlaceNodeClassName("vtkMRMLMarkupsFiducialNode")
-      parameterNode = self.getParameterNode()
-      eraseMarkups_Needle = parameterNode.GetNodeReference(self.ERASE_MARKUPS_NEEDLE)
-      selectionNode.SetActivePlaceNodeID(eraseMarkups_Needle.GetID())
-      interactionNode.SetPlaceModePersistence(1)
-      interactionNode.SetCurrentInteractionMode(interactionNode.Place)
-    else:
-      # deactivate placement mode
-      interactionNode.SetCurrentInteractionMode(interactionNode.ViewTransform)
-
   def setBreachWarningOn(self, active):
     """
     Turns breach warning on or off
@@ -2169,10 +2143,10 @@ class LumpNav2Logic(ScriptedLoadableModuleLogic, VTKObservationMixin):
   def returnClosestPoint(self, fiducialNode, erasePoint) :
     closestIndex = 0
     numberOfPoints = fiducialNode.GetNumberOfFiducials()
-    closestPosition = [0.0,0.0,0.0]
+    closestPosition = [0.0, 0.0, 0.0]
     fiducialNode.GetNthFiducialPosition(0, closestPosition)
     distanceToClosest = self.returnDistance(closestPosition, erasePoint)
-    fiducialPosition = [0.0,0.0,0.0]
+    fiducialPosition = [0.0, 0.0, 0.0]
     for fiducialIndex in range(0, numberOfPoints-1) :
       fiducialNode.GetNthFiducialPosition(fiducialIndex, fiducialPosition)
       distanceToPoint = self.returnDistance(fiducialPosition, erasePoint)

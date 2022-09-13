@@ -285,16 +285,16 @@
          </widget>
         </item>
         <item>
-         <widget class="QPushButton" name="increaseDistanceFontSizeButton">
+         <widget class="QPushButton" name="decreaseDistanceFontSizeButton">
           <property name="text">
-           <string>+ 1</string>
+           <string>- 1</string>
           </property>
          </widget>
         </item>
         <item>
-         <widget class="QPushButton" name="decreaseDistanceFontSizeButton">
+         <widget class="QPushButton" name="increaseDistanceFontSizeButton">
           <property name="text">
-           <string>- 1</string>
+           <string>+ 1</string>
           </property>
          </widget>
         </item>
@@ -331,6 +331,9 @@
           <property name="checkable">
            <bool>true</bool>
           </property>
+          <property name="autoExclusive">
+           <bool>true</bool>
+          </property>
          </widget>
         </item>
         <item>
@@ -341,6 +344,9 @@
           <property name="checkable">
            <bool>true</bool>
           </property>
+          <property name="autoExclusive">
+           <bool>true</bool>
+          </property>
          </widget>
         </item>
         <item>
@@ -349,6 +355,9 @@
            <string>Right</string>
           </property>
           <property name="checkable">
+           <bool>true</bool>
+          </property>
+          <property name="autoExclusive">
            <bool>true</bool>
           </property>
          </widget>
