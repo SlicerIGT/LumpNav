@@ -217,15 +217,8 @@ class LumpNav2Widget(ScriptedLoadableModuleWidget, VTKObservationMixin):
     slicer.util.mainWindow().installEventFilter(self.eventFilter)
 
     # Check settings and set default values if settings not found
-    cauteryCalibrationThresholdMm = slicer.util.settingsValue(self.CAUTERY_CALIBRATION_THRESHOLD_SETTING, "")
-    if cauteryCalibrationThresholdMm == "":
-      settings = qt.QSettings()
-      settings.setValue(self.CAUTERY_CALIBRATION_THRESHOLD_SETTING, str(self.CAUTERY_CALIBRATION_THRESHOLD_DEFAULT))
-    needleCalibrationThresholdMm = slicer.util.settingsValue(self.NEEDLE_CALIBRATION_THRESHOLD_SETTING, "")
-    if needleCalibrationThresholdMm == "":
-      settings = qt.QSettings()
-      settings.setValue(self.NEEDLE_CALIBRATION_THRESHOLD_SETTING, str(self.NEEDLE_CALIBRATION_THRESHOLD_DEFAULT))
-    self.logic.setCauteryVisibility(True)  # Begin with visible cautery, regardless of saved user settings
+    cauteryCalibrationThresholdMm = slicer.util.settingsValue(self.CAUTERY_CALIBRATION_THRESHOLD_SETTING, str(self.CAUTERY_CALIBRATION_THRESHOLD_DEFAULT))
+    needleCalibrationThresholdMm = slicer.util.settingsValue(self.NEEDLE_CALIBRATION_THRESHOLD_SETTING, str(self.NEEDLE_CALIBRATION_THRESHOLD_DEFAULT))
 
     # Set state of custom UI button
     self.setCustomStyle(not self.getSlicerInterfaceVisible())
@@ -257,7 +250,6 @@ class LumpNav2Widget(ScriptedLoadableModuleWidget, VTKObservationMixin):
     breachMarkupsProximityThreshold = slicer.util.settingsValue(self.logic.BREACH_MARKUPS_PROXIMITY_THRESHOLD, 1, converter=lambda x: int(x))
     self.ui.breachMarkupsThresholdSpinBox.value = breachMarkupsProximityThreshold
     self.ui.breachMarkupsThresholdSpinBox.connect('valueChanged(int)', self.onBreachMarkupsProximityChanged)
-    self.ui.displayDistanceButton.connect('toggled(bool)', self.onDisplayDistanceClicked)
     self.ui.exitButton.connect('clicked()', self.onExitButtonClicked)
     self.ui.saveSceneButton.connect('clicked()', self.onSaveSceneClicked)
 
@@ -277,7 +269,7 @@ class LumpNav2Widget(ScriptedLoadableModuleWidget, VTKObservationMixin):
     self.ui.deleteAllFiducialsButton.connect('clicked()', self.onDeleteAllFiducialsClicked)
     self.ui.selectPointsToEraseButton.connect('toggled(bool)', self.onErasePointsToggled)
     self.ui.markPointCauteryTipButton.connect('clicked()', self.onMarkPointCauteryTipClicked)
-    self.ui.startStopRecordingButton.connect('toggled(bool)', self.onStartStopRecordingClicked)  
+    self.ui.startStopRecordingButton.connect('toggled(bool)', self.onStartStopRecordingClicked)
     self.ui.freezeUltrasoundButton.connect('toggled(bool)', self.onFreezeUltrasoundClicked)
     self.ui.segmentationVisibility.connect('toggled(bool)', self.onSegmentationVisibilityToggled)
     self.pivotSamplingTimer.connect('timeout()', self.onPivotSamplingTimeout)
@@ -287,6 +279,8 @@ class LumpNav2Widget(ScriptedLoadableModuleWidget, VTKObservationMixin):
     self.ui.leftBreastButton.connect('clicked()', self.onLeftBreastButtonClicked)
     self.ui.rightBreastButton.connect('clicked()', self.onRightBreastButtonClicked)
     # self.ui.bottomBullseyeCameraButton.connect('clicked()', lambda: self.onCameraButtonClicked('View3') )
+    self.ui.displayDistanceButton.connect('toggled(bool)', self.onDisplayDistanceClicked)
+    self.ui.displayRulerButton.connect('toggled(bool)', self.onDisplayRulerButtonClicked)
     self.ui.leftAutoCenterCameraButton.connect('toggled(bool)', self.onLeftAutoCenterCameraButtonClicked)
     self.ui.rightAutoCenterCameraButton.connect('toggled(bool)', self.onRightAutoCenterCameraButtonClicked)
     self.ui.bottomAutoCenterCameraButton.connect('toggled(bool)', self.onBottomAutoCenterCameraButtonClicked)
@@ -639,11 +633,11 @@ class LumpNav2Widget(ScriptedLoadableModuleWidget, VTKObservationMixin):
     self.ui.rightBreastButton.setChecked(False)
     self.ui.leftBreastButton.setEnabled(False)
     # check if autocenter buttons are already clicked before activating autocenter
-    if not self.ui.leftAutoCenterCameraButton.isChecked() :
+    if not self.ui.leftAutoCenterCameraButton.isChecked():
       self.onAutoCenterButtonClicked('View1')
-    if not self.ui.rightAutoCenterCameraButton.isChecked() :
+    if not self.ui.rightAutoCenterCameraButton.isChecked():
       self.onAutoCenterButtonClicked('View2')
-    if not self.ui.bottomAutoCenterCameraButton.isChecked() :
+    if not self.ui.bottomAutoCenterCameraButton.isChecked():
       self.onAutoCenterButtonClicked('View3')
     cameraNode1 = self.getCamera('View1')
     cameraNode2 = self.getCamera('View2')
@@ -708,6 +702,10 @@ class LumpNav2Widget(ScriptedLoadableModuleWidget, VTKObservationMixin):
           view.cornerAnnotation().SetText(vtk.vtkCornerAnnotation.UpperLeft, "")
           view.forceRender()
         return
+
+  def onDisplayRulerButtonClicked(self, toggled):
+    logging.info(f"onDisplayRulerButtonClicked({toggled})")
+    self.logic.setRulerVisibility(toggled)
 
   def onIncreaseDistanceFontSizeClicked(self):
     logging.info("onIncreaseDistanceFontSizeClicked")
@@ -776,8 +774,8 @@ class LumpNav2Widget(ScriptedLoadableModuleWidget, VTKObservationMixin):
     self.onAutoCenterButtonClicked('View3')
 
   def onAutoCenterButtonClicked(self, viewName):
-    viewNode = self.getViewNode(viewName)
     logging.debug("onAutoCenterButtonClicked")
+    viewNode = self.getViewNode(viewName)
     if self.viewpointLogic.getViewpointForViewNode(viewNode).isCurrentModeAutoCenter():
       self.disableAutoCenterInViewNode(viewNode)
     else:
@@ -920,17 +918,6 @@ class LumpNav2Widget(ScriptedLoadableModuleWidget, VTKObservationMixin):
     camerasLogic = slicer.modules.cameras.logic()
     camera = camerasLogic.GetViewActiveCameraNode(self._parameterNode.GetNodeReference(viewName))
     return camera
-  
-  def onCameraButtonClicked(self, viewName):
-    viewNode = self.getViewNode(viewName)
-    logging.debug("onCameraButtonClicked")
-    if self.viewpointLogic.getViewpointForViewNode(viewNode).isCurrentModeBullseye():
-      self.disableBullseyeInViewNode(viewNode)
-      self.enableAutoCenterInViewNode(viewNode)
-    else:
-      self.disableViewpointInViewNode(viewNode)  # disable any other modes that might be active
-      self.enableBullseyeInViewNode(viewNode)
-    self.updateGUIButtons()
   
   def exit(self):
     """
@@ -1180,11 +1167,7 @@ class LumpNav2Logic(ScriptedLoadableModuleLogic, VTKObservationMixin):
   CONTOUR_UNSELECTED = "ContourUnselected"
   POINTS_UNSELECTED = "PointsUnselected"
 
-  DISPLAY_BREACH_STATUS = "DisplayBreachStatus"
-  DISPLAY_BREACH_LOCATION = "DisplayBreachLocation"
-  DISPLAY_BREACH_HIDDEN = "DisplayBreachHidden"
   # Ultrasound image
-
   IMAGE_IMAGE = "Image_Image"
   DEFAULT_US_DEPTH = 90
 
@@ -1483,7 +1466,7 @@ class LumpNav2Logic(ScriptedLoadableModuleLogic, VTKObservationMixin):
       stickModel = createModelsLogic.CreateNeedle(100, 1.0, 2.0, 0)
       stickModel.GetDisplayNode().SetColor(1.0, 1.0, 0)
       stickModel.SetName(self.STICK_MODEL)
-      stickModel.GetDisplayNode().VisibilityOff() #defaul is only cautery model, turn stick model off visibility
+      stickModel.GetDisplayNode().VisibilityOff()  # Default is only cautery model, turn stick model off visibility
       parameterNode.SetNodeReferenceID(self.STICK_MODEL, stickModel.GetID())
 
     stickTipToStick = parameterNode.GetNodeReference(self.CAUTERYTIP_TO_CAUTERY)
@@ -1589,15 +1572,16 @@ class LumpNav2Logic(ScriptedLoadableModuleLogic, VTKObservationMixin):
       cauteryTipToCautery = parameterNode.GetNodeReference(self.CAUTERYTIP_TO_CAUTERY)
       breachWarningNode.SetAndObserveToolTransformNodeId(cauteryTipToCautery.GetID())
       breachWarningNode.SetAndObserveWatchedModelNodeID(tumorModel_Needle.GetID())
-      breachWarningNodeObserver = breachWarningNode.AddObserver(vtk.vtkCommand.ModifiedEvent, self.onBreachWarningNodeChanged)
+      self.addObserver(breachWarningNode, vtk.vtkCommand.ModifiedEvent, self.onBreachWarningNodeChanged)
       parameterNode.SetNodeReferenceID(self.BREACH_WARNING, breachWarningNode.GetID())
       warningSoundEnabled = slicer.util.settingsValue(self.WARNING_SOUND_SETTING, True, converter=slicer.util.toBool)
       self.setWarningSound(warningSoundEnabled)
 
       # Line properties can only be set after the line is created (made visible at least once)
       breachWarningLogic = slicer.modules.breachwarning.logic()
-      breachWarningLogic.SetLineToClosestPointVisibility(False, breachWarningNode)
-      parameterNode.SetParameter(self.DISPLAY_BREACH_STATUS, self.DISPLAY_BREACH_LOCATION)
+      breachWarningLogic.SetLineToClosestPointVisibility(True, breachWarningNode)
+      breachWarningLogic.SetLineToClosestPointTextScale(0, breachWarningNode)
+      breachWarningLogic.SetLineToClosestPointColor(0, 0, 0.5, breachWarningNode)
 
     breachMarkups_Needle = parameterNode.GetNodeReference(self.BREACH_MARKUPS_NEEDLE)
     if breachMarkups_Needle is None:
@@ -1629,8 +1613,6 @@ class LumpNav2Logic(ScriptedLoadableModuleLogic, VTKObservationMixin):
       parameterNode.SetNodeReferenceID(self.CAUTERYCAMERA_TO_CAUTERY, cauteryCameraToCautery.GetID())
     cauteryCameraToCautery.SetAndObserveTransformNodeID(cauteryToReference.GetID())
 
-    self.usFrozen = False
-
     # OpenIGTLink connection
     # self.setupPlusServer()
 
@@ -1656,12 +1638,10 @@ class LumpNav2Logic(ScriptedLoadableModuleLogic, VTKObservationMixin):
     referenceToRas = self.addLinearTransformToScene(self.REFERENCE_TO_RAS)
 
     # Needle tracking
-
     needleToReference = self.addLinearTransformToScene(self.NEEDLE_TO_REFERENCE, parentTransform=referenceToRas)
     self.addLinearTransformToScene(self.NEEDLETIP_TO_NEEDLE, parentTransform=needleToReference)
 
     # Cautery tracking
-
     cauteryToReference = self.addLinearTransformToScene(self.CAUTERY_TO_REFERENCE, parentTransform=referenceToRas)
     self.addLinearTransformToScene(self.CAUTERY_TO_NEEDLE)  # For cautery calibration
 
@@ -1678,7 +1658,6 @@ class LumpNav2Logic(ScriptedLoadableModuleLogic, VTKObservationMixin):
     cauteryTipToCautery.SetAndObserveTransformNodeID(cauteryToReference.GetID())
 
     # Ultrasound image tracking
-
     transdToReference = self.addLinearTransformToScene(self.TRANSD_TO_REFERENCE, parentTransform=referenceToRas)
     imageToTransd = self.addLinearTransformToScene(self.IMAGE_TO_TRANSD, parentTransform=transdToReference)
     predictionToNeedle = self.addLinearTransformToScene(self.PREDICTION_TO_NEEDLE)
@@ -1692,8 +1671,7 @@ class LumpNav2Logic(ScriptedLoadableModuleLogic, VTKObservationMixin):
       slicer.util.updateVolumeFromArray(imageImage, imageArray)
       parameterNode.SetNodeReferenceID(self.IMAGE_IMAGE, imageImage.GetID())
       # Update prediction volume dimensions when image dimensions change
-      self.imageImageObserverTag = imageImage.AddObserver(slicer.vtkMRMLScalarVolumeNode.ImageDataModifiedEvent,
-                                                          self.onImageImageModified)
+      self.addObserver(imageImage, slicer.vtkMRMLScalarVolumeNode.ImageDataModifiedEvent, self.onImageImageModified)
     imageImage.SetAndObserveTransformNodeID(imageToTransd.GetID())
 
     predictionImage = parameterNode.GetNodeReference(self.PREDICTION_VOLUME)
@@ -1763,7 +1741,6 @@ class LumpNav2Logic(ScriptedLoadableModuleLogic, VTKObservationMixin):
     parameterNode = self.getParameterNode()
 
     # Check if config file is specified in settings. Set and use default if not.
-
     configFullpath = slicer.util.settingsValue(self.CONFIG_FILE_SETTING, '')
     if configFullpath == '':
       configFullpath = self.resourcePath(self.CONFIG_FILE_DEFAULT)
@@ -2048,6 +2025,15 @@ class LumpNav2Logic(ScriptedLoadableModuleLogic, VTKObservationMixin):
       breachWarningNode.SetAndObserveToolTransformNodeId(cauteryTipToCautery.GetID())
     else:
       breachWarningNode.SetAndObserveToolTransformNodeId(None)
+
+  def setRulerVisibility(self, toggled):
+    parameterNode = self.getParameterNode()
+    breachWarningNode = parameterNode.GetNodeReference(self.BREACH_WARNING)
+    breachWarningLogic = slicer.modules.breachwarning.logic()
+    if toggled:
+      breachWarningLogic.SetLineToClosestPointVisibility(True, breachWarningNode)
+    else:
+      breachWarningLogic.SetLineToClosestPointVisibility(False, breachWarningNode)
 
   def setBrightness(self, maxLevel):
     self.setImageMinMaxLevel(0, maxLevel)
