@@ -9,6 +9,8 @@ import logging
 from slicer.ScriptedLoadableModule import *
 from slicer.util import VTKObservationMixin
 
+import Viewpoint
+
 try:
   import matplotlib.pyplot as plt
 except:
@@ -151,7 +153,6 @@ class LumpNav2Widget(ScriptedLoadableModuleWidget, VTKObservationMixin):
   """
 
   # Variables to store widget state
-
   PIVOT_CALIBRATION = 0
   SPIN_CALIBRATION = 1
   PIVOT_CALIBRATION_TIME_SEC = 5.0
@@ -160,6 +161,8 @@ class LumpNav2Widget(ScriptedLoadableModuleWidget, VTKObservationMixin):
   NEEDLE_CALIBRATION_THRESHOLD_SETTING = "LumpNav2/NeedleCalibrationTresholdMm"
   NEEDLE_CALIBRATION_THRESHOLD_DEFAULT = 1.0
   FONT_SIZE_DEFAULT = 20
+  VIEW_COORD_HEIGHT_LIMIT = 0.6
+  VIEW_COORD_WIDTH_LIMIT = 0.9
 
   def __init__(self, parent=None):
     """
@@ -254,16 +257,9 @@ class LumpNav2Widget(ScriptedLoadableModuleWidget, VTKObservationMixin):
     self.ui.saveSceneButton.connect('clicked()', self.onSaveSceneClicked)
 
     # contouring
-    brightnessSetting = slicer.util.settingsValue(self.logic.BRIGHTNESS_SETTING, "Normal")
     self.ui.normalBrightnessButton.connect('toggled(bool)', self.onNormalBrightnessClicked)
     self.ui.brightBrightnessButton.connect('toggled(bool)', self.onBrightBrightnessClicked)
     self.ui.brightestBrightnessButton.connect('toggled(bool)', self.onBrightestBrightnessClicked)
-    if brightnessSetting == "Normal":
-      self.ui.normalBrightnessButton.checked = True
-    elif brightnessSetting == "Bright":
-      self.ui.brightBrightnessButton.checked = True
-    else:
-      self.ui.brightestBrightnessButton.checked = True
     self.ui.markPointsButton.connect('toggled(bool)', self.onMarkPointsToggled)
     self.ui.deleteLastFiducialButton.connect('clicked()', self.onDeleteLastFiducialClicked)
     self.ui.deleteAllFiducialsButton.connect('clicked()', self.onDeleteAllFiducialsClicked)
@@ -278,7 +274,6 @@ class LumpNav2Widget(ScriptedLoadableModuleWidget, VTKObservationMixin):
     # navigation
     self.ui.leftBreastButton.connect('clicked()', self.onLeftBreastButtonClicked)
     self.ui.rightBreastButton.connect('clicked()', self.onRightBreastButtonClicked)
-    # self.ui.bottomBullseyeCameraButton.connect('clicked()', lambda: self.onCameraButtonClicked('View3') )
     self.ui.displayDistanceButton.connect('toggled(bool)', self.onDisplayDistanceClicked)
     self.ui.displayRulerButton.connect('toggled(bool)', self.onDisplayRulerButtonClicked)
     self.ui.leftAutoCenterCameraButton.connect('toggled(bool)', self.onLeftAutoCenterCameraButtonClicked)
@@ -294,9 +289,9 @@ class LumpNav2Widget(ScriptedLoadableModuleWidget, VTKObservationMixin):
     self.ui.decreaseDistanceFontSizeButton.connect('clicked()', self.onDecreaseDistanceFontSizeClicked)
     self.ui.deleteLastFiducialNavigationButton.connect('clicked()', self.onDeleteLastFiducialClicked)
     cauteryToolSelected = slicer.util.settingsValue(self.logic.CAUTERY_MODEL_SELECTED, True, converter=slicer.util.toBool)
-    self.ui.toolModelButton.checked = cauteryToolSelected
+    self.ui.toolModelButton.setChecked(cauteryToolSelected)
     self.ui.toolModelButton.connect('toggled(bool)', self.onToolModelClicked)
-    self.ui.threeDViewButton.connect('toggled(bool)', self.onThreeDViewButton)
+    self.ui.threeDViewButton.connect('toggled(bool)', self.onDual3DViewButton)
     self.ui.breachLocationButton.connect('toggled(bool)', self.onBreachLocationButtonClicked)
     self.ui.deleteTumorBreachButton.connect('clicked()', self.onDeleteTumorBreachButtonClicked)
 
@@ -306,7 +301,6 @@ class LumpNav2Widget(ScriptedLoadableModuleWidget, VTKObservationMixin):
     # Add custom layouts
     self.logic.addCustomLayouts()
 
-    import Viewpoint
     self.viewpointLogic = Viewpoint.ViewpointLogic()
 
   def onCauteryCalibrationButton(self):
@@ -365,7 +359,7 @@ class LumpNav2Widget(ScriptedLoadableModuleWidget, VTKObservationMixin):
     else:
       calibrationSuccess = self.pivotCalibrationLogic.ComputeSpinCalibration()
 
-    #todo: check if this is cautery or needle calibration and use different thresholds
+    # TODO: check if this is cautery or needle calibration and use different thresholds
     calibrationThresholdStr = slicer.util.settingsValue(
       self.CAUTERY_CALIBRATION_THRESHOLD_SETTING, self.CAUTERY_CALIBRATION_THRESHOLD_DEFAULT)
     calibrationThreshold = float(calibrationThresholdStr)
@@ -428,17 +422,14 @@ class LumpNav2Widget(ScriptedLoadableModuleWidget, VTKObservationMixin):
     logging.info("onWarningSoundToggled({})".format(toggled))
     self.logic.setWarningSound(toggled)
 
-  def getCauteryVisibility(self):
-    return slicer.util.settingsValue(self.logic.CAUTERY_VISIBILITY_SETTING, False, converter=slicer.util.toBool)
-
   def onToolsCollapsed(self, collapsed):
-    if collapsed == False:
+    if not collapsed:
       self.ui.contouringCollapsibleButton.collapsed = True
       self.ui.navigationCollapsibleButton.collapsed = True
       slicer.app.layoutManager().setLayout(self.logic.LAYOUT_2D3D)
 
   def onContouringCollapsed(self, collapsed):
-    if collapsed == False:
+    if not collapsed:
       self.ui.toolsCollapsibleButton.collapsed = True
       self.ui.navigationCollapsibleButton.collapsed = True
       slicer.app.layoutManager().setLayout(6)
@@ -449,22 +440,30 @@ class LumpNav2Widget(ScriptedLoadableModuleWidget, VTKObservationMixin):
     """
     if collapsed:
       self.logic.setBreachWarningOn(False)
+      if self.ui.markPointsButton.checked:
+        self.ui.markPointsButton.setChecked(False)
+        self.logic.setMarkPoints(False)
+      if self.ui.selectPointsToEraseButton.checked:
+        self.ui.selectPointsToEraseButton.setChecked(False)
+        self.logic.setErasePoints(False)
     else:
       self.ui.toolsCollapsibleButton.collapsed = True
       self.ui.contouringCollapsibleButton.collapsed = True
-      self.onThreeDViewButton(False)
+      self.onDual3DViewButton(self.ui.threeDViewButton.checked)
       interactionNode = slicer.app.applicationLogic().GetInteractionNode()
       interactionNode.SetCurrentInteractionMode(interactionNode.ViewTransform)
       self.logic.setBreachWarningOn(True)
       self.updateGUIFromParameterNode()
 
-  def onThreeDViewButton(self, toggled):
+  def onDual3DViewButton(self, toggled):
     self.ui.threeDViewButton.checked = toggled
     if toggled:
       self.ui.threeDViewButton.text = "Triple 3D View"
+      self.ui.bottomAutoCenterCameraButton.setEnabled(False)
       slicer.app.layoutManager().setLayout(self.logic.LAYOUT_DUAL3D)
     else:
       self.ui.threeDViewButton.text = "Dual 3D View"
+      self.ui.bottomAutoCenterCameraButton.setEnabled(True)
       slicer.app.layoutManager().setLayout(self.logic.LAYOUT_TRIPLE3D)
 
   def onStartStopRecordingClicked(self, toggled):
@@ -472,7 +471,6 @@ class LumpNav2Widget(ScriptedLoadableModuleWidget, VTKObservationMixin):
       self.ui.startStopRecordingButton.text = "Stop Ultrasound Recording"
     else:
       self.ui.startStopRecordingButton.text = "Start Ultrasound Recording"
-    self.ui.markPointsButton.checked = False
     self.logic.onUltrasoundSequenceBrowserClicked(toggled)
 
   def onBreachLocationButtonClicked(self, toggled):
@@ -530,63 +528,34 @@ class LumpNav2Widget(ScriptedLoadableModuleWidget, VTKObservationMixin):
 
   def onNormalBrightnessClicked(self):
     logging.info("onNormalBrightnessClicked")
-    settings = qt.QSettings()
-    settings.setValue(self.logic.BRIGHTNESS_SETTING, "Normal")
     self.logic.setBrightness(300)
 
   def onBrightBrightnessClicked(self):
     logging.info("onBrightBrightnessClicked")
-    settings = qt.QSettings()
-    settings.setValue(self.logic.BRIGHTNESS_SETTING, "Bright")
     self.logic.setBrightness(220)
 
   def onBrightestBrightnessClicked(self):
     logging.info("onBrightestBrightnessClicked")
-    settings = qt.QSettings()
-    settings.setValue(self.logic.BRIGHTNESS_SETTING, "Brightest")
     self.logic.setBrightness(140)
 
-  def onErasePointsToggled(self, toggled):
-    logging.info("onErasePointsToggled")
+  def onMarkPointsToggled(self, toggled):
+    logging.info(f"onMarkPointsToggled({toggled})")
     if self._updatingGui:
       return
     self._updatingGui = True
-    self.ui.markPointsButton.setChecked(False)
-    interactionNode = slicer.app.applicationLogic().GetInteractionNode()
-    if toggled:  # activate placement mode
-      self._parameterNode.SetParameter(self.logic.CONTOUR_STATUS, self.logic.CONTOUR_ADDING)
-      self._parameterNode.SetParameter(self.logic.POINTS_STATUS, self.logic.POINTS_ERASING)
-      selectionNode = slicer.app.applicationLogic().GetSelectionNode()
-      selectionNode.SetReferenceActivePlaceNodeClassName("vtkMRMLMarkupsFiducialNode")
-      tumorMarkups_Needle = self._parameterNode.GetNodeReference(self.logic.TUMOR_MARKUPS_NEEDLE)
-      selectionNode.SetActivePlaceNodeID(tumorMarkups_Needle.GetID())
-      interactionNode.SetPlaceModePersistence(1)
-      interactionNode.SetCurrentInteractionMode(interactionNode.Place)
-    else:  # deactivate placement mode
-      self._parameterNode.SetParameter(self.logic.CONTOUR_STATUS, self.logic.CONTOUR_UNSELECTED)
-      self._parameterNode.SetParameter(self.logic.POINTS_STATUS, self.logic.POINTS_UNSELECTED)
-      interactionNode.SetCurrentInteractionMode(interactionNode.ViewTransform)
+    if toggled:
+      self.ui.selectPointsToEraseButton.setChecked(False)
+    self.logic.setMarkPoints(toggled)
     self._updatingGui = False
 
-  def onMarkPointsToggled(self, toggled):
+  def onErasePointsToggled(self, toggled):
+    logging.info(f"onErasePointsToggled({toggled})")
     if self._updatingGui:
       return
     self._updatingGui = True
-    interactionNode = slicer.app.applicationLogic().GetInteractionNode()
-    if toggled:  # activate placement mode
-      self.ui.selectPointsToEraseButton.setChecked(False)
-      self._parameterNode.SetParameter(self.logic.CONTOUR_STATUS, self.logic.CONTOUR_ADDING)
-      self._parameterNode.SetParameter(self.logic.POINTS_STATUS, self.logic.POINTS_ADDING)
-      selectionNode = slicer.app.applicationLogic().GetSelectionNode()
-      selectionNode.SetReferenceActivePlaceNodeClassName("vtkMRMLMarkupsFiducialNode")
-      tumorMarkups_Needle = self._parameterNode.GetNodeReference(self.logic.TUMOR_MARKUPS_NEEDLE)
-      selectionNode.SetActivePlaceNodeID(tumorMarkups_Needle.GetID())
-      interactionNode.SetPlaceModePersistence(1)
-      interactionNode.SetCurrentInteractionMode(interactionNode.Place)
-    else:  # deactivate placement mode
-      self._parameterNode.SetParameter(self.logic.CONTOUR_STATUS, self.logic.CONTOUR_UNSELECTED)
-      self._parameterNode.SetParameter(self.logic.POINTS_STATUS, self.logic.POINTS_UNSELECTED)
-      interactionNode.SetCurrentInteractionMode(interactionNode.ViewTransform)
+    if toggled:
+      self.ui.markPointsButton.setChecked(False)
+    self.logic.setErasePoints(toggled)
     self._updatingGui = False
   
   def onMarkPointCauteryTipClicked(self):
@@ -624,7 +593,7 @@ class LumpNav2Widget(ScriptedLoadableModuleWidget, VTKObservationMixin):
     Get the view node for the selected 3D view
     """
     logging.debug("getViewNode")
-    viewNode = self._parameterNode.GetNodeReference(viewName)
+    viewNode = slicer.util.getFirstNodeByName(viewName)
     return viewNode
 
   def onLeftBreastButtonClicked(self):
@@ -735,109 +704,52 @@ class LumpNav2Widget(ScriptedLoadableModuleWidget, VTKObservationMixin):
       self.ui.toolModelButton.text = "Cautery Model"
     self.logic.setToolModelClicked(toggled)
 
-  def enableBullseyeInViewNode(self, viewNode):
-    logging.debug("enableBullseyeInViewNode")
-    if self._parameterNode is None:
-      return
-    self.disableViewpointInViewNode(viewNode)
-    self.viewpointLogic.getViewpointForViewNode(viewNode).setViewNode(viewNode)
-    cauteryCameraToCautery = self._parameterNode.GetNodeReference(self.logic.CAUTERYCAMERA_TO_CAUTERY)
-    self.viewpointLogic.getViewpointForViewNode(viewNode).bullseyeSetTransformNode(cauteryCameraToCautery)
-    self.viewpointLogic.getViewpointForViewNode(viewNode).bullseyeStart()
-    self.updateGUISliders(viewNode)
-
-  def disableBullseyeInViewNode(self, viewNode):
-    logging.debug("disableBullseyeInViewNode")
-    if self.viewpointLogic.getViewpointForViewNode(viewNode).isCurrentModeBullseye():
-      self.viewpointLogic.getViewpointForViewNode(viewNode).bullseyeStop()
-      self.updateGUISliders(viewNode)
-
-  def disableBullseyeInAllViewNodes(self):
-    logging.debug("disableBullseyeInAllViewNodes")
-    leftViewNode = self.getViewNode('View1')
-    self.disableBullseyeInViewNode(leftViewNode)
-    rightViewNode = self.getViewNode('View2')
-    self.disableBullseyeInViewNode(rightViewNode)
-    bottomViewNode = self.getViewNode('View3')
-    self.disableBullseyeInViewNode(bottomViewNode)
-
   def onLeftAutoCenterCameraButtonClicked(self, pushed):
     logging.info("onLeftAutoCenterButtonClicked")
+    self.ui.rightAutoCenterCameraButton.setChecked(False)
+    self.ui.bottomAutoCenterCameraButton.setChecked(False)
     self.onAutoCenterButtonClicked('View1')
 
   def onRightAutoCenterCameraButtonClicked(self, pushed):
-    logging.info("onRightAutoCenterCameraButtomClicked")
+    logging.info("onRightAutoCenterCameraButtonClicked")
+    self.ui.leftAutoCenterCameraButton.setChecked(False)
+    self.ui.bottomAutoCenterCameraButton.setChecked(False)
     self.onAutoCenterButtonClicked('View2')
 
   def onBottomAutoCenterCameraButtonClicked(self, pushed):
     logging.info("onBottomAutoCenterCameraButtonClicked")
+    self.ui.rightAutoCenterCameraButton.setChecked(False)
+    self.ui.leftAutoCenterCameraButton.setChecked(False)
     self.onAutoCenterButtonClicked('View3')
 
   def onAutoCenterButtonClicked(self, viewName):
-    logging.debug("onAutoCenterButtonClicked")
     viewNode = self.getViewNode(viewName)
     if self.viewpointLogic.getViewpointForViewNode(viewNode).isCurrentModeAutoCenter():
       self.disableAutoCenterInViewNode(viewNode)
     else:
       self.enableAutoCenterInViewNode(viewNode)
-      logging.info("Auto center for %s enabled", viewName)
-    self.updateGUIButtons()
 
   def disableAutoCenterInViewNode(self, viewNode):
-    logging.debug("disableAutoCenterInViewNode")
     if self.viewpointLogic.getViewpointForViewNode(viewNode).isCurrentModeAutoCenter():
       self.viewpointLogic.getViewpointForViewNode(viewNode).autoCenterStop()
-      logging.info("Auto center for %s disabled", viewNode.GetName())
+    logging.info("Auto center for %s disabled", viewNode.GetName())
 
   def enableAutoCenterInViewNode(self, viewNode):
-    logging.debug("enableAutoCenterInViewNode")
     self.disableViewpointInViewNode(viewNode)
-    heightViewCoordLimits = 0.6
-    widthViewCoordLimits = 0.9
     self.viewpointLogic.getViewpointForViewNode(viewNode).setViewNode(viewNode)
-    self.viewpointLogic.getViewpointForViewNode(viewNode).autoCenterSetSafeXMinimum(-widthViewCoordLimits)
-    self.viewpointLogic.getViewpointForViewNode(viewNode).autoCenterSetSafeXMaximum(widthViewCoordLimits)
-    self.viewpointLogic.getViewpointForViewNode(viewNode).autoCenterSetSafeYMinimum(-heightViewCoordLimits)
-    self.viewpointLogic.getViewpointForViewNode(viewNode).autoCenterSetSafeYMaximum(heightViewCoordLimits)
+    self.viewpointLogic.getViewpointForViewNode(viewNode).autoCenterSetSafeXMinimum(-self.VIEW_COORD_WIDTH_LIMIT)
+    self.viewpointLogic.getViewpointForViewNode(viewNode).autoCenterSetSafeXMaximum(self.VIEW_COORD_WIDTH_LIMIT)
+    self.viewpointLogic.getViewpointForViewNode(viewNode).autoCenterSetSafeYMinimum(-self.VIEW_COORD_HEIGHT_LIMIT)
+    self.viewpointLogic.getViewpointForViewNode(viewNode).autoCenterSetSafeYMaximum(self.VIEW_COORD_HEIGHT_LIMIT)
     parameterNode = self._parameterNode
     tumorModel = parameterNode.GetNodeReference(self.logic.TUMOR_MODEL)
     self.viewpointLogic.getViewpointForViewNode(viewNode).autoCenterSetModelNode(tumorModel)
     self.viewpointLogic.getViewpointForViewNode(viewNode).autoCenterStart()
+    logging.info("Auto center for %s enabled", viewNode.GetName())
 
-  def disableViewpointInViewNode(self,viewNode):
+  def disableViewpointInViewNode(self, viewNode):
     logging.debug("disableViewpointInViewNode")
-    self.disableBullseyeInViewNode(viewNode)
     self.disableAutoCenterInViewNode(viewNode)
-
-  def updateGUIButtons(self):
-    logging.debug("updateGUIButtons")
-
-    leftViewNode = self.getViewNode('View1')
-
-    blockSignalState = self.ui.leftAutoCenterCameraButton.blockSignals(True)
-    if self.viewpointLogic.getViewpointForViewNode(leftViewNode).isCurrentModeAutoCenter():
-      self.ui.leftAutoCenterCameraButton.setChecked(True)
-    else:
-      self.ui.leftAutoCenterCameraButton.setChecked(False)
-    self.ui.leftAutoCenterCameraButton.blockSignals(blockSignalState)
-
-    rightViewNode = self.getViewNode('View2')
-
-    blockSignalState = self.ui.rightAutoCenterCameraButton.blockSignals(True)
-    if self.viewpointLogic.getViewpointForViewNode(rightViewNode).isCurrentModeAutoCenter():
-      self.ui.rightAutoCenterCameraButton.setChecked(True)
-    else:
-      self.ui.rightAutoCenterCameraButton.setChecked(False)
-    self.ui.rightAutoCenterCameraButton.blockSignals(blockSignalState)
-
-    centerViewNode = self.getViewNode('View3')
-
-    blockSignalState = self.ui.bottomAutoCenterCameraButton.blockSignals(True)
-    if self.viewpointLogic.getViewpointForViewNode(centerViewNode).isCurrentModeAutoCenter():
-      self.ui.bottomAutoCenterCameraButton.setChecked(True)
-    else:
-      self.ui.bottomAutoCenterCameraButton.setChecked(False)
-    self.ui.bottomAutoCenterCameraButton.blockSignals(blockSignalState)
 
   def setCustomStyle(self, visible):
     """
@@ -905,7 +817,7 @@ class LumpNav2Widget(ScriptedLoadableModuleWidget, VTKObservationMixin):
       slicer.app.layoutManager().setLayout(6)
 
     if self.ui.navigationCollapsibleButton.checked:
-      self.onThreeDViewButton(self.ui.threeDViewButton.checked)
+      self.onDual3DViewButton(self.ui.threeDViewButton.checked)
 
     self.updateGUIFromParameterNode()
     self.updateGUIFromMRML()
@@ -916,7 +828,7 @@ class LumpNav2Widget(ScriptedLoadableModuleWidget, VTKObservationMixin):
     """
     logging.debug("getCamera")
     camerasLogic = slicer.modules.cameras.logic()
-    camera = camerasLogic.GetViewActiveCameraNode(self._parameterNode.GetNodeReference(viewName))
+    camera = camerasLogic.GetViewActiveCameraNode(self.getViewNode(viewName))
     return camera
   
   def exit(self):
@@ -1067,6 +979,7 @@ class LumpNav2Widget(ScriptedLoadableModuleWidget, VTKObservationMixin):
 
     self._updatingGUIFromMRML = True
 
+    # Needle visibility button
     needleModel = self._parameterNode.GetNodeReference(self.logic.NEEDLE_MODEL)
     if needleModel is not None:
       if needleModel.GetDisplayVisibility():
@@ -1074,9 +987,20 @@ class LumpNav2Widget(ScriptedLoadableModuleWidget, VTKObservationMixin):
       else:
         self.ui.needleVisibilityButton.checked = False
 
+    # Cautery visibility and tool model buttons
     cauteryModel = self._parameterNode.GetNodeReference(self.logic.CAUTERY_MODEL)
-    if cauteryModel is not None:
-      if cauteryModel.GetDisplayVisibility():
+    stickModel = self._parameterNode.GetNodeReference(self.logic.STICK_MODEL)
+    isCauterySelected = slicer.util.settingsValue(self.logic.CAUTERY_MODEL_SELECTED, True, converter=slicer.util.toBool)
+    if isCauterySelected:
+      selectedModel = cauteryModel
+      self.ui.toolModelButton.checked = True
+      self.ui.toolModelButton.text = "Stick Model"
+    else:
+      selectedModel = stickModel
+      self.ui.toolModelButton.checked = False
+      self.ui.toolModelButton.text = "Cautery Model"
+    if selectedModel is not None:
+      if selectedModel.GetDisplayVisibility():
         self.ui.cauteryVisibilityButton.checked = True
       else:
         self.ui.cauteryVisibilityButton.checked = False
@@ -1191,7 +1115,6 @@ class LumpNav2Logic(ScriptedLoadableModuleLogic, VTKObservationMixin):
   STICK_MODEL = "StickModel"
   WARNING_SOUND_SETTING = "LumpNav2/WarningSoundEnabled"
   BREACH_MARKUPS_PROXIMITY_THRESHOLD = "LumpNav2/BreachMarkupsProximitySetting"
-  BRIGHTNESS_SETTING = "LumpNav2/BrightnessSetting"
 
   # Model reconstruction
   ROI_NODE = "ROI"
@@ -1201,7 +1124,6 @@ class LumpNav2Logic(ScriptedLoadableModuleLogic, VTKObservationMixin):
   RECONSTRUCTION_VOLUME = "ReconstructionVolume"
 
   # Layout codes
-
   LAYOUT_2D3D = 501
   LAYOUT_TRIPLE3D = 502
   LAYOUT_DUAL3D = 503
@@ -1444,7 +1366,7 @@ class LumpNav2Logic(ScriptedLoadableModuleLogic, VTKObservationMixin):
       needleTipToNeedle_settings = np.array(needleTipToNeedle_settings)
       needleTipToNeedle_settings = slicer.util.vtkMatrixFromArray(needleTipToNeedle_settings)
       needleTipToNeedle.SetMatrixTransformToParent(needleTipToNeedle_settings)
-    self.addObserver(needleTipToNeedle, slicer.vtkMRMLLinearTransformNode.TransformModifiedEvent, self.needleTipToNeedleModified)
+    self.addObserver(needleTipToNeedle, slicer.vtkMRMLLinearTransformNode.TransformModifiedEvent, self.onNeedleTipToNeedleModified)
 
     # Cautery model
     cauteryModel = parameterNode.GetNodeReference(self.CAUTERY_MODEL)
@@ -1582,6 +1504,7 @@ class LumpNav2Logic(ScriptedLoadableModuleLogic, VTKObservationMixin):
       breachWarningLogic.SetLineToClosestPointVisibility(True, breachWarningNode)
       breachWarningLogic.SetLineToClosestPointTextScale(0, breachWarningNode)
       breachWarningLogic.SetLineToClosestPointColor(0, 0, 0.5, breachWarningNode)
+      breachWarningLogic.SetLineToClosestPointVisibility(False, breachWarningNode)
 
     breachMarkups_Needle = parameterNode.GetNodeReference(self.BREACH_MARKUPS_NEEDLE)
     if breachMarkups_Needle is None:
@@ -1832,10 +1755,10 @@ class LumpNav2Logic(ScriptedLoadableModuleLogic, VTKObservationMixin):
       roiNode = parameterNode.GetNodeReference(self.ROI_NODE)
       roiNode.SetAndObserveTransformNodeID(needleToReference.GetID())
 
-  def setUltrasoundSequenceBrowser(self, recording):
+  def setUltrasoundSequenceBrowser(self, isRecording):
     parameterNode = self.getParameterNode()
     sequenceBrowserUltrasound = parameterNode.GetNodeReference(self.ULTRASOUND_SEQUENCE_BROWSER)
-    sequenceBrowserUltrasound.SetRecordingActive(recording)  # stop
+    sequenceBrowserUltrasound.SetRecordingActive(isRecording)
 
   def setSegmentationVisibility(self, toggled):
     parameterNode = self.getParameterNode()
@@ -2126,6 +2049,40 @@ class LumpNav2Logic(ScriptedLoadableModuleLogic, VTKObservationMixin):
     tumorModel_Needle = parameterNode.GetNodeReference(self.TUMOR_MODEL)
     tumorModel_Needle.SetAndObservePolyData(normals.GetOutput())
 
+  def setMarkPoints(self, toggled):
+    parameterNode = self.getParameterNode()
+    interactionNode = slicer.app.applicationLogic().GetInteractionNode()
+    if toggled:  # activate placement mode
+      parameterNode.SetParameter(self.CONTOUR_STATUS, self.CONTOUR_ADDING)
+      parameterNode.SetParameter(self.POINTS_STATUS, self.POINTS_ADDING)
+      selectionNode = slicer.app.applicationLogic().GetSelectionNode()
+      selectionNode.SetReferenceActivePlaceNodeClassName("vtkMRMLMarkupsFiducialNode")
+      tumorMarkups_Needle = parameterNode.GetNodeReference(self.TUMOR_MARKUPS_NEEDLE)
+      selectionNode.SetActivePlaceNodeID(tumorMarkups_Needle.GetID())
+      interactionNode.SetPlaceModePersistence(1)
+      interactionNode.SetCurrentInteractionMode(interactionNode.Place)
+    else:  # deactivate placement mode
+      parameterNode.SetParameter(self.CONTOUR_STATUS, self.CONTOUR_UNSELECTED)
+      parameterNode.SetParameter(self.POINTS_STATUS, self.POINTS_UNSELECTED)
+      interactionNode.SetCurrentInteractionMode(interactionNode.ViewTransform)
+
+  def setErasePoints(self, toggled):
+    parameterNode = self.getParameterNode()
+    interactionNode = slicer.app.applicationLogic().GetInteractionNode()
+    if toggled:  # activate placement mode
+      parameterNode.SetParameter(self.CONTOUR_STATUS, self.CONTOUR_ADDING)
+      parameterNode.SetParameter(self.POINTS_STATUS, self.POINTS_ERASING)
+      selectionNode = slicer.app.applicationLogic().GetSelectionNode()
+      selectionNode.SetReferenceActivePlaceNodeClassName("vtkMRMLMarkupsFiducialNode")
+      tumorMarkups_Needle = parameterNode.GetNodeReference(self.TUMOR_MARKUPS_NEEDLE)
+      selectionNode.SetActivePlaceNodeID(tumorMarkups_Needle.GetID())
+      interactionNode.SetPlaceModePersistence(1)
+      interactionNode.SetCurrentInteractionMode(interactionNode.Place)
+    else:  # deactivate placement mode
+      parameterNode.SetParameter(self.CONTOUR_STATUS, self.CONTOUR_UNSELECTED)
+      parameterNode.SetParameter(self.POINTS_STATUS, self.POINTS_UNSELECTED)
+      interactionNode.SetCurrentInteractionMode(interactionNode.ViewTransform)
+
   def modifyPoints(self, observer, eventID):
     parameterNode = self.getParameterNode()
     tumorMarkups_Needle = parameterNode.GetNodeReference(self.TUMOR_MARKUPS_NEEDLE)
@@ -2223,8 +2180,7 @@ class LumpNav2Logic(ScriptedLoadableModuleLogic, VTKObservationMixin):
     if predictionData.GetDimensions() != imageDimensions:
       predictionData.SetDimensions(imageDimensions)
 
-  def needleTipToNeedleModified(self, observer, eventid):
-    logging.debug('needleTipToNeedleModified')
+  def onNeedleTipToNeedleModified(self, observer, eventid):
     import json
     settings = qt.QSettings()
     parameterNode = self.getParameterNode()
