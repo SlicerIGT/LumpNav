@@ -278,14 +278,6 @@ class LumpNav2Widget(ScriptedLoadableModuleWidget, VTKObservationMixin):
     self.ui.leftAutoCenterCameraButton.connect('toggled(bool)', self.onLeftAutoCenterCameraButtonClicked)
     self.ui.rightAutoCenterCameraButton.connect('toggled(bool)', self.onRightAutoCenterCameraButtonClicked)
     self.ui.bottomAutoCenterCameraButton.connect('toggled(bool)', self.onBottomAutoCenterCameraButtonClicked)
-    self.ui.increaseDistanceFontSizeButton.setAutoRepeat(True)
-    self.ui.increaseDistanceFontSizeButton.setAutoRepeatDelay(500)
-    self.ui.increaseDistanceFontSizeButton.setAutoRepeatInterval(10)
-    self.ui.increaseDistanceFontSizeButton.connect('clicked()', self.onIncreaseDistanceFontSizeClicked)
-    self.ui.decreaseDistanceFontSizeButton.setAutoRepeat(True)
-    self.ui.decreaseDistanceFontSizeButton.setAutoRepeatDelay(500)
-    self.ui.decreaseDistanceFontSizeButton.setAutoRepeatInterval(10)
-    self.ui.decreaseDistanceFontSizeButton.connect('clicked()', self.onDecreaseDistanceFontSizeClicked)
     self.ui.deleteLastFiducialNavigationButton.connect('clicked()', self.onDeleteLastFiducialClicked)
     cauteryToolSelected = slicer.util.settingsValue(self.logic.CAUTERY_MODEL_SELECTED, True, converter=slicer.util.toBool)
     self.ui.toolModelButton.setChecked(cauteryToolSelected)
@@ -612,7 +604,7 @@ class LumpNav2Widget(ScriptedLoadableModuleWidget, VTKObservationMixin):
     cameraNode1 = self.getCamera('View1')
     cameraNode2 = self.getCamera('View2')
     cameraNode3 = self.getCamera('View3')
-    #TODO: Don't use magic numbers
+    # TODO: Don't use magic numbers
     cameraNode1.SetPosition(-242.0042709749552, 331.2026122150233, -36.6617924419265)
     cameraNode1.SetViewUp(0.802637869051714, 0.5959392355990031, -0.025077452777348814)
     cameraNode1.SetFocalPoint(0.0, 0.0, 0.0)
@@ -658,43 +650,16 @@ class LumpNav2Widget(ScriptedLoadableModuleWidget, VTKObservationMixin):
     settings.setValue(self.logic.DISTANCE_TO_TUMOR_VISIBILITY, toggled)
     parameterNode = self._parameterNode
     breachWarningNode = parameterNode.GetNodeReference(self.logic.BREACH_WARNING)
-    for i in range(slicer.app.layoutManager().threeDViewCount):
-      view = slicer.app.layoutManager().threeDWidget(i).threeDView()
-      if toggled:
-        if view.cornerAnnotation().GetMaximumFontSize() != view.cornerAnnotation().GetMinimumFontSize():
-          view.cornerAnnotation().SetMaximumFontSize(self.FONT_SIZE_DEFAULT)
-          view.cornerAnnotation().SetMinimumFontSize(self.FONT_SIZE_DEFAULT)
-          view.cornerAnnotation().SetNonlinearFontScaleFactor(1)
-        view.cornerAnnotation().SetText(vtk.vtkCornerAnnotation.UpperLeft,
-                                        f"{breachWarningNode.GetClosestDistanceToModelFromToolTip():.2f}")
-      else:
-        view.cornerAnnotation().SetText(vtk.vtkCornerAnnotation.UpperLeft, "")
-      view.forceRender()
+    breachWarningLogic = slicer.modules.breachwarning.logic()
+    if toggled:
+      breachWarningLogic.SetLineToClosestPointTextScale(5, breachWarningNode)
+    else:
+      breachWarningLogic.SetLineToClosestPointTextScale(0, breachWarningNode)
 
   def onDisplayRulerButtonClicked(self, toggled):
     logging.info(f"onDisplayRulerButtonClicked({toggled})")
     self.logic.setRulerVisibility(toggled)
 
-  def onIncreaseDistanceFontSizeClicked(self):
-    logging.info("onIncreaseDistanceFontSizeClicked")
-    for i in range(slicer.app.layoutManager().threeDViewCount):
-      view = slicer.app.layoutManager().threeDWidget(i).threeDView()
-      fontSize = view.cornerAnnotation().GetMaximumFontSize() + 1
-      view.cornerAnnotation().SetMaximumFontSize(fontSize)
-      view.cornerAnnotation().SetMinimumFontSize(fontSize)
-      view.cornerAnnotation().SetNonlinearFontScaleFactor(1)
-      view.forceRender()
-
-  def onDecreaseDistanceFontSizeClicked(self):
-    logging.info("onDecreaseDistanceFontSizeClicked")
-    for i in range(slicer.app.layoutManager().threeDViewCount):
-      view = slicer.app.layoutManager().threeDWidget(i).threeDView()
-      fontSize = view.cornerAnnotation().GetMaximumFontSize() - 1
-      view.cornerAnnotation().SetMaximumFontSize(fontSize)
-      view.cornerAnnotation().SetMinimumFontSize(fontSize)
-      view.cornerAnnotation().SetNonlinearFontScaleFactor(1)
-      view.forceRender()
-  
   def onToolModelClicked(self, toggled):
     logging.info('onToolModelClicked')
     if toggled:
@@ -2103,9 +2068,6 @@ class LumpNav2Logic(ScriptedLoadableModuleLogic, VTKObservationMixin):
     return closestIndex, fiducialPosition
 
   def onBreachWarningNodeChanged(self, observer, eventid):
-    showDistance = slicer.util.settingsValue(self.DISTANCE_TO_TUMOR_VISIBILITY, False, converter=slicer.util.toBool)
-    if showDistance:
-      self.showDistanceToTumor()
     parameterNode = self.getParameterNode()
     breachWarningNode = parameterNode.GetNodeReference(self.BREACH_WARNING)
     if breachWarningNode.GetClosestDistanceToModelFromToolTip() < 0:
@@ -2149,16 +2111,6 @@ class LumpNav2Logic(ScriptedLoadableModuleLogic, VTKObservationMixin):
         return True
     else:
       return False
-
-  def showDistanceToTumor(self):
-    breachWarningNode = self.getParameterNode().GetNodeReference(self.BREACH_WARNING)
-    for i in range(slicer.app.layoutManager().threeDViewCount):
-      view = slicer.app.layoutManager().threeDWidget(i).threeDView()
-      distanceToTumor = breachWarningNode.GetClosestDistanceToModelFromToolTip()
-      if distanceToTumor > 10:  # Only show distance with 2 decimal places if the cautery is within 10mm of the tumor boundary
-        view.setCornerAnnotationText("{0:.1f}mm".format(breachWarningNode.GetClosestDistanceToModelFromToolTip()))
-      else:
-        view.setCornerAnnotationText("{0:.2f}mm".format(breachWarningNode.GetClosestDistanceToModelFromToolTip()))
 
   def onImageImageModified(self, observer, eventid):
     self.updatePredictionImageDimensions()
