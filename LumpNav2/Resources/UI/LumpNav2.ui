@@ -281,6 +281,16 @@
        </layout>
       </item>
       <item>
+       <widget class="QPushButton" name="displayRulerButton">
+        <property name="text">
+         <string>Display ruler</string>
+        </property>
+        <property name="checkable">
+         <bool>true</bool>
+        </property>
+       </widget>
+      </item>
+      <item>
        <widget class="QPushButton" name="displayDistanceButton">
         <property name="text">
          <string>Display distance to tumor</string>
@@ -294,14 +304,29 @@
        </widget>
       </item>
       <item>
-       <widget class="QPushButton" name="displayRulerButton">
-        <property name="text">
-         <string>Display ruler</string>
-        </property>
-        <property name="checkable">
-         <bool>true</bool>
-        </property>
-       </widget>
+       <layout class="QHBoxLayout" name="horizontalLayout_8">
+        <item>
+         <widget class="QLabel" name="fontSizeLabel">
+          <property name="text">
+           <string>Distance to tumor font size:</string>
+          </property>
+         </widget>
+        </item>
+        <item>
+         <widget class="QPushButton" name="decreaseDistanceFontSizeButton">
+          <property name="text">
+           <string>- 1</string>
+          </property>
+         </widget>
+        </item>
+        <item>
+         <widget class="QPushButton" name="increaseDistanceFontSizeButton">
+          <property name="text">
+           <string>+ 1</string>
+          </property>
+         </widget>
+        </item>
+       </layout>
       </item>
       <item>
        <layout class="QHBoxLayout" name="horizontalLayout_7">

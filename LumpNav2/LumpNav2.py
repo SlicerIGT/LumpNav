@@ -273,8 +273,14 @@ class LumpNav2Widget(ScriptedLoadableModuleWidget, VTKObservationMixin):
     # navigation
     self.ui.leftBreastButton.connect('clicked()', self.onLeftBreastButtonClicked)
     self.ui.rightBreastButton.connect('clicked()', self.onRightBreastButtonClicked)
-    self.ui.displayDistanceButton.connect('toggled(bool)', self.onDisplayDistanceClicked)
+    displayRulerEnabled = slicer.util.settingsValue(self.logic.DISPLAY_RULER_SETTING, True, converter=slicer.util.toBool)
+    self.ui.displayRulerButton.checked = displayRulerEnabled
     self.ui.displayRulerButton.connect('toggled(bool)', self.onDisplayRulerButtonClicked)
+    displayDistanceEnabled = slicer.util.settingsValue(self.logic.DISPLAY_DISTANCE_SETTING, True, converter=slicer.util.toBool)
+    self.ui.displayDistanceButton.checked = displayDistanceEnabled
+    self.ui.displayDistanceButton.connect('toggled(bool)', self.onDisplayDistanceClicked)
+    self.ui.increaseDistanceFontSizeButton.connect('clicked()', self.onIncreaseDistanceFontSizeClicked)
+    self.ui.decreaseDistanceFontSizeButton.connect('clicked()', self.onDecreaseDistanceFontSizeClicked)
     self.ui.leftAutoCenterCameraButton.connect('toggled(bool)', self.onLeftAutoCenterCameraButtonClicked)
     self.ui.rightAutoCenterCameraButton.connect('toggled(bool)', self.onRightAutoCenterCameraButtonClicked)
     self.ui.bottomAutoCenterCameraButton.connect('toggled(bool)', self.onBottomAutoCenterCameraButtonClicked)
@@ -644,21 +650,33 @@ class LumpNav2Widget(ScriptedLoadableModuleWidget, VTKObservationMixin):
     cameraNode2.ResetClippingRange()
     cameraNode1.ResetClippingRange()
 
+  def onDisplayRulerButtonClicked(self, toggled):
+    logging.info(f"onDisplayRulerButtonClicked({toggled})")
+    settings = qt.QSettings()
+    settings.setValue(self.logic.DISPLAY_RULER_SETTING, toggled)
+    self.logic.setRulerVisibility(toggled)
+
   def onDisplayDistanceClicked(self, toggled):
     logging.info("onDisplayDistanceClicked({})".format(toggled))
     settings = qt.QSettings()
-    settings.setValue(self.logic.DISTANCE_TO_TUMOR_VISIBILITY, toggled)
-    parameterNode = self._parameterNode
-    breachWarningNode = parameterNode.GetNodeReference(self.logic.BREACH_WARNING)
-    breachWarningLogic = slicer.modules.breachwarning.logic()
-    if toggled:
-      breachWarningLogic.SetLineToClosestPointTextScale(5, breachWarningNode)
-    else:
-      breachWarningLogic.SetLineToClosestPointTextScale(0, breachWarningNode)
+    settings.setValue(self.logic.DISPLAY_DISTANCE_SETTING, toggled)
+    self.logic.setRulerDistanceVisibility(toggled)
 
-  def onDisplayRulerButtonClicked(self, toggled):
-    logging.info(f"onDisplayRulerButtonClicked({toggled})")
-    self.logic.setRulerVisibility(toggled)
+  def onIncreaseDistanceFontSizeClicked(self):
+    logging.info("onIncreaseDistanceFontSizeClicked")
+    previousFontSize = slicer.util.settingsValue(self.logic.RULER_FONT_SIZE, self.logic.RULER_DISTANCE_DEFAULT_FONT_SIZE, converter=lambda x: float(x))
+    newFontSize = previousFontSize + 1
+    settings = qt.QSettings()
+    settings.setValue(self.logic.RULER_FONT_SIZE, newFontSize)
+    self.logic.setRulerDistanceFontSize(newFontSize)
+
+  def onDecreaseDistanceFontSizeClicked(self):
+    logging.info("onDecreaseDistanceFontSizeClicked")
+    previousFontSize = slicer.util.settingsValue(self.logic.RULER_FONT_SIZE, self.logic.RULER_DISTANCE_DEFAULT_FONT_SIZE, converter=lambda x: float(x))
+    newFontSize = previousFontSize - 1
+    settings = qt.QSettings()
+    settings.setValue(self.logic.RULER_FONT_SIZE, newFontSize)
+    self.logic.setRulerDistanceFontSize(newFontSize)
 
   def onToolModelClicked(self, toggled):
     logging.info('onToolModelClicked')
@@ -1079,9 +1097,12 @@ class LumpNav2Logic(ScriptedLoadableModuleLogic, VTKObservationMixin):
   CAUTERY_MODEL_SELECTED = "LumpNav2/CauteryModelSelected"
   TUMOR_MODEL = "TumorModel"
   STICK_MODEL = "StickModel"
-  DISTANCE_TO_TUMOR_VISIBILITY = "LumpNav2/DistanceToTumorVisible"
   WARNING_SOUND_SETTING = "LumpNav2/WarningSoundEnabled"
   BREACH_MARKUPS_PROXIMITY_THRESHOLD = "LumpNav2/BreachMarkupsProximitySetting"
+  DISPLAY_RULER_SETTING = "LumpNav2/DistanceRulerEnabled"
+  DISPLAY_DISTANCE_SETTING = "LumpNav2/DistanceRulerTextEnabled"
+  RULER_DISTANCE_DEFAULT_FONT_SIZE = 5
+  RULER_FONT_SIZE = "LumpNav2/RulerFontSize"
 
   # Model reconstruction
   ROI_NODE = "ROI"
@@ -1458,9 +1479,15 @@ class LumpNav2Logic(ScriptedLoadableModuleLogic, VTKObservationMixin):
       # Line properties can only be set after the line is created (made visible at least once)
       breachWarningLogic = slicer.modules.breachwarning.logic()
       breachWarningLogic.SetLineToClosestPointVisibility(True, breachWarningNode)
-      breachWarningLogic.SetLineToClosestPointTextScale(0, breachWarningNode)
+      distanceRulerFontSize = slicer.util.settingsValue(self.RULER_FONT_SIZE, self.RULER_DISTANCE_DEFAULT_FONT_SIZE, converter=lambda x: float(x))
+      breachWarningLogic.SetLineToClosestPointTextScale(distanceRulerFontSize, breachWarningNode)
       breachWarningLogic.SetLineToClosestPointColor(0, 0, 0.5, breachWarningNode)
-      breachWarningLogic.SetLineToClosestPointVisibility(False, breachWarningNode)
+
+      # Ruler display and distance text setting
+      displayRulerEnabled = slicer.util.settingsValue(self.DISPLAY_RULER_SETTING, True, converter=slicer.util.toBool)
+      breachWarningLogic.SetLineToClosestPointVisibility(displayRulerEnabled, breachWarningNode)
+      displayDistanceEnabled = slicer.util.settingsValue(self.DISPLAY_DISTANCE_SETTING, True, converter=slicer.util.toBool)
+      self.setRulerDistanceVisibility(displayDistanceEnabled)
 
     breachMarkups_Needle = parameterNode.GetNodeReference(self.BREACH_MARKUPS_NEEDLE)
     if breachMarkups_Needle is None:
@@ -1913,6 +1940,19 @@ class LumpNav2Logic(ScriptedLoadableModuleLogic, VTKObservationMixin):
       breachWarningLogic.SetLineToClosestPointVisibility(True, breachWarningNode)
     else:
       breachWarningLogic.SetLineToClosestPointVisibility(False, breachWarningNode)
+
+  def setRulerDistanceVisibility(self, toggled):
+    if toggled:
+      fontSize = slicer.util.settingsValue(self.RULER_FONT_SIZE, self.RULER_DISTANCE_DEFAULT_FONT_SIZE, converter=lambda x: float(x))
+    else:
+      fontSize = 0
+    self.setRulerDistanceFontSize(fontSize)
+
+  def setRulerDistanceFontSize(self, fontSize):
+    parameterNode = self.getParameterNode()
+    breachWarningNode = parameterNode.GetNodeReference(self.BREACH_WARNING)
+    breachWarningLogic = slicer.modules.breachwarning.logic()
+    breachWarningLogic.SetLineToClosestPointTextScale(fontSize, breachWarningNode)
 
   def setBrightness(self, maxLevel):
     self.setImageMinMaxLevel(0, maxLevel)
