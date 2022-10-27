@@ -361,12 +361,10 @@ class LumpNav2Widget(ScriptedLoadableModuleWidget, VTKObservationMixin):
       self._updatingGUIFromParameterNode = False
 
       logging.info("Scene saved to: {0}".format(sceneSaveDirectory))
-      slicer.util.showStatusMessage(f"Scene saved to {sceneSaveDirectory}.", 2000)
-      slicer.util.infoDisplay(f"Scene saved to {sceneSaveDirectory}", windowTitle="Save Scene")
+      slicer.util.showStatusMessage(f"Scene saved to {sceneSaveDirectory}.", 5000)
     else:
       logging.error("Scene saving failed")
-      slicer.util.showStatusMessage(f"Failed to save scene to {sceneSaveDirectory}.", 2000)
-      slicer.util.infoDisplay(f"Failed to save scene to {sceneSaveDirectory}", windowTitle="Save Scene")
+      slicer.util.showStatusMessage(f"Failed to save scene to {sceneSaveDirectory}.", 5000)
 
   def onStopPivotCalibration(self):
     self.pivotCalibrationLogic.SetRecordingState(False)
@@ -415,20 +413,27 @@ class LumpNav2Widget(ScriptedLoadableModuleWidget, VTKObservationMixin):
     msgBox.setStyleSheet(slicer.util.mainWindow().styleSheet)
     msgBox.setWindowTitle("Confirm Exit")
     msgBox.setText("Some data may not have been saved yet.")
-    msgBox.setInformativeText("Do you want to exit and discard the current scene?")
-    discardButton = msgBox.addButton("Exit", qt.QMessageBox.DestructiveRole)
+    msgBox.setInformativeText("Do you still want to exit?")
+    saveExitButton = msgBox.addButton("Save and Exit", qt.QMessageBox.DestructiveRole)
+    discardButton = msgBox.addButton("Discard and Exit", qt.QMessageBox.DestructiveRole)
     cancelButton = msgBox.addButton("Cancel", qt.QMessageBox.RejectRole)
     msgBox.setModal(True)
     msgBox.exec()
 
-    if msgBox.clickedButton() == discardButton:
+    if msgBox.clickedButton() == saveExitButton:
       # Automatically save if changes were made since last save
       hasUnsavedChanges = self._parameterNode.GetParameter(self.HAS_UNSAVED_CHANGES)
       if hasUnsavedChanges == "True":
         self.onSaveSceneClicked()
+        slicer.util.infoDisplay(f"Scene saved to {self.ui.saveFolderSelector.directory}. Press OK to exit.", windowTitle="Save Scene")
+      else:
+        logging.info("No changes made since last save. Exiting.")
+        slicer.util.showStatusMessage("No changes made since last save. Exiting.", 5000)
+        slicer.util.infoDisplay("No changes made since last save. Press OK to exit.", windowTitle="Save Scene")
       return True
-    else:
-      return False
+    if msgBox.clickedButton() == discardButton:
+      return True
+    return False
 
   def onNeedleVisibilityToggled(self, toggled):
     logging.info("onNeedleVisibilityToggled({})".format(toggled))
