@@ -521,16 +521,20 @@ class LumpNav2Widget(ScriptedLoadableModuleWidget, VTKObservationMixin):
     settings.setValue(self.logic.BREACH_MARKUPS_PROXIMITY_THRESHOLD, value)
 
   def onFreezeUltrasoundClicked(self, toggled):
-    logging.info("onFreezeUltrasoundClicked")
+    logging.info(f"onFreezeUltrasoundClicked({toggled})")
+    if toggled:
+      self.ui.freezeUltrasoundButton.text = "Un-Freeze"
+    else:
+      self.ui.freezeUltrasoundButton.text = "Freeze"
     self.logic.setFreezeUltrasoundClicked(toggled)
 
   def onStartPlusClicked(self, toggled):
-    plusRemoteNode = self._parameterNode.GetNodeReference(self.logic.PLUS_REMOTE_NODE)
-    if plusRemoteNode:
-      if toggled:
-        plusRemoteNode.Start()
-      else:
-        plusRemoteNode.Stop()
+    logging.info(f"onStartPlusClicked({toggled})")
+    if toggled:
+      self.ui.startPlusButton.text = "Stop PLUS"
+    else:
+      self.ui.freezeUltrasoundButton.text = "Start PLUS"
+    self.logic.setPlusServerClicked(toggled)
 
   def onDisplayRASClicked(self, toggled):
     parameterNode = self._parameterNode
@@ -1112,7 +1116,6 @@ class LumpNav2Logic(ScriptedLoadableModuleLogic, VTKObservationMixin):
   CONFIG_TEXT_NODE = "ConfigTextNode"
   PLUS_SERVER_NODE = "PlusServer"
   PLUS_SERVER_LAUNCHER_NODE = "PlusServerLauncher"
-  PLUS_REMOTE_NODE = "PlusRemoteNode"
 
   # Model names and settings
   NEEDLE_MODEL = "NeedleModel"
@@ -1548,7 +1551,7 @@ class LumpNav2Logic(ScriptedLoadableModuleLogic, VTKObservationMixin):
     cauteryCameraToCautery.SetAndObserveTransformNodeID(cauteryToReference.GetID())
 
     # OpenIGTLink connection
-    # self.setupPlusServer()
+    self.setupPlusServer()
 
     # Set nodes for segmentation logic
     self.segmentationLogic.setModelPath(self.resourcePath(self.AI_MODEL_PATH))
@@ -1710,13 +1713,6 @@ class LumpNav2Logic(ScriptedLoadableModuleLogic, VTKObservationMixin):
 
     if plusServerLauncherNode.GetNodeReferenceID('plusServerRef') != plusServerNode.GetID():
       plusServerLauncherNode.AddAndObserveServerNode(plusServerNode)
-
-    # TODO: may not be the right way to start server?
-    plusRemoteNode = parameterNode.GetNodeReference(self.PLUS_REMOTE_NODE)
-    if not plusRemoteNode:
-      plusRemoteNode = slicer.mrmlScene.AddNewNodeByClass("vtkMRMLIGTLConnectorNode", self.PLUS_REMOTE_NODE)
-      plusRemoteNode.SaveWithSceneOff()
-      parameterNode.SetNodeReferenceID(self.PLUS_REMOTE_NODE, plusRemoteNode.GetID())
 
   def setTrackingSequenceBrowser(self, recording):
     parameterNode = self.getParameterNode()
@@ -1925,11 +1921,18 @@ class LumpNav2Logic(ScriptedLoadableModuleLogic, VTKObservationMixin):
     parameterNode = self.getParameterNode()
     plusServerNode = parameterNode.GetNodeReference(self.PLUS_SERVER_NODE)
     if toggled:
-      # self.guideletParent.connectorNode.Stop()
       plusServerNode.StopServer()
     else:
-      # self.guideletParent.connectorNode.Start()
       plusServerNode.StartServer()
+
+  def setPlusServerClicked(self, toggled):
+    parameterNode = self.getParameterNode()
+    plusServerNode = parameterNode.GetNodeReference(self.PLUS_SERVER_NODE)
+    if plusServerNode:
+      if toggled:
+        plusServerNode.StartServer()
+      else:
+        plusServerNode.StopServer()
 
   def setToolModelClicked(self, toggled):
     logging.info("setToolModelClicked")
