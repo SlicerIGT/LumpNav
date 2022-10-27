@@ -417,31 +417,30 @@
        </layout>
       </item>
       <item>
-       <layout class="QHBoxLayout" name="horizontalLayout_10">
+       <layout class="QHBoxLayout" name="horizontalLayout_12">
         <item>
-         <widget class="QLabel" name="label_3">
+         <widget class="QLabel" name="breachFiducialSizeLabel">
           <property name="text">
-           <string>Segmentation threshold:</string>
+           <string>Tumor breach fiducial size:</string>
           </property>
          </widget>
         </item>
         <item>
-         <widget class="QSlider" name="segmentationThresholdSlider">
-          <property name="maximum">
-           <number>305</number>
+         <widget class="ctkDoubleSlider" name="breachFiducialSizeSlider">
+          <property name="value">
+           <double>5.000000000000000</double>
           </property>
-          <property name="sliderPosition">
-           <number>245</number>
+          <property name="singleStep">
+           <double>0.100000000000000</double>
+          </property>
+          <property name="pageStep">
+           <double>1.000000000000000</double>
+          </property>
+          <property name="maximum">
+           <double>10.000000000000000</double>
           </property>
           <property name="orientation">
            <enum>Qt::Horizontal</enum>
-          </property>
-         </widget>
-        </item>
-        <item>
-         <widget class="QLabel" name="thresholdSliderValue">
-          <property name="text">
-           <string>20%</string>
           </property>
          </widget>
         </item>
@@ -502,16 +501,12 @@
        </widget>
       </item>
       <item>
-       <widget class="QPushButton" name="saveSceneButton">
+       <widget class="QPushButton" name="startPlusButton">
         <property name="text">
-         <string>Save Scene</string>
+         <string>Start PLUS</string>
         </property>
-       </widget>
-      </item>
-      <item>
-       <widget class="QPushButton" name="exitButton">
-        <property name="text">
-         <string>Exit</string>
+        <property name="checkable">
+         <bool>true</bool>
         </property>
        </widget>
       </item>
@@ -552,6 +547,30 @@
        </widget>
       </item>
       <item>
+       <widget class="QPushButton" name="saveSceneButton">
+        <property name="text">
+         <string>Save Scene</string>
+        </property>
+       </widget>
+      </item>
+      <item>
+       <widget class="QPushButton" name="exitButton">
+        <property name="text">
+         <string>Exit</string>
+        </property>
+       </widget>
+      </item>
+      <item>
+       <widget class="QPushButton" name="displayRASButton">
+        <property name="text">
+         <string>Display RAS</string>
+        </property>
+        <property name="checkable">
+         <bool>true</bool>
+        </property>
+       </widget>
+      </item>
+      <item>
        <widget class="QPushButton" name="displayCauteryStateButton">
         <property name="enabled">
          <bool>true</bool>
@@ -575,24 +594,35 @@
        </widget>
       </item>
       <item>
-       <widget class="QPushButton" name="startPlusButton">
-        <property name="text">
-         <string>Start PLUS</string>
-        </property>
-        <property name="checkable">
-         <bool>true</bool>
-        </property>
-       </widget>
-      </item>
-      <item>
-       <widget class="QPushButton" name="displayRASButton">
-        <property name="text">
-         <string>Display RAS</string>
-        </property>
-        <property name="checkable">
-         <bool>true</bool>
-        </property>
-       </widget>
+       <layout class="QHBoxLayout" name="horizontalLayout_10">
+        <item>
+         <widget class="QLabel" name="label_3">
+          <property name="text">
+           <string>Segmentation threshold:</string>
+          </property>
+         </widget>
+        </item>
+        <item>
+         <widget class="QSlider" name="segmentationThresholdSlider">
+          <property name="maximum">
+           <number>305</number>
+          </property>
+          <property name="sliderPosition">
+           <number>245</number>
+          </property>
+          <property name="orientation">
+           <enum>Qt::Horizontal</enum>
+          </property>
+         </widget>
+        </item>
+        <item>
+         <widget class="QLabel" name="thresholdSliderValue">
+          <property name="text">
+           <string>20%</string>
+          </property>
+         </widget>
+        </item>
+       </layout>
       </item>
       <item>
        <widget class="QPushButton" name="warningSoundButton">
@@ -652,6 +682,11 @@
    <extends>QWidget</extends>
    <header>ctkCollapsibleButton.h</header>
    <container>1</container>
+  </customwidget>
+  <customwidget>
+   <class>ctkDoubleSlider</class>
+   <extends>QWidget</extends>
+   <header>ctkDoubleSlider.h</header>
   </customwidget>
   <customwidget>
    <class>qMRMLWidget</class>

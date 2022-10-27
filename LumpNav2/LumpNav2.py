@@ -156,9 +156,9 @@ class LumpNav2Widget(ScriptedLoadableModuleWidget, VTKObservationMixin):
   PIVOT_CALIBRATION = 0
   SPIN_CALIBRATION = 1
   PIVOT_CALIBRATION_TIME_SEC = 5.0
-  CAUTERY_CALIBRATION_THRESHOLD_SETTING = "LumpNav2/CauteryCalibrationTresholdMm"
+  CAUTERY_CALIBRATION_THRESHOLD_SETTING = "LumpNav2/CauteryCalibrationThresholdMm"
   CAUTERY_CALIBRATION_THRESHOLD_DEFAULT = 1.0
-  NEEDLE_CALIBRATION_THRESHOLD_SETTING = "LumpNav2/NeedleCalibrationTresholdMm"
+  NEEDLE_CALIBRATION_THRESHOLD_SETTING = "LumpNav2/NeedleCalibrationThresholdMm"
   NEEDLE_CALIBRATION_THRESHOLD_DEFAULT = 1.0
   FONT_SIZE_DEFAULT = 20
   VIEW_COORD_HEIGHT_LIMIT = 0.6
@@ -291,6 +291,9 @@ class LumpNav2Widget(ScriptedLoadableModuleWidget, VTKObservationMixin):
     self.ui.threeDViewButton.connect('toggled(bool)', self.onDual3DViewButton)
     self.ui.breachLocationButton.connect('toggled(bool)', self.onBreachLocationButtonClicked)
     self.ui.deleteTumorBreachButton.connect('clicked()', self.onDeleteTumorBreachButtonClicked)
+    breachMarkupsSize = slicer.util.settingsValue(self.logic.BREACH_MARKUPS_SIZE_SETTING, 5, converter=lambda x: float(x))
+    self.ui.breachFiducialSizeSlider.value = breachMarkupsSize
+    self.ui.breachFiducialSizeSlider.connect('valueChanged(double)', self.onBreachFiducialSizeValueChanged)
 
     # Add custom layouts
     self.logic.addCustomLayouts()
@@ -478,6 +481,11 @@ class LumpNav2Widget(ScriptedLoadableModuleWidget, VTKObservationMixin):
       breachMarkups_Needle.SetDisplayVisibility(1)
     else:
       breachMarkups_Needle.SetDisplayVisibility(0)
+
+  def onBreachFiducialSizeValueChanged(self, value):
+    settings = qt.QSettings()
+    settings.setValue(self.logic.BREACH_MARKUPS_SIZE_SETTING, value)
+    self.logic.setBreachFiducialSize(value)
 
   def onDeleteTumorBreachButtonClicked(self):
     logging.info("onDeleteTumorBreachButtonClicked")
@@ -1099,6 +1107,7 @@ class LumpNav2Logic(ScriptedLoadableModuleLogic, VTKObservationMixin):
   STICK_MODEL = "StickModel"
   WARNING_SOUND_SETTING = "LumpNav2/WarningSoundEnabled"
   BREACH_MARKUPS_PROXIMITY_THRESHOLD = "LumpNav2/BreachMarkupsProximitySetting"
+  BREACH_MARKUPS_SIZE_SETTING = "LumpNav2/BreachMarkupsSize"
   DISPLAY_RULER_SETTING = "LumpNav2/DistanceRulerEnabled"
   DISPLAY_DISTANCE_SETTING = "LumpNav2/DistanceRulerTextEnabled"
   RULER_DISTANCE_DEFAULT_FONT_SIZE = 5
@@ -1493,7 +1502,9 @@ class LumpNav2Logic(ScriptedLoadableModuleLogic, VTKObservationMixin):
     if breachMarkups_Needle is None:
       breachMarkups_Needle = slicer.mrmlScene.AddNewNodeByClass("vtkMRMLMarkupsFiducialNode", self.BREACH_MARKUPS_NEEDLE)
       breachMarkups_Needle.CreateDefaultDisplayNodes()
-      breachMarkups_Needle.GetDisplayNode().SetGlyphScale(5)
+      # Breach markup size setting
+      breachMarkupsSize = slicer.util.settingsValue(self.BREACH_MARKUPS_SIZE_SETTING, 5, converter=lambda x: float(x))
+      breachMarkups_Needle.GetDisplayNode().SetGlyphScale(breachMarkupsSize)
       breachMarkups_Needle.GetDisplayNode().SetTextScale(0)
       breachMarkups_Needle.GetDisplayNode().SetColor(1, 0, 0)
       breachMarkups_Needle.LockedOn()
@@ -2151,6 +2162,12 @@ class LumpNav2Logic(ScriptedLoadableModuleLogic, VTKObservationMixin):
         return True
     else:
       return False
+
+  def setBreachFiducialSize(self, value):
+    parameterNode = self.getParameterNode()
+    breachMarkups_Needle = parameterNode.GetNodeReference(self.BREACH_MARKUPS_NEEDLE)
+    if breachMarkups_Needle is not None:
+      breachMarkups_Needle.GetDisplayNode().SetGlyphScale(value)
 
   def onImageImageModified(self, observer, eventid):
     self.updatePredictionImageDimensions()
