@@ -125,9 +125,6 @@ class LumpNavEventFilter(qt.QWidget):
     self.moduleWidget = moduleWidget
 
   def eventFilter(self, object, event):
-    if self.moduleWidget.getSlicerInterfaceVisible():
-      return False
-
     if event.type() == qt.QEvent.Close:
       if self.moduleWidget.confirmExit():
         slicer.app.quit()
@@ -153,6 +150,8 @@ class LumpNav2Widget(ScriptedLoadableModuleWidget, VTKObservationMixin):
   """
 
   # Variables to store widget state
+  SLICER_INTERFACE_VISIBLE = "LumpNav2/SlicerInterfaceVisible"
+  HAS_UNSAVED_CHANGES = "HasUnsavedChanges"
   PIVOT_CALIBRATION = 0
   SPIN_CALIBRATION = 1
   PIVOT_CALIBRATION_TIME_SEC = 5.0
@@ -163,6 +162,7 @@ class LumpNav2Widget(ScriptedLoadableModuleWidget, VTKObservationMixin):
   FONT_SIZE_DEFAULT = 20
   VIEW_COORD_HEIGHT_LIMIT = 0.6
   VIEW_COORD_WIDTH_LIMIT = 0.9
+  LAST_SAVE_FOLDER = "LumpNav2/LastSaveFolder"
 
   def __init__(self, parent=None):
     """
@@ -254,6 +254,10 @@ class LumpNav2Widget(ScriptedLoadableModuleWidget, VTKObservationMixin):
     self.ui.breachMarkupsThresholdSpinBox.connect('valueChanged(int)', self.onBreachMarkupsProximityChanged)
     self.ui.exitButton.connect('clicked()', self.onExitButtonClicked)
     self.ui.saveSceneButton.connect('clicked()', self.onSaveSceneClicked)
+    lastSavePath = slicer.util.settingsValue(self.LAST_SAVE_FOLDER, "")
+    if lastSavePath != "":
+      self.ui.saveFolderSelector.directory = lastSavePath
+    self.ui.saveFolderSelector.connect('directoryChanged(const QString)', self.onSavePathChanged)
 
     # contouring
     self.ui.normalBrightnessButton.connect('toggled(bool)', self.onNormalBrightnessClicked)
@@ -328,25 +332,41 @@ class LumpNav2Widget(ScriptedLoadableModuleWidget, VTKObservationMixin):
     mainwindow = slicer.util.mainWindow()
     mainwindow.close()
 
+  def onSavePathChanged(self, path):
+    if path:
+      abspath = os.path.abspath(path)
+      self.ui.saveFolderSelector.directory = abspath
+      settings = qt.QSettings()
+      settings.setValue(self.LAST_SAVE_FOLDER, abspath)
+      logging.info(f"onSavePathChanged({abspath})")
+
   def onSaveSceneClicked(self):  # common
     #
     # save the mrml scene to a temp directory, then zip it
     #
     qt.QApplication.setOverrideCursor(qt.Qt.WaitCursor)
-    node = self.logic.getParameterNode()
-    sceneSaveDirectory = node.GetParameter('SavedScenesDirectory')
+    sceneSaveDirectory = self.ui.saveFolderSelector.directory
     sceneSaveDirectory = sceneSaveDirectory + "/" + self.logic.moduleName + "-" + time.strftime("%Y%m%d-%H%M%S")
     logging.info("Saving scene to: {0}".format(sceneSaveDirectory))
     if not os.access(sceneSaveDirectory, os.F_OK):
       os.makedirs(sceneSaveDirectory)
 
     applicationLogic = slicer.app.applicationLogic()
-    if applicationLogic.SaveSceneToSlicerDataBundleDirectory(sceneSaveDirectory, None):
+    saveSuccess = applicationLogic.SaveSceneToSlicerDataBundleDirectory(sceneSaveDirectory, None)
+    qt.QApplication.restoreOverrideCursor()
+    if saveSuccess:
+      # Update parameter without triggering event
+      self._updatingGUIFromParameterNode = True
+      self._parameterNode.SetParameter(self.HAS_UNSAVED_CHANGES, "False")
+      self._updatingGUIFromParameterNode = False
+
       logging.info("Scene saved to: {0}".format(sceneSaveDirectory))
+      slicer.util.showStatusMessage(f"Scene saved to {sceneSaveDirectory}.", 2000)
+      slicer.util.infoDisplay(f"Scene saved to {sceneSaveDirectory}", windowTitle="Save Scene")
     else:
       logging.error("Scene saving failed")
-    qt.QApplication.restoreOverrideCursor()
-    slicer.util.showStatusMessage(f"Scene saved to {sceneSaveDirectory}!", 2000)
+      slicer.util.showStatusMessage(f"Failed to save scene to {sceneSaveDirectory}.", 2000)
+      slicer.util.infoDisplay(f"Failed to save scene to {sceneSaveDirectory}", windowTitle="Save Scene")
 
   def onStopPivotCalibration(self):
     self.pivotCalibrationLogic.SetRecordingState(False)
@@ -393,17 +413,19 @@ class LumpNav2Widget(ScriptedLoadableModuleWidget, VTKObservationMixin):
   def confirmExit(self):
     msgBox = qt.QMessageBox()
     msgBox.setStyleSheet(slicer.util.mainWindow().styleSheet)
-    msgBox.setWindowTitle("Confirm exit")
-    msgBox.setText("Some data may not have been saved yet. Do you want to exit and discard the current scene?")
-    #TODO: Save scene
-    if self._parameterNode.GetMTime() > self.logic.saveTime.GetMTime():
-      self.onSaveSceneClicked()
+    msgBox.setWindowTitle("Confirm Exit")
+    msgBox.setText("Some data may not have been saved yet.")
+    msgBox.setInformativeText("Do you want to exit and discard the current scene?")
     discardButton = msgBox.addButton("Exit", qt.QMessageBox.DestructiveRole)
     cancelButton = msgBox.addButton("Cancel", qt.QMessageBox.RejectRole)
     msgBox.setModal(True)
     msgBox.exec()
 
     if msgBox.clickedButton() == discardButton:
+      # Automatically save if changes were made since last save
+      hasUnsavedChanges = self._parameterNode.GetParameter(self.HAS_UNSAVED_CHANGES)
+      if hasUnsavedChanges == "True":
+        self.onSaveSceneClicked()
       return True
     else:
       return False
@@ -751,7 +773,7 @@ class LumpNav2Widget(ScriptedLoadableModuleWidget, VTKObservationMixin):
     :returns: None
     """
     settings = qt.QSettings()
-    settings.setValue('LumpNav2/SlicerInterfaceVisible', not visible)
+    settings.setValue(self.SLICER_INTERFACE_VISIBLE, not visible)
 
     slicer.util.setToolbarsVisible(not visible)
     slicer.util.setMenuBarsVisible(not visible)
@@ -774,7 +796,7 @@ class LumpNav2Widget(ScriptedLoadableModuleWidget, VTKObservationMixin):
     self.ui.customUiButton.checked = visible
 
   def getSlicerInterfaceVisible(self):
-    return slicer.util.settingsValue('LumpNav2/SlicerInterfaceVisible', False, converter=slicer.util.toBool)
+    return slicer.util.settingsValue(self.SLICER_INTERFACE_VISIBLE, False, converter=slicer.util.toBool)
 
   def cleanup(self):
     """
@@ -956,6 +978,9 @@ class LumpNav2Widget(ScriptedLoadableModuleWidget, VTKObservationMixin):
       self.ui.selectPointsToEraseButton.setChecked(False)
       self.ui.selectPointsToEraseButton.setEnabled(False)
 
+    # Set parameter to tell if changes were made to scene after a save
+    self._parameterNode.SetParameter(self.HAS_UNSAVED_CHANGES, "True")
+
     # All the GUI updates are done
     self._updatingGUIFromParameterNode = False
 
@@ -1038,12 +1063,6 @@ class LumpNav2Widget(ScriptedLoadableModuleWidget, VTKObservationMixin):
       return
 
     wasModified = self._parameterNode.StartModify()  # Modify all properties in a single batch
-
-    needleVisible = self.ui.needleVisibilityButton.checked
-    if needleVisible:
-      self._parameterNode.SetParameter(self.logic.NEEDLE_MODEL_VISIBLE, "true")
-    else:
-      self._parameterNode.SetParameter(self.logic.NEEDLE_MODEL_VISIBLE, "false")
 
     self._parameterNode.EndModify(wasModified)
 
@@ -1147,8 +1166,6 @@ class LumpNav2Logic(ScriptedLoadableModuleLogic, VTKObservationMixin):
     # Telemed C5 probe geometry
     self.scaling_Intercept = 0.01663333
     self.scaling_Slope = 0.00192667
-
-    self.saveTime = vtk.vtkTimeStamp()
 
     self.segmentationLogic = slicer.modules.segmentationunet.widgetRepresentation().self().logic
     self.firstOutputReady = False
