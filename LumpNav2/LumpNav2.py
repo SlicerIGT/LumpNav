@@ -153,7 +153,6 @@ class LumpNav2Widget(ScriptedLoadableModuleWidget, VTKObservationMixin):
   # Variables to store widget state
   SLICER_RECOMMENDED_VERSION = "5.0.0"
   SLICER_INTERFACE_VISIBLE = "LumpNav2/SlicerInterfaceVisible"
-  HAS_UNSAVED_CHANGES = "HasUnsavedChanges"
   PIVOT_CALIBRATION = 0
   SPIN_CALIBRATION = 1
   PIVOT_CALIBRATION_TIME_SEC = 5.0
@@ -178,6 +177,7 @@ class LumpNav2Widget(ScriptedLoadableModuleWidget, VTKObservationMixin):
     self._updatingGUIFromParameterNode = False
     self._updatingGUIFromMRML = False
     self._updatingGui = False
+    self.saveTime = vtk.vtkTimeStamp()
     self.observedNeedleModel = None
     self.observedCauteryModel = None
     self.observedTrackingSeqBrNode = None
@@ -374,11 +374,8 @@ class LumpNav2Widget(ScriptedLoadableModuleWidget, VTKObservationMixin):
     saveSuccess = applicationLogic.SaveSceneToSlicerDataBundleDirectory(sceneSaveDirectory, None)
     qt.QApplication.restoreOverrideCursor()
     if saveSuccess:
-      # Update parameter without triggering event
-      self._updatingGUIFromParameterNode = True
-      self._parameterNode.SetParameter(self.HAS_UNSAVED_CHANGES, "False")
-      self._updatingGUIFromParameterNode = False
-
+      # Record time stamp of save
+      self.saveTime.Modified()
       logging.info("Scene saved to: {0}".format(sceneSaveDirectory))
       slicer.util.showStatusMessage(f"Scene saved to {sceneSaveDirectory}.", 5000)
     else:
@@ -441,8 +438,7 @@ class LumpNav2Widget(ScriptedLoadableModuleWidget, VTKObservationMixin):
 
     if msgBox.clickedButton() == saveExitButton:
       # Automatically save if changes were made since last save
-      hasUnsavedChanges = self._parameterNode.GetParameter(self.HAS_UNSAVED_CHANGES)
-      if hasUnsavedChanges == "True":
+      if self._parameterNode.GetMTime() > self.saveTime.GetMTime():
         self.onSaveSceneClicked()
         slicer.util.infoDisplay(f"Scene saved to {self.ui.saveFolderSelector.directory}. Press OK to exit.", windowTitle="Save Scene")
       else:
@@ -1005,9 +1001,6 @@ class LumpNav2Widget(ScriptedLoadableModuleWidget, VTKObservationMixin):
       self.ui.deleteLastFiducialNavigationButton.setEnabled(False)
       self.ui.selectPointsToEraseButton.setChecked(False)
       self.ui.selectPointsToEraseButton.setEnabled(False)
-
-    # Set parameter to tell if changes were made to scene after a save
-    self._parameterNode.SetParameter(self.HAS_UNSAVED_CHANGES, "True")
 
     # All the GUI updates are done
     self._updatingGUIFromParameterNode = False
