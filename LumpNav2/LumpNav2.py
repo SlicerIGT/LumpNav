@@ -1,6 +1,7 @@
 import os
 import time
 import json
+from packaging import version
 
 import numpy as np
 import vtk, qt, ctk, slicer
@@ -150,6 +151,7 @@ class LumpNav2Widget(ScriptedLoadableModuleWidget, VTKObservationMixin):
   """
 
   # Variables to store widget state
+  SLICER_RECOMMENDED_VERSION = "5.0.0"
   SLICER_INTERFACE_VISIBLE = "LumpNav2/SlicerInterfaceVisible"
   HAS_UNSAVED_CHANGES = "HasUnsavedChanges"
   PIVOT_CALIBRATION = 0
@@ -194,6 +196,23 @@ class LumpNav2Widget(ScriptedLoadableModuleWidget, VTKObservationMixin):
     """
     Called when the user opens the module the first time and the widget is initialized.
     """
+    # Check Slicer version and display message if older than recommended
+    currentSlicerVersion = str(slicer.app.mainApplicationMajorVersion) + "." + \
+                           str(slicer.app.mainApplicationMinorVersion) + "." + \
+                           str(slicer.app.mainApplicationPatchVersion)
+    logging.info(currentSlicerVersion)
+    if version.parse(currentSlicerVersion) < version.parse(self.SLICER_RECOMMENDED_VERSION):
+      msg = qt.QMessageBox()
+      msg.setIcon(qt.QMessageBox.Information)
+      msg.setTextFormat(qt.Qt.RichText)
+      msg.setText(f"Current 3D Slicer version ({currentSlicerVersion}) is older than the recommended version "
+                  f"({self.SLICER_RECOMMENDED_VERSION}). This may lead to unexpected behaviour.")
+      msg.setInformativeText("3D Slicer releases can be downloaded <a href='https://download.slicer.org/'>here</a>.")
+      msg.setWindowTitle("3D Slicer")
+      msg.setStandardButtons(qt.QMessageBox.Ok)
+      msg.setModal(True)
+      msg.exec()
+
     ScriptedLoadableModuleWidget.setup(self)
 
     # Load widget from .ui file (created by Qt Designer).
