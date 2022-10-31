@@ -200,7 +200,6 @@ class LumpNav2Widget(ScriptedLoadableModuleWidget, VTKObservationMixin):
     currentSlicerVersion = str(slicer.app.mainApplicationMajorVersion) + "." + \
                            str(slicer.app.mainApplicationMinorVersion) + "." + \
                            str(slicer.app.mainApplicationPatchVersion)
-    logging.info(currentSlicerVersion)
     if version.parse(currentSlicerVersion) < version.parse(self.SLICER_RECOMMENDED_VERSION):
       msg = qt.QMessageBox()
       msg.setIcon(qt.QMessageBox.Information)
@@ -277,6 +276,10 @@ class LumpNav2Widget(ScriptedLoadableModuleWidget, VTKObservationMixin):
     if lastSavePath != "":
       self.ui.saveFolderSelector.directory = lastSavePath
     self.ui.saveFolderSelector.connect('directoryChanged(const QString)', self.onSavePathChanged)
+    lastHostname = slicer.util.settingsValue(self.logic.LAST_HOSTNAME, "")
+    if lastHostname != "":
+      self.ui.hostnameLineEdit.text = lastHostname
+    self.ui.hostnameLineEdit.connect('editingFinished()', self.onHostnameChanged)
 
     # contouring
     self.ui.normalBrightnessButton.connect('toggled(bool)', self.onNormalBrightnessClicked)
@@ -552,12 +555,21 @@ class LumpNav2Widget(ScriptedLoadableModuleWidget, VTKObservationMixin):
       self.ui.freezeUltrasoundButton.text = "Freeze"
     self.logic.setFreezeUltrasoundClicked(toggled)
 
+  def onHostnameChanged(self):
+    newHostname = self.ui.hostnameLineEdit.text
+    settings = qt.QSettings()
+    settings.setValue(self.logic.LAST_HOSTNAME, newHostname)
+    self.logic.setHostname(newHostname)
+    logging.info(f"onHostnameChanged({newHostname})")
+
   def onStartPlusClicked(self, toggled):
     logging.info(f"onStartPlusClicked({toggled})")
     if toggled:
       self.ui.startPlusButton.text = "Stop PLUS"
+      self.ui.hostnameLineEdit.enabled = False
     else:
-      self.ui.freezeUltrasoundButton.text = "Start PLUS"
+      self.ui.startPlusButton.text = "Start PLUS"
+      self.ui.hostnameLineEdit.enabled = True
     self.logic.setPlusServerClicked(toggled)
 
   def onDisplayRASClicked(self, toggled):
@@ -1140,6 +1152,7 @@ class LumpNav2Logic(ScriptedLoadableModuleLogic, VTKObservationMixin):
   CONFIG_TEXT_NODE = "ConfigTextNode"
   PLUS_SERVER_NODE = "PlusServer"
   PLUS_SERVER_LAUNCHER_NODE = "PlusServerLauncher"
+  LAST_HOSTNAME = "LumpNav2/LastHostname"
 
   # Model names and settings
   NEEDLE_MODEL = "NeedleModel"
@@ -1738,6 +1751,11 @@ class LumpNav2Logic(ScriptedLoadableModuleLogic, VTKObservationMixin):
     if plusServerLauncherNode.GetNodeReferenceID('plusServerRef') != plusServerNode.GetID():
       plusServerLauncherNode.AddAndObserveServerNode(plusServerNode)
 
+    # Set hostname from settings
+    lastHostname = slicer.util.settingsValue(self.LAST_HOSTNAME, "")
+    if lastHostname != "":
+      self.setHostname(lastHostname)
+
   def setTrackingSequenceBrowser(self, recording):
     parameterNode = self.getParameterNode()
     sequenceBrowserTracking = parameterNode.GetNodeReference(self.TRACKING_SEQUENCE_BROWSER)
@@ -1957,6 +1975,12 @@ class LumpNav2Logic(ScriptedLoadableModuleLogic, VTKObservationMixin):
         plusServerNode.StartServer()
       else:
         plusServerNode.StopServer()
+
+  def setHostname(self, hostname):
+    parameterNode = self.getParameterNode()
+    plusServerLauncherNode = parameterNode.GetNodeReference(self.PLUS_SERVER_LAUNCHER_NODE)
+    if plusServerLauncherNode:
+      plusServerLauncherNode.SetHostname(hostname)
 
   def setToolModelClicked(self, toggled):
     logging.info("setToolModelClicked")
