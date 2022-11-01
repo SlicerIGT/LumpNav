@@ -569,6 +569,7 @@ class LumpNav2Widget(ScriptedLoadableModuleWidget, VTKObservationMixin):
     self.logic.setPlusServerClicked(toggled)
 
   def onDisplayRASClicked(self, toggled):
+    logging.info(f"onDisplayRASClicked({toggled})")
     parameterNode = self._parameterNode
     RASMarkups = parameterNode.GetNodeReference(self.logic.RAS_MARKUPS)
     if toggled:
@@ -1440,12 +1441,13 @@ class LumpNav2Logic(ScriptedLoadableModuleLogic, VTKObservationMixin):
       tumorModel_Needle = slicer.mrmlScene.AddNewNodeByClass("vtkMRMLModelNode", self.TUMOR_MODEL)
       tumorModel_Needle.CreateDefaultDisplayNodes()
       modelDisplayNode = tumorModel_Needle.GetDisplayNode()
-      modelDisplayNode.SetColor(0,1,0) # Green
+      modelDisplayNode.SetColor(0, 1, 0)  # Green
       modelDisplayNode.BackfaceCullingOff()
       modelDisplayNode.SliceIntersectionVisibilityOn()
       modelDisplayNode.SetSliceIntersectionThickness(4)
-      modelDisplayNode.SetOpacity(0.3) # Between 0-1, 1 being opaque
+      modelDisplayNode.SetOpacity(0.3)  # Between 0-1, 1 being opaque
       parameterNode.SetNodeReferenceID(self.TUMOR_MODEL, tumorModel_Needle.GetID())
+    self.addObserver(tumorModel_Needle, slicer.vtkMRMLModelNode.MeshModifiedEvent, self.setRASMarkups)
 
     needleToReference = parameterNode.GetNodeReference(self.NEEDLE_TO_REFERENCE)
     tumorModel_Needle.SetAndObserveTransformNodeID(needleToReference.GetID())
@@ -1471,16 +1473,11 @@ class LumpNav2Logic(ScriptedLoadableModuleLogic, VTKObservationMixin):
       RASMarkups = slicer.mrmlScene.AddNewNodeByClass("vtkMRMLMarkupsFiducialNode", self.RAS_MARKUPS)
       RASMarkups.CreateDefaultDisplayNodes()
       RASMarkups.GetDisplayNode().SetTextScale(5)
-      RASMarkups.GetDisplayNode().SetGlyphScale(5)
-      RASMarkups.AddControlPoint(10, 0, 0,"RIGHT")
-      RASMarkups.AddControlPoint(0, 10, 0, "ANTERIOR")
-      RASMarkups.AddControlPoint(0, 0, 10, "SUPERIOR")
-      RASMarkups.AddControlPoint(-10, 0, 0,"LEFT")
-      RASMarkups.AddControlPoint(0, -10, 0, "POSTERIOR")
-      RASMarkups.AddControlPoint(0, 0, -10, "INFERIOR")
+      RASMarkups.GetDisplayNode().SetGlyphScale(0)
       RASMarkups.LockedOn()
       RASMarkups.SetDisplayVisibility(0)
       parameterNode.SetNodeReferenceID(self.RAS_MARKUPS, RASMarkups.GetID())
+    RASMarkups.SetAndObserveTransformNodeID(needleToReference.GetID())
 
     sequenceLogic = slicer.modules.sequences.logic()
 
@@ -2178,6 +2175,35 @@ class LumpNav2Logic(ScriptedLoadableModuleLogic, VTKObservationMixin):
         distanceToClosest = distanceToPoint
     fiducialNode.GetNthFiducialPosition(closestIndex, fiducialPosition)
     return closestIndex, fiducialPosition
+
+  def setRASMarkups(self, observer, eventid):
+    parameterNode = self.getParameterNode()
+    tumorModel = parameterNode.GetNodeReference(self.TUMOR_MODEL)
+    if tumorModel is not None:
+      centerOfMassFilter = vtk.vtkCenterOfMass()
+      centerOfMassFilter.SetInputData(tumorModel.GetPolyData())
+      centerOfMassFilter.SetUseScalarsAsWeights(False)
+      centerOfMassFilter.Update()
+      center = centerOfMassFilter.GetCenter()
+
+      # Calculate how far from center to put markups
+      bounds = [0, 0, 0, 0, 0, 0]
+      tumorModel.GetBounds(bounds)
+      boundDist = [(bounds[1] - bounds[0]), (bounds[3] - bounds[2]), (bounds[5] - bounds[4])]
+      distanceFromCenter = max(boundDist) / 2
+
+      # Update RAS markup points
+      RASMarkups = parameterNode.GetNodeReference(self.RAS_MARKUPS)
+      RASMarkups.RemoveAllMarkups()
+      RASMarkups.AddControlPoint(center, "")
+      centerWorld = RASMarkups.GetNthControlPointPositionWorld(0)
+      RASMarkups.RemoveAllMarkups()
+      RASMarkups.AddControlPointWorld(centerWorld[0] + distanceFromCenter, centerWorld[1], centerWorld[2], "R")
+      RASMarkups.AddControlPointWorld(centerWorld[0], centerWorld[1] + distanceFromCenter, centerWorld[2], "A")
+      RASMarkups.AddControlPointWorld(centerWorld[0], centerWorld[1], centerWorld[2] + distanceFromCenter, "S")
+      RASMarkups.AddControlPointWorld(centerWorld[0] - distanceFromCenter, centerWorld[1], centerWorld[2], "L")
+      RASMarkups.AddControlPointWorld(centerWorld[0], centerWorld[1] - distanceFromCenter, centerWorld[2], "P")
+      RASMarkups.AddControlPointWorld(centerWorld[0], centerWorld[1], centerWorld[2] - distanceFromCenter, "I")
 
   def onBreachWarningNodeChanged(self, observer, eventid):
     parameterNode = self.getParameterNode()
