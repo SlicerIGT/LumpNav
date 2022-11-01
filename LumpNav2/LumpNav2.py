@@ -672,16 +672,6 @@ class LumpNav2Widget(ScriptedLoadableModuleWidget, VTKObservationMixin):
 
   def onLeftBreastButtonClicked(self):
     logging.info("onLeftButtonClicked")
-    self.ui.rightBreastButton.setEnabled(True)
-    self.ui.rightBreastButton.setChecked(False)
-    self.ui.leftBreastButton.setEnabled(False)
-    # check if autocenter buttons are already clicked before activating autocenter
-    if not self.ui.leftAutoCenterCameraButton.isChecked():
-      self.onAutoCenterButtonClicked('View1')
-    if not self.ui.rightAutoCenterCameraButton.isChecked():
-      self.onAutoCenterButtonClicked('View2')
-    if not self.ui.bottomAutoCenterCameraButton.isChecked():
-      self.onAutoCenterButtonClicked('View3')
     cameraNode1 = self.getCamera('View1')
     cameraNode2 = self.getCamera('View2')
     cameraNode3 = self.getCamera('View3')
@@ -700,15 +690,6 @@ class LumpNav2Widget(ScriptedLoadableModuleWidget, VTKObservationMixin):
 
   def onRightBreastButtonClicked(self):
     logging.info("onRightButtonClicked")
-    self.ui.rightBreastButton.setEnabled(False)
-    self.ui.leftBreastButton.setEnabled(True)
-    self.ui.leftBreastButton.setChecked(False)
-    if not self.ui.leftAutoCenterCameraButton.isChecked():
-      self.onAutoCenterButtonClicked('View1')
-    if not self.ui.rightAutoCenterCameraButton.isChecked():
-      self.onAutoCenterButtonClicked('View2')
-    if not self.ui.bottomAutoCenterCameraButton.isChecked():
-      self.onAutoCenterButtonClicked('View3')
     cameraNode1 = self.getCamera('View1')
     cameraNode2 = self.getCamera('View2')
     cameraNode3 = self.getCamera('View3')
@@ -763,23 +744,14 @@ class LumpNav2Widget(ScriptedLoadableModuleWidget, VTKObservationMixin):
 
   def onLeftAutoCenterCameraButtonClicked(self, toggled):
     logging.info("onLeftAutoCenterButtonClicked")
-    if toggled:
-      self.ui.rightAutoCenterCameraButton.setChecked(False)
-      self.ui.bottomAutoCenterCameraButton.setChecked(False)
     self.onAutoCenterButtonClicked('View1')
 
   def onRightAutoCenterCameraButtonClicked(self, toggled):
     logging.info("onRightAutoCenterCameraButtonClicked")
-    if toggled:
-      self.ui.leftAutoCenterCameraButton.setChecked(False)
-      self.ui.bottomAutoCenterCameraButton.setChecked(False)
     self.onAutoCenterButtonClicked('View2')
 
   def onBottomAutoCenterCameraButtonClicked(self, toggled):
     logging.info("onBottomAutoCenterCameraButtonClicked")
-    if toggled:
-      self.ui.rightAutoCenterCameraButton.setChecked(False)
-      self.ui.leftAutoCenterCameraButton.setChecked(False)
     self.onAutoCenterButtonClicked('View3')
 
   def onAutoCenterButtonClicked(self, viewName):
@@ -795,7 +767,6 @@ class LumpNav2Widget(ScriptedLoadableModuleWidget, VTKObservationMixin):
     logging.info("Auto center for %s disabled", viewNode.GetName())
 
   def enableAutoCenterInViewNode(self, viewNode):
-    self.disableViewpointInViewNode(viewNode)
     self.logic.viewpointLogic.getViewpointForViewNode(viewNode).setViewNode(viewNode)
     self.logic.viewpointLogic.getViewpointForViewNode(viewNode).autoCenterSetSafeXMinimum(-self.VIEW_COORD_WIDTH_LIMIT)
     self.logic.viewpointLogic.getViewpointForViewNode(viewNode).autoCenterSetSafeXMaximum(self.VIEW_COORD_WIDTH_LIMIT)
@@ -1783,13 +1754,11 @@ class LumpNav2Logic(ScriptedLoadableModuleLogic, VTKObservationMixin):
       # Start prediction
       self.setRegionOfInterestNode(toggled)
       self.segmentationLogic.resumePrediction()
-      # self.segmentationLogic.setRealTimePrediction(toggled)
       self.setVolumeReconstruction(toggled)
 
     else:
       # Stop prediction
       self.segmentationLogic.pausePrediction()
-      # self.segmentationLogic.setRealTimePrediction(toggled)
 
       # Move transforms back
       transdToReference = parameterNode.GetNodeReference(self.TRANSD_TO_REFERENCE)
