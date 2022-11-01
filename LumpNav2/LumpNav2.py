@@ -494,6 +494,14 @@ class LumpNav2Widget(ScriptedLoadableModuleWidget, VTKObservationMixin):
       self.ui.toolsCollapsibleButton.collapsed = True
       self.ui.contouringCollapsibleButton.collapsed = True
       self.onDual3DViewButton(self.ui.threeDViewButton.checked)
+      # 3D view settings
+      layoutManager = slicer.app.layoutManager()
+      for i in range(layoutManager.threeDViewCount):
+        view = layoutManager.threeDWidget(i).mrmlViewNode()
+        view.SetOrientationMarkerType(view.OrientationMarkerTypeHuman)
+        view.SetOrientationMarkerSize(view.OrientationMarkerSizeLarge)
+        view.SetBoxVisible(False)
+        view.SetAxisLabelsVisible(False)
       interactionNode = slicer.app.applicationLogic().GetInteractionNode()
       interactionNode.SetCurrentInteractionMode(interactionNode.ViewTransform)
       self.logic.setBreachWarningOn(True)
@@ -868,7 +876,7 @@ class LumpNav2Widget(ScriptedLoadableModuleWidget, VTKObservationMixin):
       slicer.app.layoutManager().setLayout(6)
 
     if self.ui.navigationCollapsibleButton.checked:
-      self.onDual3DViewButton(self.ui.threeDViewButton.checked)
+      self.onNavigationCollapsed(not self.ui.navigationCollapsibleButton.checked)
 
     self.updateGUIFromParameterNode()
     self.updateGUIFromMRML()
