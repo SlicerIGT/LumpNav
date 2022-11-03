@@ -371,6 +371,9 @@
           <property name="checkable">
            <bool>true</bool>
           </property>
+          <property name="checked">
+           <bool>true</bool>
+          </property>
           <property name="autoExclusive">
            <bool>false</bool>
           </property>
@@ -384,6 +387,9 @@
           <property name="checkable">
            <bool>true</bool>
           </property>
+          <property name="checked">
+           <bool>true</bool>
+          </property>
           <property name="autoExclusive">
            <bool>false</bool>
           </property>
@@ -395,6 +401,9 @@
            <string>Right</string>
           </property>
           <property name="checkable">
+           <bool>true</bool>
+          </property>
+          <property name="checked">
            <bool>true</bool>
           </property>
           <property name="autoExclusive">
@@ -438,21 +447,16 @@
          </widget>
         </item>
         <item>
-         <widget class="ctkDoubleSlider" name="breachFiducialSizeSlider">
-          <property name="value">
-           <double>5.000000000000000</double>
+         <widget class="QPushButton" name="decreaseBreachFiducialSize">
+          <property name="text">
+           <string>- 1</string>
           </property>
-          <property name="singleStep">
-           <double>0.100000000000000</double>
-          </property>
-          <property name="pageStep">
-           <double>1.000000000000000</double>
-          </property>
-          <property name="maximum">
-           <double>10.000000000000000</double>
-          </property>
-          <property name="orientation">
-           <enum>Qt::Horizontal</enum>
+         </widget>
+        </item>
+        <item>
+         <widget class="QPushButton" name="increaseBreachFiducialSize">
+          <property name="text">
+           <string>+ 1</string>
           </property>
          </widget>
         </item>
@@ -749,11 +753,6 @@
    <class>ctkDirectoryButton</class>
    <extends>QWidget</extends>
    <header>ctkDirectoryButton.h</header>
-  </customwidget>
-  <customwidget>
-   <class>ctkDoubleSlider</class>
-   <extends>QWidget</extends>
-   <header>ctkDoubleSlider.h</header>
   </customwidget>
   <customwidget>
    <class>qMRMLWidget</class>

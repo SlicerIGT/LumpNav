@@ -294,11 +294,12 @@ class LumpNav2Widget(ScriptedLoadableModuleWidget, VTKObservationMixin):
     self.ui.toolModelButton.setChecked(cauteryToolSelected)
     self.ui.toolModelButton.connect('toggled(bool)', self.onToolModelClicked)
     self.ui.threeDViewButton.connect('toggled(bool)', self.onDual3DViewButton)
+    breachMarkupsDisplayEnabled = slicer.util.settingsValue(self.logic.BREACH_MARKUPS_DISPLAY_SETTING, True, converter=slicer.util.toBool)
+    self.ui.breachLocationButton.checked = breachMarkupsDisplayEnabled
     self.ui.breachLocationButton.connect('toggled(bool)', self.onBreachLocationButtonClicked)
     self.ui.deleteTumorBreachButton.connect('clicked()', self.onDeleteTumorBreachButtonClicked)
-    breachMarkupsSize = slicer.util.settingsValue(self.logic.BREACH_MARKUPS_SIZE_SETTING, 5, converter=lambda x: float(x))
-    self.ui.breachFiducialSizeSlider.value = breachMarkupsSize
-    self.ui.breachFiducialSizeSlider.connect('valueChanged(double)', self.onBreachFiducialSizeValueChanged)
+    self.ui.increaseBreachFiducialSize.connect('clicked()', self.onIncreaseBreachFiducialSize)
+    self.ui.decreaseBreachFiducialSize.connect('clicked()', self.onDecreaseBreachFiducialSize)
 
     # settings panel
     self.ui.customUiButton.connect('toggled(bool)', self.onCustomUiClicked)
@@ -524,13 +525,17 @@ class LumpNav2Widget(ScriptedLoadableModuleWidget, VTKObservationMixin):
       self.ui.toolsCollapsibleButton.collapsed = True
       self.ui.contouringCollapsibleButton.collapsed = True
       self.onDual3DViewButton(self.ui.threeDViewButton.checked)
-      # 3D view settings
+
+      # Position bottom camera
       cameraNode3 = self.getCamera("View3")
-      cameraNode3.SetPosition(0.0, 0.0, -500.0)
-      cameraNode3.SetViewUp(0.0, 1.0, 0.0)
-      cameraNode3.SetFocalPoint(0.0, 0.0, 0.0)
-      cameraNode3.SetViewAngle(20.0)
-      cameraNode3.ResetClippingRange()
+      cameraNode3.RotateTo(cameraNode3.Inferior)
+
+      # Autocenter all views
+      self.onLeftAutoCenterCameraButtonClicked(True)
+      self.onBottomAutoCenterCameraButtonClicked(True)
+      self.onRightAutoCenterCameraButtonClicked(True)
+
+      # Set 3D view settings
       layoutManager = slicer.app.layoutManager()
       for i in range(layoutManager.threeDViewCount):
         view = layoutManager.threeDWidget(i).mrmlViewNode()
@@ -564,6 +569,8 @@ class LumpNav2Widget(ScriptedLoadableModuleWidget, VTKObservationMixin):
 
   def onBreachLocationButtonClicked(self, toggled):
     logging.info(f"onBreachLocationButtonClicked({toggled})")
+    settings = qt.QSettings()
+    settings.setValue(self.logic.BREACH_MARKUPS_DISPLAY_SETTING, toggled)
     parameterNode = self._parameterNode
     breachMarkups_Needle = parameterNode.GetNodeReference(self.logic.BREACH_MARKUPS_NEEDLE)
     if toggled:
@@ -571,10 +578,25 @@ class LumpNav2Widget(ScriptedLoadableModuleWidget, VTKObservationMixin):
     else:
       breachMarkups_Needle.SetDisplayVisibility(0)
 
-  def onBreachFiducialSizeValueChanged(self, value):
+  def onIncreaseBreachFiducialSize(self):
+    logging.info("onIncreaseBreachFiducialSize")
+    previousFontSize = slicer.util.settingsValue(self.logic.BREACH_MARKUPS_SIZE_SETTING,
+                                                 self.logic.BREACH_MARKUPS_SIZE_DEFAULT,
+                                                 converter=lambda x: float(x))
+    newFontSize = previousFontSize + 1
     settings = qt.QSettings()
-    settings.setValue(self.logic.BREACH_MARKUPS_SIZE_SETTING, value)
-    self.logic.setBreachFiducialSize(value)
+    settings.setValue(self.logic.BREACH_MARKUPS_SIZE_SETTING, newFontSize)
+    self.logic.setBreachFiducialSize(newFontSize)
+
+  def onDecreaseBreachFiducialSize(self):
+    logging.info("onDecreaseBreachFiducialSize")
+    previousFontSize = slicer.util.settingsValue(self.logic.BREACH_MARKUPS_SIZE_SETTING,
+                                                 self.logic.BREACH_MARKUPS_SIZE_DEFAULT,
+                                                 converter=lambda x: float(x))
+    newFontSize = previousFontSize - 1
+    settings = qt.QSettings()
+    settings.setValue(self.logic.BREACH_MARKUPS_SIZE_SETTING, newFontSize)
+    self.logic.setBreachFiducialSize(newFontSize)
 
   def onDeleteTumorBreachButtonClicked(self):
     logging.info("onDeleteTumorBreachButtonClicked")
@@ -762,7 +784,9 @@ class LumpNav2Widget(ScriptedLoadableModuleWidget, VTKObservationMixin):
 
   def onIncreaseDistanceFontSizeClicked(self):
     logging.info("onIncreaseDistanceFontSizeClicked")
-    previousFontSize = slicer.util.settingsValue(self.logic.RULER_FONT_SIZE, self.logic.RULER_DISTANCE_DEFAULT_FONT_SIZE, converter=lambda x: float(x))
+    previousFontSize = slicer.util.settingsValue(self.logic.RULER_FONT_SIZE,
+                                                 self.logic.RULER_DISTANCE_DEFAULT_FONT_SIZE,
+                                                 converter=lambda x: float(x))
     newFontSize = previousFontSize + 1
     settings = qt.QSettings()
     settings.setValue(self.logic.RULER_FONT_SIZE, newFontSize)
@@ -770,7 +794,9 @@ class LumpNav2Widget(ScriptedLoadableModuleWidget, VTKObservationMixin):
 
   def onDecreaseDistanceFontSizeClicked(self):
     logging.info("onDecreaseDistanceFontSizeClicked")
-    previousFontSize = slicer.util.settingsValue(self.logic.RULER_FONT_SIZE, self.logic.RULER_DISTANCE_DEFAULT_FONT_SIZE, converter=lambda x: float(x))
+    previousFontSize = slicer.util.settingsValue(self.logic.RULER_FONT_SIZE,
+                                                 self.logic.RULER_DISTANCE_DEFAULT_FONT_SIZE,
+                                                 converter=lambda x: float(x))
     newFontSize = previousFontSize - 1
     settings = qt.QSettings()
     settings.setValue(self.logic.RULER_FONT_SIZE, newFontSize)
@@ -1180,8 +1206,10 @@ class LumpNav2Logic(ScriptedLoadableModuleLogic, VTKObservationMixin):
   TUMOR_MODEL = "TumorModel"
   STICK_MODEL = "StickModel"
   WARNING_SOUND_SETTING = "LumpNav2/WarningSoundEnabled"
+  BREACH_MARKUPS_DISPLAY_SETTING = "LumpNav2/BreachMarkupsDisplaySetting"
   BREACH_MARKUPS_PROXIMITY_THRESHOLD = "LumpNav2/BreachMarkupsProximitySetting"
   BREACH_MARKUPS_SIZE_SETTING = "LumpNav2/BreachMarkupsSize"
+  BREACH_MARKUPS_SIZE_DEFAULT = "LumpNav2/BreachMarkupsSizeDefault"
   DISPLAY_RULER_SETTING = "LumpNav2/DistanceRulerEnabled"
   DISPLAY_DISTANCE_SETTING = "LumpNav2/DistanceRulerTextEnabled"
   RULER_DISTANCE_DEFAULT_FONT_SIZE = 5
@@ -1571,12 +1599,14 @@ class LumpNav2Logic(ScriptedLoadableModuleLogic, VTKObservationMixin):
       breachMarkups_Needle = slicer.mrmlScene.AddNewNodeByClass("vtkMRMLMarkupsFiducialNode", self.BREACH_MARKUPS_NEEDLE)
       breachMarkups_Needle.CreateDefaultDisplayNodes()
       # Breach markup size setting
-      breachMarkupsSize = slicer.util.settingsValue(self.BREACH_MARKUPS_SIZE_SETTING, 5, converter=lambda x: float(x))
+      breachMarkupsSize = slicer.util.settingsValue(self.BREACH_MARKUPS_SIZE_SETTING, self.BREACH_MARKUPS_SIZE_DEFAULT, converter=lambda x: float(x))
       breachMarkups_Needle.GetDisplayNode().SetGlyphScale(breachMarkupsSize)
       breachMarkups_Needle.GetDisplayNode().SetTextScale(0)
       breachMarkups_Needle.GetDisplayNode().SetColor(1, 0, 0)
       breachMarkups_Needle.LockedOn()
-      breachMarkups_Needle.SetDisplayVisibility(1)
+      # Breach markup display setting
+      breachMarkupsDisplay = slicer.util.settingsValue(self.BREACH_MARKUPS_DISPLAY_SETTING, True, converter=slicer.util.toBool)
+      breachMarkups_Needle.SetDisplayVisibility(breachMarkupsDisplay)
       parameterNode.SetNodeReferenceID(self.BREACH_MARKUPS_NEEDLE, breachMarkups_Needle.GetID())
     breachMarkups_Needle.SetAndObserveTransformNodeID(needleToReference.GetID())
 
