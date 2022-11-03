@@ -17,13 +17,13 @@
    <item>
     <widget class="ctkCollapsibleButton" name="toolsCollapsibleButton">
      <property name="text">
-      <string>Tools Calibration</string>
+      <string>Tool Calibration</string>
      </property>
      <property name="checked">
-      <bool>false</bool>
+      <bool>true</bool>
      </property>
      <property name="collapsed">
-      <bool>true</bool>
+      <bool>false</bool>
      </property>
      <layout class="QVBoxLayout" name="verticalLayout_2">
       <item>
@@ -41,7 +41,7 @@
        </widget>
       </item>
       <item>
-       <widget class="QPushButton" name="previousCauteryCalibrationButton">
+       <widget class="QPushButton" name="undoCauteryCalibrationButton">
         <property name="enabled">
          <bool>false</bool>
         </property>
@@ -243,10 +243,10 @@
       <string>Navigation</string>
      </property>
      <property name="checked">
-      <bool>true</bool>
+      <bool>false</bool>
      </property>
      <property name="collapsed">
-      <bool>false</bool>
+      <bool>true</bool>
      </property>
      <layout class="QVBoxLayout" name="verticalLayout_4">
       <item>
@@ -270,10 +270,10 @@
            <string>Left Breast</string>
           </property>
           <property name="checkable">
-           <bool>true</bool>
+           <bool>false</bool>
           </property>
           <property name="autoExclusive">
-           <bool>true</bool>
+           <bool>false</bool>
           </property>
          </widget>
         </item>
@@ -283,10 +283,10 @@
            <string>Right Breast</string>
           </property>
           <property name="checkable">
-           <bool>true</bool>
+           <bool>false</bool>
           </property>
           <property name="autoExclusive">
-           <bool>true</bool>
+           <bool>false</bool>
           </property>
          </widget>
         </item>

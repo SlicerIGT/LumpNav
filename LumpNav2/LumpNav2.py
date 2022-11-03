@@ -153,17 +153,20 @@ class LumpNav2Widget(ScriptedLoadableModuleWidget, VTKObservationMixin):
   # Variables to store widget state
   SLICER_RECOMMENDED_VERSION = "5.0.0"
   SLICER_INTERFACE_VISIBLE = "LumpNav2/SlicerInterfaceVisible"
+  FONT_SIZE_DEFAULT = 20
+  VIEW_COORD_HEIGHT_LIMIT = 0.6
+  VIEW_COORD_WIDTH_LIMIT = 0.9
+  LAST_SAVE_FOLDER = "LumpNav2/LastSaveFolder"
+
+  # Tool calibration
   PIVOT_CALIBRATION = 0
   SPIN_CALIBRATION = 1
   PIVOT_CALIBRATION_TIME_SEC = 5.0
   CAUTERY_CALIBRATION_THRESHOLD_SETTING = "LumpNav2/CauteryCalibrationThresholdMm"
   CAUTERY_CALIBRATION_THRESHOLD_DEFAULT = 1.0
+  LAST_PIVOT_CALIBRATION_RESULT = "LastPivotCalibrationResult"
   NEEDLE_CALIBRATION_THRESHOLD_SETTING = "LumpNav2/NeedleCalibrationThresholdMm"
   NEEDLE_CALIBRATION_THRESHOLD_DEFAULT = 1.0
-  FONT_SIZE_DEFAULT = 20
-  VIEW_COORD_HEIGHT_LIMIT = 0.6
-  VIEW_COORD_WIDTH_LIMIT = 0.9
-  LAST_SAVE_FOLDER = "LumpNav2/LastSaveFolder"
 
   def __init__(self, parent=None):
     """
@@ -249,37 +252,13 @@ class LumpNav2Widget(ScriptedLoadableModuleWidget, VTKObservationMixin):
     self.addObserver(slicer.mrmlScene, slicer.mrmlScene.EndCloseEvent, self.onSceneEndClose)
 
     # QT connections
-    self.ui.customUiButton.connect('toggled(bool)', self.onCustomUiClicked)
-    self.ui.startPlusButton.connect('toggled(bool)', self.onStartPlusClicked)
-    self.ui.displayRASButton.connect('toggled(bool)', self.onDisplayRASClicked)
-    self.ui.displayCauteryStateButton.connect('toggled(bool)', self.onDisplayCauteryStateClicked)
     self.ui.toolsCollapsibleButton.connect('contentsCollapsed(bool)', self.onToolsCollapsed)
     self.ui.contouringCollapsibleButton.connect('contentsCollapsed(bool)', self.onContouringCollapsed)
     self.ui.navigationCollapsibleButton.connect('contentsCollapsed(bool)', self.onNavigationCollapsed)
+
+    # Tool calibration
     self.ui.cauteryCalibrationButton.connect('clicked()', self.onCauteryCalibrationButton)
-    needleVisibilitySetting = slicer.util.settingsValue(self.logic.NEEDLE_VISIBILITY_SETTING, True, converter=slicer.util.toBool)
-    self.ui.needleVisibilityButton.checked = needleVisibilitySetting
-    self.ui.needleVisibilityButton.connect('toggled(bool)', self.onNeedleVisibilityToggled)
-    self.ui.trackingSequenceBrowserButton.connect('toggled(bool)', self.onTrackingSequenceBrowser)
-    cauteryVisible = slicer.util.settingsValue(self.logic.CAUTERY_VISIBILITY_SETTING, True, converter=slicer.util.toBool)
-    self.ui.cauteryVisibilityButton.checked = cauteryVisible
-    self.ui.cauteryVisibilityButton.connect('toggled(bool)', self.onCauteryVisibilityToggled)
-    warningSoundEnabled = slicer.util.settingsValue(self.logic.WARNING_SOUND_SETTING, True, converter=slicer.util.toBool)
-    self.ui.warningSoundButton.checked = warningSoundEnabled
-    self.ui.warningSoundButton.connect('toggled(bool)', self.onWarningSoundToggled)
-    breachMarkupsProximityThreshold = slicer.util.settingsValue(self.logic.BREACH_MARKUPS_PROXIMITY_THRESHOLD, 1, converter=lambda x: int(x))
-    self.ui.breachMarkupsThresholdSpinBox.value = breachMarkupsProximityThreshold
-    self.ui.breachMarkupsThresholdSpinBox.connect('valueChanged(int)', self.onBreachMarkupsProximityChanged)
-    self.ui.exitButton.connect('clicked()', self.onExitButtonClicked)
-    self.ui.saveSceneButton.connect('clicked()', self.onSaveSceneClicked)
-    lastSavePath = slicer.util.settingsValue(self.LAST_SAVE_FOLDER, "")
-    if lastSavePath != "":
-      self.ui.saveFolderSelector.directory = lastSavePath
-    self.ui.saveFolderSelector.connect('directoryChanged(const QString)', self.onSavePathChanged)
-    lastHostname = slicer.util.settingsValue(self.logic.LAST_HOSTNAME, "")
-    if lastHostname != "":
-      self.ui.hostnameLineEdit.text = lastHostname
-    self.ui.hostnameLineEdit.connect('editingFinished()', self.onHostnameChanged)
+    self.ui.undoCauteryCalibrationButton.connect('clicked()', self.onUndoCauteryCalibrationClicked)
 
     # contouring
     self.ui.normalBrightnessButton.connect('toggled(bool)', self.onNormalBrightnessClicked)
@@ -321,6 +300,35 @@ class LumpNav2Widget(ScriptedLoadableModuleWidget, VTKObservationMixin):
     self.ui.breachFiducialSizeSlider.value = breachMarkupsSize
     self.ui.breachFiducialSizeSlider.connect('valueChanged(double)', self.onBreachFiducialSizeValueChanged)
 
+    # settings panel
+    self.ui.customUiButton.connect('toggled(bool)', self.onCustomUiClicked)
+    self.ui.startPlusButton.connect('toggled(bool)', self.onStartPlusClicked)
+    self.ui.displayRASButton.connect('toggled(bool)', self.onDisplayRASClicked)
+    self.ui.displayCauteryStateButton.connect('toggled(bool)', self.onDisplayCauteryStateClicked)
+    needleVisibilitySetting = slicer.util.settingsValue(self.logic.NEEDLE_VISIBILITY_SETTING, True, converter=slicer.util.toBool)
+    self.ui.needleVisibilityButton.checked = needleVisibilitySetting
+    self.ui.needleVisibilityButton.connect('toggled(bool)', self.onNeedleVisibilityToggled)
+    self.ui.trackingSequenceBrowserButton.connect('toggled(bool)', self.onTrackingSequenceBrowser)
+    cauteryVisible = slicer.util.settingsValue(self.logic.CAUTERY_VISIBILITY_SETTING, True, converter=slicer.util.toBool)
+    self.ui.cauteryVisibilityButton.checked = cauteryVisible
+    self.ui.cauteryVisibilityButton.connect('toggled(bool)', self.onCauteryVisibilityToggled)
+    warningSoundEnabled = slicer.util.settingsValue(self.logic.WARNING_SOUND_SETTING, True, converter=slicer.util.toBool)
+    self.ui.warningSoundButton.checked = warningSoundEnabled
+    self.ui.warningSoundButton.connect('toggled(bool)', self.onWarningSoundToggled)
+    breachMarkupsProximityThreshold = slicer.util.settingsValue(self.logic.BREACH_MARKUPS_PROXIMITY_THRESHOLD, 1, converter=lambda x: int(x))
+    self.ui.breachMarkupsThresholdSpinBox.value = breachMarkupsProximityThreshold
+    self.ui.breachMarkupsThresholdSpinBox.connect('valueChanged(int)', self.onBreachMarkupsProximityChanged)
+    self.ui.exitButton.connect('clicked()', self.onExitButtonClicked)
+    self.ui.saveSceneButton.connect('clicked()', self.onSaveSceneClicked)
+    lastSavePath = slicer.util.settingsValue(self.LAST_SAVE_FOLDER, "")
+    if lastSavePath != "":
+      self.ui.saveFolderSelector.directory = lastSavePath
+    self.ui.saveFolderSelector.connect('directoryChanged(const QString)', self.onSavePathChanged)
+    lastHostname = slicer.util.settingsValue(self.logic.LAST_HOSTNAME, "")
+    if lastHostname != "":
+      self.ui.hostnameLineEdit.text = lastHostname
+    self.ui.hostnameLineEdit.connect('editingFinished()', self.onHostnameChanged)
+
     # Add custom layouts
     self.logic.addCustomLayouts()
 
@@ -331,6 +339,13 @@ class LumpNav2Widget(ScriptedLoadableModuleWidget, VTKObservationMixin):
     logging.info('onCauteryCalibrationButton')
     cauteryToNeedle = self._parameterNode.GetNodeReference(self.logic.CAUTERY_TO_NEEDLE)
     cauteryTipToCautery = self._parameterNode.GetNodeReference(self.logic.CAUTERYTIP_TO_CAUTERY)
+    # Save previous pivot calibration to parameter node
+    if self.pivotCalibrationResultNode:
+      lastPivotCalibration = self._parameterNode.GetNodeReference(self.LAST_PIVOT_CALIBRATION_RESULT)
+      if lastPivotCalibration is None:
+        lastPivotCalibration = slicer.mrmlScene.AddNewNodeByClass("vtkMRMLLinearTransformNode", self.LAST_PIVOT_CALIBRATION_RESULT)
+        self._parameterNode.SetNodeReferenceID(self.LAST_PIVOT_CALIBRATION_RESULT, lastPivotCalibration.GetID())
+      lastPivotCalibration.SetMatrixTransformToParent(self.pivotCalibrationResultNode.GetMatrixTransformToParent())
     self.startPivotCalibration(cauteryToNeedle, cauteryTipToCautery)
 
   def startPivotCalibration(self, toolToReferenceTransformNode, toolTipToToolTransformNode):
@@ -349,6 +364,63 @@ class LumpNav2Widget(ScriptedLoadableModuleWidget, VTKObservationMixin):
       self.pivotSamplingTimer.start()  # continue
     else:
       self.onStopPivotCalibration()  # calibration completed
+
+  def onStopPivotCalibration(self):
+    self.pivotCalibrationLogic.SetRecordingState(False)
+    self.ui.cauteryCalibrationButton.setEnabled(True)
+
+    if self.pivotCalibrationMode == self.PIVOT_CALIBRATION:
+      calibrationSuccess = self.pivotCalibrationLogic.ComputePivotCalibration()
+    else:
+      calibrationSuccess = self.pivotCalibrationLogic.ComputeSpinCalibration()
+
+    # TODO: check if this is cautery or needle calibration and use different thresholds
+    calibrationThresholdStr = slicer.util.settingsValue(
+      self.CAUTERY_CALIBRATION_THRESHOLD_SETTING, self.CAUTERY_CALIBRATION_THRESHOLD_DEFAULT)
+    calibrationThreshold = float(calibrationThresholdStr)
+
+    if not calibrationSuccess:
+      self.ui.cauteryCalibrationLabel.setText("Calibration failed: " + self.pivotCalibrationLogic.GetErrorText())
+      self.pivotCalibrationLogic.ClearToolToReferenceMatrices()
+      return
+
+    # Warning if RMSE is too high, but still use calibration
+    if self.pivotCalibrationLogic.GetPivotRMSE() >= calibrationThreshold:
+      self.ui.cauteryCalibrationLabel.setText("Warning: RMSE = {0:.2f} mm".format(self.pivotCalibrationLogic.GetPivotRMSE()))
+    else:
+      self.ui.cauteryCalibrationLabel.setText("Success, RMSE = {0:.2f} mm".format(self.pivotCalibrationLogic.GetPivotRMSE()))
+
+    toolTipToToolMatrix = vtk.vtkMatrix4x4()
+    self.pivotCalibrationLogic.GetToolTipToToolMatrix(toolTipToToolMatrix)
+    self.pivotCalibrationLogic.ClearToolToReferenceMatrices()
+    self.pivotCalibrationResultNode.SetMatrixTransformToParent(toolTipToToolMatrix)
+
+    lastPivotCalibration = self._parameterNode.GetNodeReference(self.LAST_PIVOT_CALIBRATION_RESULT)
+    if lastPivotCalibration is not None:
+      self.ui.undoCauteryCalibrationButton.enabled = True
+
+    # Save calibration result so this calibration will be loaded in the next session automatically
+    pivotCalibrationResultName = self.pivotCalibrationResultNode.GetName()
+    pivotCalibrationFileWithPath = self.resourcePath(pivotCalibrationResultName + ".h5")
+    slicer.util.saveNode(self.pivotCalibrationResultNode, pivotCalibrationFileWithPath)
+
+    if self.pivotCalibrationMode == self.PIVOT_CALIBRATION:
+      logging.info("Pivot calibration completed. Tool: {0}. RMSE = {1:.2f} mm".format(
+        self.pivotCalibrationResultNode.GetName(), self.pivotCalibrationLogic.GetPivotRMSE()))
+    else:
+      logging.info("Spin calibration completed.")
+
+  def onUndoCauteryCalibrationClicked(self):
+    logging.info("onUndoCauteryCalibrationClicked")
+    self.ui.undoCauteryCalibrationButton.enabled = False
+
+    # Replace current calibration with previous one and save
+    lastPivotCalibration = self._parameterNode.GetNodeReference(self.LAST_PIVOT_CALIBRATION_RESULT)
+    self.pivotCalibrationResultNode.SetMatrixTransformToParent(lastPivotCalibration.GetMatrixTransformToParent())
+    pivotCalibrationResultName = self.pivotCalibrationResultNode.GetName()
+    pivotCalibrationFileWithPath = self.resourcePath(pivotCalibrationResultName + ".h5")
+    slicer.util.saveNode(self.pivotCalibrationResultNode, pivotCalibrationFileWithPath)
+    self.ui.cauteryCalibrationLabel.setText("Pivot calibration reverted")
 
   def onExitButtonClicked(self):
     mainwindow = slicer.util.mainWindow()
@@ -384,48 +456,6 @@ class LumpNav2Widget(ScriptedLoadableModuleWidget, VTKObservationMixin):
     else:
       logging.error("Scene saving failed")
       slicer.util.showStatusMessage(f"Failed to save scene to {sceneSaveDirectory}.", 5000)
-
-  def onStopPivotCalibration(self):
-    self.pivotCalibrationLogic.SetRecordingState(False)
-    self.ui.cauteryCalibrationButton.setEnabled(True)
-
-    if self.pivotCalibrationMode == self.PIVOT_CALIBRATION:
-      calibrationSuccess = self.pivotCalibrationLogic.ComputePivotCalibration()
-    else:
-      calibrationSuccess = self.pivotCalibrationLogic.ComputeSpinCalibration()
-
-    # TODO: check if this is cautery or needle calibration and use different thresholds
-    calibrationThresholdStr = slicer.util.settingsValue(
-      self.CAUTERY_CALIBRATION_THRESHOLD_SETTING, self.CAUTERY_CALIBRATION_THRESHOLD_DEFAULT)
-    calibrationThreshold = float(calibrationThresholdStr)
-
-    if not calibrationSuccess:
-      self.ui.cauteryCalibrationLabel.setText("Calibration failed: " + self.pivotCalibrationLogic.GetErrorText())
-      self.pivotCalibrationLogic.ClearToolToReferenceMatrices()
-      return
-
-    # Warning if RMSE is too high, but still use calibration
-    if self.pivotCalibrationLogic.GetPivotRMSE() >= calibrationThreshold:
-      self.ui.cauteryCalibrationLabel.setText("Warning: RMSE = {0:.2f} mm".format(self.pivotCalibrationLogic.GetPivotRMSE()))
-    else:
-      self.ui.cauteryCalibrationLabel.setText("Success, RMSE = {:.2f} mm".format(self.pivotCalibrationLogic.GetPivotRMSE()))
-
-    tooltipToToolMatrix = vtk.vtkMatrix4x4()
-    self.pivotCalibrationLogic.GetToolTipToToolMatrix(tooltipToToolMatrix)
-    self.pivotCalibrationLogic.ClearToolToReferenceMatrices()
-    self.pivotCalibrationResultNode.SetMatrixTransformToParent(tooltipToToolMatrix)
-
-    # Save calibration result so this calibration will be loaded in the next session automatically
-
-    pivotCalibrationResultName = self.pivotCalibrationResultNode.GetName()
-    pivotCalibrationFileWithPath = self.resourcePath(pivotCalibrationResultName + ".h5")
-    slicer.util.saveNode(self.pivotCalibrationResultNode, pivotCalibrationFileWithPath)
-
-    if self.pivotCalibrationMode == self.PIVOT_CALIBRATION:
-      logging.info("Pivot calibration completed. Tool: {0}. RMSE = {1:.2f} mm".format(
-        self.pivotCalibrationResultNode.GetName(), self.pivotCalibrationLogic.GetPivotRMSE()))
-    else:
-      logging.info("Spin calibration completed.")
 
   def confirmExit(self):
     msgBox = qt.QMessageBox()
@@ -495,6 +525,12 @@ class LumpNav2Widget(ScriptedLoadableModuleWidget, VTKObservationMixin):
       self.ui.contouringCollapsibleButton.collapsed = True
       self.onDual3DViewButton(self.ui.threeDViewButton.checked)
       # 3D view settings
+      cameraNode3 = self.getCamera("View3")
+      cameraNode3.SetPosition(0.0, 0.0, -500.0)
+      cameraNode3.SetViewUp(0.0, 1.0, 0.0)
+      cameraNode3.SetFocalPoint(0.0, 0.0, 0.0)
+      cameraNode3.SetViewAngle(20.0)
+      cameraNode3.ResetClippingRange()
       layoutManager = slicer.app.layoutManager()
       for i in range(layoutManager.threeDViewCount):
         view = layoutManager.threeDWidget(i).mrmlViewNode()
@@ -672,6 +708,9 @@ class LumpNav2Widget(ScriptedLoadableModuleWidget, VTKObservationMixin):
 
   def onLeftBreastButtonClicked(self):
     logging.info("onLeftButtonClicked")
+    self.ui.rightBreastButton.setEnabled(True)
+    self.ui.rightBreastButton.setChecked(False)
+    self.ui.leftBreastButton.setEnabled(False)
     cameraNode1 = self.getCamera('View1')
     cameraNode2 = self.getCamera('View2')
     cameraNode3 = self.getCamera('View3')
@@ -685,11 +724,14 @@ class LumpNav2Widget(ScriptedLoadableModuleWidget, VTKObservationMixin):
     cameraNode1.SetViewAngle(25.0)
     cameraNode2.SetViewAngle(25.0)
     cameraNode3.SetViewAngle(20.0)
-    cameraNode2.ResetClippingRange()
     cameraNode1.ResetClippingRange()
+    cameraNode2.ResetClippingRange()
 
   def onRightBreastButtonClicked(self):
     logging.info("onRightButtonClicked")
+    self.ui.rightBreastButton.setEnabled(False)
+    self.ui.leftBreastButton.setEnabled(True)
+    self.ui.leftBreastButton.setChecked(False)
     cameraNode1 = self.getCamera('View1')
     cameraNode2 = self.getCamera('View2')
     cameraNode3 = self.getCamera('View3')
@@ -703,8 +745,8 @@ class LumpNav2Widget(ScriptedLoadableModuleWidget, VTKObservationMixin):
     cameraNode1.SetViewAngle(25.0)
     cameraNode2.SetViewAngle(25.0)
     cameraNode3.SetViewAngle(20.0)
-    cameraNode2.ResetClippingRange()
     cameraNode1.ResetClippingRange()
+    cameraNode2.ResetClippingRange()
 
   def onDisplayRulerButtonClicked(self, toggled):
     logging.info(f"onDisplayRulerButtonClicked({toggled})")
