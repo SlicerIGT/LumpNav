@@ -7,7 +7,7 @@
     <x>0</x>
     <y>0</y>
     <width>509</width>
-    <height>943</height>
+    <height>1065</height>
    </rect>
   </property>
   <property name="cursor">
@@ -270,7 +270,7 @@
            <string>Left Breast</string>
           </property>
           <property name="checkable">
-           <bool>false</bool>
+           <bool>true</bool>
           </property>
           <property name="autoExclusive">
            <bool>false</bool>
@@ -283,7 +283,7 @@
            <string>Right Breast</string>
           </property>
           <property name="checkable">
-           <bool>false</bool>
+           <bool>true</bool>
           </property>
           <property name="autoExclusive">
            <bool>false</bool>
@@ -357,7 +357,7 @@
       <item>
        <layout class="QHBoxLayout" name="horizontalLayout_6">
         <item>
-         <widget class="QLabel" name="label_2">
+         <widget class="QLabel" name="autoCenterLabel">
           <property name="text">
            <string>&lt;html&gt;&lt;head/&gt;&lt;body&gt;&lt;p&gt;Auto-center:&lt;/p&gt;&lt;/body&gt;&lt;/html&gt;</string>
           </property>
@@ -372,7 +372,7 @@
            <bool>true</bool>
           </property>
           <property name="checked">
-           <bool>true</bool>
+           <bool>false</bool>
           </property>
           <property name="autoExclusive">
            <bool>false</bool>
@@ -388,7 +388,7 @@
            <bool>true</bool>
           </property>
           <property name="checked">
-           <bool>true</bool>
+           <bool>false</bool>
           </property>
           <property name="autoExclusive">
            <bool>false</bool>
@@ -404,10 +404,54 @@
            <bool>true</bool>
           </property>
           <property name="checked">
-           <bool>true</bool>
+           <bool>false</bool>
           </property>
           <property name="autoExclusive">
            <bool>false</bool>
+          </property>
+         </widget>
+        </item>
+       </layout>
+      </item>
+      <item>
+       <layout class="QHBoxLayout" name="horizontalLayout_17">
+        <item>
+         <widget class="QLabel" name="cauteryCameraLabel">
+          <property name="frameShape">
+           <enum>QFrame::NoFrame</enum>
+          </property>
+          <property name="text">
+           <string>Cautery camera:</string>
+          </property>
+         </widget>
+        </item>
+        <item>
+         <widget class="QPushButton" name="leftCauteryCameraButton">
+          <property name="text">
+           <string>Left</string>
+          </property>
+          <property name="checkable">
+           <bool>true</bool>
+          </property>
+         </widget>
+        </item>
+        <item>
+         <widget class="QPushButton" name="bottomCauteryCameraButton">
+          <property name="text">
+           <string>Bottom</string>
+          </property>
+          <property name="checkable">
+           <bool>true</bool>
+          </property>
+         </widget>
+        </item>
+        <item>
+         <widget class="QPushButton" name="rightCauteryCameraButton">
+          <property name="text">
+           <string>Right</string>
+          </property>
+          <property name="checkable">
+           <bool>true</bool>
           </property>
          </widget>
         </item>

@@ -156,6 +156,9 @@ class LumpNav2Widget(ScriptedLoadableModuleWidget, VTKObservationMixin):
   FONT_SIZE_DEFAULT = 20
   VIEW_COORD_HEIGHT_LIMIT = 0.6
   VIEW_COORD_WIDTH_LIMIT = 0.9
+  DEFAULT_VIEW = 0
+  LEFT_BREAST_VIEW = 1
+  RIGHT_BREAST_VIEW = 2
   LAST_SAVE_FOLDER = "LumpNav2/LastSaveFolder"
 
   # Tool calibration
@@ -276,8 +279,8 @@ class LumpNav2Widget(ScriptedLoadableModuleWidget, VTKObservationMixin):
     self.ui.segmentationThresholdSlider.connect("valueChanged(int)", self.onSegmentationThresholdChanged)
 
     # navigation
-    self.ui.leftBreastButton.connect('clicked()', self.onLeftBreastButtonClicked)
-    self.ui.rightBreastButton.connect('clicked()', self.onRightBreastButtonClicked)
+    self.ui.leftBreastButton.connect('toggled(bool)', self.onLeftBreastButtonClicked)
+    self.ui.rightBreastButton.connect('toggled(bool)', self.onRightBreastButtonClicked)
     displayRulerEnabled = slicer.util.settingsValue(self.logic.DISPLAY_RULER_SETTING, True, converter=slicer.util.toBool)
     self.ui.displayRulerButton.checked = displayRulerEnabled
     self.ui.displayRulerButton.connect('toggled(bool)', self.onDisplayRulerButtonClicked)
@@ -289,6 +292,9 @@ class LumpNav2Widget(ScriptedLoadableModuleWidget, VTKObservationMixin):
     self.ui.leftAutoCenterCameraButton.connect('toggled(bool)', self.onLeftAutoCenterCameraButtonClicked)
     self.ui.rightAutoCenterCameraButton.connect('toggled(bool)', self.onRightAutoCenterCameraButtonClicked)
     self.ui.bottomAutoCenterCameraButton.connect('toggled(bool)', self.onBottomAutoCenterCameraButtonClicked)
+    self.ui.leftCauteryCameraButton.connect('toggled(bool)', self.onLeftCauteryCameraButtonClicked)
+    self.ui.rightCauteryCameraButton.connect('toggled(bool)', self.onRightCauteryCameraButtonClicked)
+    self.ui.bottomCauteryCameraButton.connect('toggled(bool)', self.onBottomCauteryCameraButtonClicked)
     self.ui.deleteLastFiducialNavigationButton.connect('clicked()', self.onDeleteLastFiducialClicked)
     cauteryToolSelected = slicer.util.settingsValue(self.logic.CAUTERY_MODEL_SELECTED, True, converter=slicer.util.toBool)
     self.ui.toolModelButton.setChecked(cauteryToolSelected)
@@ -525,16 +531,6 @@ class LumpNav2Widget(ScriptedLoadableModuleWidget, VTKObservationMixin):
       self.ui.toolsCollapsibleButton.collapsed = True
       self.ui.contouringCollapsibleButton.collapsed = True
       self.onDual3DViewButton(self.ui.threeDViewButton.checked)
-
-      # Position bottom camera
-      cameraNode3 = self.getCamera("View3")
-      cameraNode3.RotateTo(cameraNode3.Inferior)
-
-      # Autocenter all views
-      self.onLeftAutoCenterCameraButtonClicked(True)
-      self.onBottomAutoCenterCameraButtonClicked(True)
-      self.onRightAutoCenterCameraButtonClicked(True)
-
       # Set 3D view settings
       layoutManager = slicer.app.layoutManager()
       for i in range(layoutManager.threeDViewCount):
@@ -553,11 +549,14 @@ class LumpNav2Widget(ScriptedLoadableModuleWidget, VTKObservationMixin):
     self.ui.threeDViewButton.checked = toggled
     if toggled:
       self.ui.threeDViewButton.text = "Triple 3D View"
+      self.setBottomCameraView()
       self.ui.bottomAutoCenterCameraButton.setEnabled(False)
+      self.ui.bottomCauteryCameraButton.setEnabled(False)
       slicer.app.layoutManager().setLayout(self.logic.LAYOUT_DUAL3D)
     else:
       self.ui.threeDViewButton.text = "Dual 3D View"
       self.ui.bottomAutoCenterCameraButton.setEnabled(True)
+      self.ui.bottomCauteryCameraButton.setEnabled(True)
       slicer.app.layoutManager().setLayout(self.logic.LAYOUT_TRIPLE3D)
 
   def onStartStopRecordingClicked(self, toggled):
@@ -603,6 +602,46 @@ class LumpNav2Widget(ScriptedLoadableModuleWidget, VTKObservationMixin):
     parameterNode = self._parameterNode
     breachMarkups_Needle = parameterNode.GetNodeReference(self.logic.BREACH_MARKUPS_NEEDLE)
     breachMarkups_Needle.RemoveAllMarkups()
+
+  def onDisplayRulerButtonClicked(self, toggled):
+    logging.info(f"onDisplayRulerButtonClicked({toggled})")
+    settings = qt.QSettings()
+    settings.setValue(self.logic.DISPLAY_RULER_SETTING, toggled)
+    self.logic.setRulerVisibility(toggled)
+
+  def onDisplayDistanceClicked(self, toggled):
+    logging.info("onDisplayDistanceClicked({})".format(toggled))
+    settings = qt.QSettings()
+    settings.setValue(self.logic.DISPLAY_DISTANCE_SETTING, toggled)
+    self.logic.setRulerDistanceVisibility(toggled)
+
+  def onIncreaseDistanceFontSizeClicked(self):
+    logging.info("onIncreaseDistanceFontSizeClicked")
+    previousFontSize = slicer.util.settingsValue(self.logic.RULER_FONT_SIZE,
+                                                 self.logic.RULER_DISTANCE_DEFAULT_FONT_SIZE,
+                                                 converter=lambda x: float(x))
+    newFontSize = previousFontSize + 1
+    settings = qt.QSettings()
+    settings.setValue(self.logic.RULER_FONT_SIZE, newFontSize)
+    self.logic.setRulerDistanceFontSize(newFontSize)
+
+  def onDecreaseDistanceFontSizeClicked(self):
+    logging.info("onDecreaseDistanceFontSizeClicked")
+    previousFontSize = slicer.util.settingsValue(self.logic.RULER_FONT_SIZE,
+                                                 self.logic.RULER_DISTANCE_DEFAULT_FONT_SIZE,
+                                                 converter=lambda x: float(x))
+    newFontSize = previousFontSize - 1
+    settings = qt.QSettings()
+    settings.setValue(self.logic.RULER_FONT_SIZE, newFontSize)
+    self.logic.setRulerDistanceFontSize(newFontSize)
+
+  def onToolModelClicked(self, toggled):
+    logging.info('onToolModelClicked')
+    if toggled:
+      self.ui.toolModelButton.text = "Stick Model"
+    else:
+      self.ui.toolModelButton.text = "Cautery Model"
+    self.logic.setToolModelClicked(toggled)
 
   def onBreachMarkupsProximityChanged(self, value):
     logging.info(f"onBreachMarkupsProximityChanged({value})")
@@ -728,99 +767,137 @@ class LumpNav2Widget(ScriptedLoadableModuleWidget, VTKObservationMixin):
     viewNode = slicer.util.getFirstNodeByName(viewName)
     return viewNode
 
-  def onLeftBreastButtonClicked(self):
-    logging.info("onLeftButtonClicked")
-    self.ui.rightBreastButton.setEnabled(True)
-    self.ui.rightBreastButton.setChecked(False)
-    self.ui.leftBreastButton.setEnabled(False)
-    cameraNode1 = self.getCamera('View1')
-    cameraNode2 = self.getCamera('View2')
-    cameraNode3 = self.getCamera('View3')
-    # TODO: Don't use magic numbers
-    cameraNode1.SetPosition(-242.0042709749552, 331.2026122150233, -36.6617924419265)
-    cameraNode1.SetViewUp(0.802637869051714, 0.5959392355990031, -0.025077452777348814)
-    cameraNode1.SetFocalPoint(0.0, 0.0, 0.0)
-    cameraNode2.SetPosition(0.0, 500.0, 0.0)
-    cameraNode2.SetViewUp(1.0, 0.0, 0.0)
-    cameraNode2.SetFocalPoint(0.0, 0.0, 0.0)
-    cameraNode1.SetViewAngle(25.0)
-    cameraNode2.SetViewAngle(25.0)
-    cameraNode3.SetViewAngle(20.0)
-    cameraNode1.ResetClippingRange()
-    cameraNode2.ResetClippingRange()
-
-  def onRightBreastButtonClicked(self):
-    logging.info("onRightButtonClicked")
-    self.ui.rightBreastButton.setEnabled(False)
-    self.ui.leftBreastButton.setEnabled(True)
-    self.ui.leftBreastButton.setChecked(False)
-    cameraNode1 = self.getCamera('View1')
-    cameraNode2 = self.getCamera('View2')
-    cameraNode3 = self.getCamera('View3')
-    # TODO: magic numbers
-    cameraNode1.SetPosition(275.4944476449362, 309.31555951664205, 42.169967768629164)
-    cameraNode1.SetViewUp(-0.749449157051234, 0.661802245162601, -0.018540477149624528)
-    cameraNode1.SetFocalPoint(0.0, 0.0, 0.0)
-    cameraNode2.SetPosition(0.0, 500.0, 0.0)
-    cameraNode2.SetViewUp(-1.0, 0.0, 0.0)
-    cameraNode2.SetFocalPoint(0.0, 0.0, 0.0)
-    cameraNode1.SetViewAngle(25.0)
-    cameraNode2.SetViewAngle(25.0)
-    cameraNode3.SetViewAngle(20.0)
-    cameraNode1.ResetClippingRange()
-    cameraNode2.ResetClippingRange()
-
-  def onDisplayRulerButtonClicked(self, toggled):
-    logging.info(f"onDisplayRulerButtonClicked({toggled})")
-    settings = qt.QSettings()
-    settings.setValue(self.logic.DISPLAY_RULER_SETTING, toggled)
-    self.logic.setRulerVisibility(toggled)
-
-  def onDisplayDistanceClicked(self, toggled):
-    logging.info("onDisplayDistanceClicked({})".format(toggled))
-    settings = qt.QSettings()
-    settings.setValue(self.logic.DISPLAY_DISTANCE_SETTING, toggled)
-    self.logic.setRulerDistanceVisibility(toggled)
-
-  def onIncreaseDistanceFontSizeClicked(self):
-    logging.info("onIncreaseDistanceFontSizeClicked")
-    previousFontSize = slicer.util.settingsValue(self.logic.RULER_FONT_SIZE,
-                                                 self.logic.RULER_DISTANCE_DEFAULT_FONT_SIZE,
-                                                 converter=lambda x: float(x))
-    newFontSize = previousFontSize + 1
-    settings = qt.QSettings()
-    settings.setValue(self.logic.RULER_FONT_SIZE, newFontSize)
-    self.logic.setRulerDistanceFontSize(newFontSize)
-
-  def onDecreaseDistanceFontSizeClicked(self):
-    logging.info("onDecreaseDistanceFontSizeClicked")
-    previousFontSize = slicer.util.settingsValue(self.logic.RULER_FONT_SIZE,
-                                                 self.logic.RULER_DISTANCE_DEFAULT_FONT_SIZE,
-                                                 converter=lambda x: float(x))
-    newFontSize = previousFontSize - 1
-    settings = qt.QSettings()
-    settings.setValue(self.logic.RULER_FONT_SIZE, newFontSize)
-    self.logic.setRulerDistanceFontSize(newFontSize)
-
-  def onToolModelClicked(self, toggled):
-    logging.info('onToolModelClicked')
+  def onLeftBreastButtonClicked(self, toggled):
+    logging.info(f"onLeftButtonClicked({toggled})")
+    if self.ui.rightBreastButton.checked:
+      rightBreastBlockSignalState = self.ui.rightBreastButton.blockSignals(True)
+      self.ui.rightBreastButton.setChecked(False)
+      self.ui.rightBreastButton.blockSignals(rightBreastBlockSignalState)
     if toggled:
-      self.ui.toolModelButton.text = "Stick Model"
+      self.setLeftCameraView(self.LEFT_BREAST_VIEW)
+      self.setRightCameraView(self.LEFT_BREAST_VIEW)
     else:
-      self.ui.toolModelButton.text = "Cautery Model"
-    self.logic.setToolModelClicked(toggled)
+      self.setLeftCameraView(self.DEFAULT_VIEW)
+      self.setRightCameraView(self.DEFAULT_VIEW)
+    self.setBottomCameraView()
+
+  def onRightBreastButtonClicked(self, toggled):
+    logging.info(f"onRightButtonClicked({toggled})")
+    if self.ui.leftBreastButton.checked:
+      leftBreastBlockSignalState = self.ui.leftBreastButton.blockSignals(True)
+      self.ui.leftBreastButton.setChecked(False)
+      self.ui.leftBreastButton.blockSignals(leftBreastBlockSignalState)
+    if toggled:
+      self.setLeftCameraView(self.RIGHT_BREAST_VIEW)
+      self.setRightCameraView(self.RIGHT_BREAST_VIEW)
+    else:
+      self.setLeftCameraView(self.DEFAULT_VIEW)
+      self.setRightCameraView(self.DEFAULT_VIEW)
+    self.setBottomCameraView()
+
+  def getCurrentCameraView(self):
+    if not self.ui.leftBreastButton.checked and not self.ui.rightBreastButton.checked:
+      currentView = self.DEFAULT_VIEW
+    elif self.ui.leftBreastButton.checked:
+      currentView = self.LEFT_BREAST_VIEW
+    else:
+      currentView = self.RIGHT_BREAST_VIEW
+    return currentView
+
+  def setLeftCameraView(self, currentView):
+    cameraNode = self.getCamera('View1')
+    if currentView == self.LEFT_BREAST_VIEW:
+      cameraNode.SetPosition(-242.0042709749552, 331.2026122150233, -36.6617924419265)
+      cameraNode.SetViewUp(0.802637869051714, 0.5959392355990031, -0.025077452777348814)
+      cameraNode.SetFocalPoint(0.0, 0.0, 0.0)
+      cameraNode.SetViewAngle(25.0)
+      cameraNode.ResetClippingRange()
+    elif currentView == self.RIGHT_BREAST_VIEW:
+      cameraNode.SetPosition(275.4944476449362, 309.31555951664205, 42.169967768629164)
+      cameraNode.SetViewUp(-0.749449157051234, 0.661802245162601, -0.018540477149624528)
+      cameraNode.SetFocalPoint(0.0, 0.0, 0.0)
+      cameraNode.SetViewAngle(25.0)
+      cameraNode.ResetClippingRange()
+    else:
+      cameraNode.RotateTo(cameraNode.Anterior)
+
+  def setRightCameraView(self, currentView):
+    cameraNode = self.getCamera('View2')
+    if currentView == self.LEFT_BREAST_VIEW:
+      cameraNode.SetPosition(0.0, 500.0, 0.0)
+      cameraNode.SetViewUp(1.0, 0.0, 0.0)
+      cameraNode.SetFocalPoint(0.0, 0.0, 0.0)
+      cameraNode.SetViewAngle(25.0)
+      cameraNode.ResetClippingRange()
+    elif currentView == self.RIGHT_BREAST_VIEW:
+      cameraNode.SetPosition(0.0, 500.0, 0.0)
+      cameraNode.SetViewUp(-1.0, 0.0, 0.0)
+      cameraNode.SetFocalPoint(0.0, 0.0, 0.0)
+      cameraNode.SetViewAngle(25.0)
+      cameraNode.ResetClippingRange()
+    else:
+      cameraNode.RotateTo(cameraNode.Anterior)
+
+  def setBottomCameraView(self):
+    cameraNode = self.getCamera("View3")
+    cameraNode.RotateTo(cameraNode.Inferior)
+    cameraNode.SetViewAngle(20.0)
+
+  def onLeftCauteryCameraButtonClicked(self, toggled):
+    logging.info("onLeftFollowCameraButtonClicked")
+    self.onCauteryCameraButtonClicked("View1")
+    if not self.ui.leftCauteryCameraButton.checked:
+      self.setLeftCameraView(self.getCurrentCameraView())
+
+  def onRightCauteryCameraButtonClicked(self, toggled):
+    logging.info("onRightFollowCameraButtonClicked")
+    self.onCauteryCameraButtonClicked("View2")
+    if not self.ui.rightCauteryCameraButton.checked:
+      self.setRightCameraView(self.getCurrentCameraView())
+
+  def onBottomCauteryCameraButtonClicked(self, toggled):
+    logging.info("onBottomFollowCameraButtonClicked")
+    self.onCauteryCameraButtonClicked("View3")
+    if not self.ui.bottomCauteryCameraButton.checked:
+      self.setBottomCameraView()
+
+  def onCauteryCameraButtonClicked(self, viewName):
+    viewNode = self.getViewNode(viewName)
+    if self.logic.viewpointLogic.getViewpointForViewNode(viewNode).isCurrentModeBullseye():
+      self.disableBullseyeInViewNode(viewNode)
+    else:
+      self.enableBullseyeInViewNode(viewNode)
+    self.updateGUIButtons()
+
+  def disableBullseyeInViewNode(self, viewNode):
+    if self.logic.viewpointLogic.getViewpointForViewNode(viewNode).isCurrentModeBullseye():
+      self.logic.viewpointLogic.getViewpointForViewNode(viewNode).bullseyeStop()
+
+  def enableBullseyeInViewNode(self, viewNode):
+    logging.debug("enableBullseyeInViewNode")
+    self.disableViewpointInViewNode(viewNode)
+    cauteryCameraToCautery = self._parameterNode.GetNodeReference(self.logic.CAUTERYCAMERA_TO_CAUTERY)
+    self.logic.viewpointLogic.getViewpointForViewNode(viewNode).setViewNode(viewNode)
+    self.logic.viewpointLogic.getViewpointForViewNode(viewNode).bullseyeSetTransformNode(cauteryCameraToCautery)
+    self.logic.viewpointLogic.getViewpointForViewNode(viewNode).bullseyeStart()
 
   def onLeftAutoCenterCameraButtonClicked(self, toggled):
     logging.info("onLeftAutoCenterButtonClicked")
     self.onAutoCenterButtonClicked('View1')
+    if not self.ui.leftCauteryCameraButton.checked:
+      self.setLeftCameraView(self.getCurrentCameraView())
 
   def onRightAutoCenterCameraButtonClicked(self, toggled):
     logging.info("onRightAutoCenterCameraButtonClicked")
     self.onAutoCenterButtonClicked('View2')
+    if not self.ui.rightCauteryCameraButton.checked:
+      self.setRightCameraView(self.getCurrentCameraView())
 
   def onBottomAutoCenterCameraButtonClicked(self, toggled):
     logging.info("onBottomAutoCenterCameraButtonClicked")
     self.onAutoCenterButtonClicked('View3')
+    if not self.ui.bottomCauteryCameraButton.checked:
+      self.setBottomCameraView()
 
   def onAutoCenterButtonClicked(self, viewName):
     viewNode = self.getViewNode(viewName)
@@ -828,27 +905,76 @@ class LumpNav2Widget(ScriptedLoadableModuleWidget, VTKObservationMixin):
       self.disableAutoCenterInViewNode(viewNode)
     else:
       self.enableAutoCenterInViewNode(viewNode)
+    self.updateGUIButtons()
 
   def disableAutoCenterInViewNode(self, viewNode):
     if self.logic.viewpointLogic.getViewpointForViewNode(viewNode).isCurrentModeAutoCenter():
       self.logic.viewpointLogic.getViewpointForViewNode(viewNode).autoCenterStop()
-    logging.info("Auto center for %s disabled", viewNode.GetName())
 
   def enableAutoCenterInViewNode(self, viewNode):
+    self.disableViewpointInViewNode(viewNode)
+    tumorModel = self._parameterNode.GetNodeReference(self.logic.TUMOR_MODEL)
     self.logic.viewpointLogic.getViewpointForViewNode(viewNode).setViewNode(viewNode)
     self.logic.viewpointLogic.getViewpointForViewNode(viewNode).autoCenterSetSafeXMinimum(-self.VIEW_COORD_WIDTH_LIMIT)
     self.logic.viewpointLogic.getViewpointForViewNode(viewNode).autoCenterSetSafeXMaximum(self.VIEW_COORD_WIDTH_LIMIT)
     self.logic.viewpointLogic.getViewpointForViewNode(viewNode).autoCenterSetSafeYMinimum(-self.VIEW_COORD_HEIGHT_LIMIT)
     self.logic.viewpointLogic.getViewpointForViewNode(viewNode).autoCenterSetSafeYMaximum(self.VIEW_COORD_HEIGHT_LIMIT)
-    parameterNode = self._parameterNode
-    tumorModel = parameterNode.GetNodeReference(self.logic.TUMOR_MODEL)
     self.logic.viewpointLogic.getViewpointForViewNode(viewNode).autoCenterSetModelNode(tumorModel)
     self.logic.viewpointLogic.getViewpointForViewNode(viewNode).autoCenterStart()
-    logging.info("Auto center for %s enabled", viewNode.GetName())
 
   def disableViewpointInViewNode(self, viewNode):
     logging.debug("disableViewpointInViewNode")
     self.disableAutoCenterInViewNode(viewNode)
+    self.disableBullseyeInViewNode(viewNode)
+
+  def updateGUIButtons(self):
+    # Left view node
+    autoCenterBlockSignalState = self.ui.leftAutoCenterCameraButton.blockSignals(True)
+    bullseyeBlockSignalState = self.ui.leftCauteryCameraButton.blockSignals(True)
+    leftViewNode = self.getViewNode("View1")
+    if self.logic.viewpointLogic.getViewpointForViewNode(leftViewNode).isCurrentModeAutoCenter():
+      self.ui.leftAutoCenterCameraButton.setChecked(True)
+      self.ui.leftCauteryCameraButton.setChecked(False)
+    elif self.logic.viewpointLogic.getViewpointForViewNode(leftViewNode).isCurrentModeBullseye():
+      self.ui.leftAutoCenterCameraButton.setChecked(False)
+      self.ui.leftCauteryCameraButton.setChecked(True)
+    else:
+      self.ui.leftAutoCenterCameraButton.setChecked(False)
+      self.ui.leftCauteryCameraButton.setChecked(False)
+    self.ui.leftAutoCenterCameraButton.blockSignals(autoCenterBlockSignalState)
+    self.ui.leftCauteryCameraButton.blockSignals(bullseyeBlockSignalState)
+
+    # Right view node
+    autoCenterBlockSignalState = self.ui.rightAutoCenterCameraButton.blockSignals(True)
+    bullseyeBlockSignalState = self.ui.rightCauteryCameraButton.blockSignals(True)
+    rightViewNode = self.getViewNode("View2")
+    if self.logic.viewpointLogic.getViewpointForViewNode(rightViewNode).isCurrentModeAutoCenter():
+      self.ui.rightAutoCenterCameraButton.setChecked(True)
+      self.ui.rightCauteryCameraButton.setChecked(False)
+    elif self.logic.viewpointLogic.getViewpointForViewNode(rightViewNode).isCurrentModeBullseye():
+      self.ui.rightAutoCenterCameraButton.setChecked(False)
+      self.ui.rightCauteryCameraButton.setChecked(True)
+    else:
+      self.ui.rightAutoCenterCameraButton.setChecked(False)
+      self.ui.rightCauteryCameraButton.setChecked(False)
+    self.ui.rightAutoCenterCameraButton.blockSignals(autoCenterBlockSignalState)
+    self.ui.rightCauteryCameraButton.blockSignals(bullseyeBlockSignalState)
+
+    # Bottom view node
+    autoCenterBlockSignalState = self.ui.bottomAutoCenterCameraButton.blockSignals(True)
+    bullseyeBlockSignalState = self.ui.bottomCauteryCameraButton.blockSignals(True)
+    bottomViewNode = self.getViewNode("View3")
+    if self.logic.viewpointLogic.getViewpointForViewNode(bottomViewNode).isCurrentModeAutoCenter():
+      self.ui.bottomAutoCenterCameraButton.setChecked(True)
+      self.ui.bottomCauteryCameraButton.setChecked(False)
+    elif self.logic.viewpointLogic.getViewpointForViewNode(bottomViewNode).isCurrentModeBullseye():
+      self.ui.bottomAutoCenterCameraButton.setChecked(False)
+      self.ui.bottomCauteryCameraButton.setChecked(True)
+    else:
+      self.ui.bottomAutoCenterCameraButton.setChecked(False)
+      self.ui.bottomCauteryCameraButton.setChecked(False)
+    self.ui.bottomAutoCenterCameraButton.blockSignals(autoCenterBlockSignalState)
+    self.ui.bottomCauteryCameraButton.blockSignals(bullseyeBlockSignalState)
 
   def setCustomStyle(self, visible):
     """
@@ -1112,27 +1238,6 @@ class LumpNav2Widget(ScriptedLoadableModuleWidget, VTKObservationMixin):
       self.ui.startStopRecordingButton.checked = ultrasoundSqBr.GetRecordingActive()
 
     self._updatingGUIFromMRML = False
-
-  def updateGUISliders(self, viewNode):
-    logging.debug("updateGUISliders")
-    if self.logic.viewpointLogic.getViewpointForViewNode(viewNode).isCurrentModeBullseye():
-      self.ui.fieldOfViewSlider.connect('valueChanged(double)', self.logic.viewpointLogic.getViewpointForViewNode(viewNode).bullseyeSetCameraViewAngleDeg)
-      self.ui.cameraXPosSlider.connect('valueChanged(double)', self.logic.viewpointLogic.getViewpointForViewNode(viewNode).bullseyeSetCameraXPosMm)
-      self.ui.cameraYPosSlider.connect('valueChanged(double)', self.logic.viewpointLogic.getViewpointForViewNode(viewNode).bullseyeSetCameraYPosMm)
-      self.ui.cameraZPosSlider.connect('valueChanged(double)', self.logic.viewpointLogic.getViewpointForViewNode(viewNode).bullseyeSetCameraZPosMm)
-      self.ui.fieldOfViewSlider.setDisabled(False)
-      self.ui.cameraXPosSlider.setDisabled(False)
-      self.ui.cameraZPosSlider.setDisabled(False)
-      self.ui.cameraYPosSlider.setDisabled(False)
-    else:
-      self.ui.fieldOfViewSlider.disconnect('valueChanged(double)', self.logic.viewpointLogic.getViewpointForViewNode(viewNode).bullseyeSetCameraViewAngleDeg)
-      self.ui.cameraXPosSlider.disconnect('valueChanged(double)', self.logic.viewpointLogic.getViewpointForViewNode(viewNode).bullseyeSetCameraXPosMm)
-      self.ui.cameraYPosSlider.disconnect('valueChanged(double)', self.logic.viewpointLogic.getViewpointForViewNode(viewNode).bullseyeSetCameraYPosMm)
-      self.ui.cameraZPosSlider.disconnect('valueChanged(double)', self.logic.viewpointLogic.getViewpointForViewNode(viewNode).bullseyeSetCameraZPosMm)
-      self.ui.fieldOfViewSlider.setDisabled(True)
-      self.ui.cameraXPosSlider.setDisabled(True)
-      self.ui.cameraZPosSlider.setDisabled(True)
-      self.ui.cameraYPosSlider.setDisabled(True)
 
   def updateParameterNodeFromGUI(self, caller=None, event=None):
     """
@@ -1620,9 +1725,9 @@ class LumpNav2Logic(ScriptedLoadableModuleLogic, VTKObservationMixin):
         logging.info("Creating cautery camera to cautery calibration file, because none was found at: "
                      "{}".format(cauteryCameraToCauteryFileWithPath))
         cauteryCameraToCautery = slicer.mrmlScene.AddNewNodeByClass("vtkMRMLLinearTransformNode", self.CAUTERYCAMERA_TO_CAUTERY)
-        m = self.createMatrixFromString('0 0 -1 0 '
-                                        '1 0 0 0 '
-                                        '0 -1 0 0 '
+        m = self.createMatrixFromString('0 1 0 170 '
+                                        '1 0 0 -8 '
+                                        '0 0 -1 -30 '
                                         '0 0 0 1')
         cauteryCameraToCautery.SetMatrixTransformToParent(m)
       parameterNode.SetNodeReferenceID(self.CAUTERYCAMERA_TO_CAUTERY, cauteryCameraToCautery.GetID())
