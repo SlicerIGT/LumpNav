@@ -549,7 +549,6 @@ class LumpNav2Widget(ScriptedLoadableModuleWidget, VTKObservationMixin):
     self.ui.threeDViewButton.checked = toggled
     if toggled:
       self.ui.threeDViewButton.text = "Triple 3D View"
-      self.setBottomCameraView()
       self.ui.bottomAutoCenterCameraButton.setEnabled(False)
       self.ui.bottomCauteryCameraButton.setEnabled(False)
       slicer.app.layoutManager().setLayout(self.logic.LAYOUT_DUAL3D)
@@ -558,6 +557,7 @@ class LumpNav2Widget(ScriptedLoadableModuleWidget, VTKObservationMixin):
       self.ui.bottomAutoCenterCameraButton.setEnabled(True)
       self.ui.bottomCauteryCameraButton.setEnabled(True)
       slicer.app.layoutManager().setLayout(self.logic.LAYOUT_TRIPLE3D)
+      self.setBottomCameraView()
 
   def onStartStopRecordingClicked(self, toggled):
     if toggled:
@@ -840,8 +840,11 @@ class LumpNav2Widget(ScriptedLoadableModuleWidget, VTKObservationMixin):
 
   def setBottomCameraView(self):
     cameraNode = self.getCamera("View3")
-    cameraNode.RotateTo(cameraNode.Inferior)
+    cameraNode.SetPosition(0.0, 0.0, -500.0)
+    cameraNode.SetViewUp(0.0, 0.0, 0.0)
+    cameraNode.SetFocalPoint(0.0, 0.0, 0.0)
     cameraNode.SetViewAngle(20.0)
+    cameraNode.ResetClippingRange()
 
   def onLeftCauteryCameraButtonClicked(self, toggled):
     logging.info("onLeftFollowCameraButtonClicked")
@@ -1725,13 +1728,13 @@ class LumpNav2Logic(ScriptedLoadableModuleLogic, VTKObservationMixin):
         logging.info("Creating cautery camera to cautery calibration file, because none was found at: "
                      "{}".format(cauteryCameraToCauteryFileWithPath))
         cauteryCameraToCautery = slicer.mrmlScene.AddNewNodeByClass("vtkMRMLLinearTransformNode", self.CAUTERYCAMERA_TO_CAUTERY)
-        m = self.createMatrixFromString('0 1 0 170 '
-                                        '1 0 0 -8 '
-                                        '0 0 -1 -30 '
+        m = self.createMatrixFromString('1 0 0 0 '
+                                        '0 -1 0 -5 '
+                                        '0 0 -1 -40 '
                                         '0 0 0 1')
         cauteryCameraToCautery.SetMatrixTransformToParent(m)
       parameterNode.SetNodeReferenceID(self.CAUTERYCAMERA_TO_CAUTERY, cauteryCameraToCautery.GetID())
-    cauteryCameraToCautery.SetAndObserveTransformNodeID(cauteryToReference.GetID())
+    cauteryCameraToCautery.SetAndObserveTransformNodeID(cauteryTipToCautery.GetID())
 
     # OpenIGTLink connection
     self.setupPlusServer()
