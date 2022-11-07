@@ -557,7 +557,6 @@ class LumpNav2Widget(ScriptedLoadableModuleWidget, VTKObservationMixin):
       self.ui.bottomAutoCenterCameraButton.setEnabled(True)
       self.ui.bottomCauteryCameraButton.setEnabled(True)
       slicer.app.layoutManager().setLayout(self.logic.LAYOUT_TRIPLE3D)
-      # self.setBottomCameraView()
 
   def onStartStopRecordingClicked(self, toggled):
     if toggled:
@@ -781,10 +780,10 @@ class LumpNav2Widget(ScriptedLoadableModuleWidget, VTKObservationMixin):
       self.setLeftCameraView(self.DEFAULT_VIEW)
       self.setRightCameraView(self.DEFAULT_VIEW)
       self.setBottomCameraView(self.DEFAULT_VIEW)
-    # Disable bullseye mode
+    # Enable autocenter
     for i in range(slicer.app.layoutManager().threeDViewCount):
       viewNode = slicer.app.layoutManager().threeDWidget(i).mrmlViewNode()
-      self.disableBullseyeInViewNode(viewNode)
+      self.enableAutoCenterInViewNode(viewNode)
     self.updateGUIButtons()
 
   def onRightBreastButtonClicked(self, toggled):
@@ -801,10 +800,10 @@ class LumpNav2Widget(ScriptedLoadableModuleWidget, VTKObservationMixin):
       self.setLeftCameraView(self.DEFAULT_VIEW)
       self.setRightCameraView(self.DEFAULT_VIEW)
       self.setBottomCameraView(self.DEFAULT_VIEW)
-    # Disable bullseye mode
+    # Enable autocenter
     for i in range(slicer.app.layoutManager().threeDViewCount):
       viewNode = slicer.app.layoutManager().threeDWidget(i).mrmlViewNode()
-      self.disableBullseyeInViewNode(viewNode)
+      self.enableAutoCenterInViewNode(viewNode)
     self.updateGUIButtons()
 
   def getCurrentCameraView(self):
@@ -831,6 +830,7 @@ class LumpNav2Widget(ScriptedLoadableModuleWidget, VTKObservationMixin):
       cameraNode.SetViewAngle(25.0)
       cameraNode.ResetClippingRange()
     else:
+      cameraNode.SetFocalPoint(0.0, 0.0, 0.0)
       cameraNode.RotateTo(cameraNode.Anterior)
 
   def setRightCameraView(self, currentView):
@@ -848,11 +848,13 @@ class LumpNav2Widget(ScriptedLoadableModuleWidget, VTKObservationMixin):
       cameraNode.SetViewAngle(25.0)
       cameraNode.ResetClippingRange()
     else:
+      cameraNode.SetFocalPoint(0.0, 0.0, 0.0)
       cameraNode.RotateTo(cameraNode.Anterior)
 
   def setBottomCameraView(self, currentView):
     cameraNode = self.getCamera("View3")
     if currentView == self.DEFAULT_VIEW:
+      cameraNode.SetFocalPoint(0.0, 0.0, 0.0)
       cameraNode.RotateTo(cameraNode.Anterior)
     else:
       cameraNode.SetPosition(0.0, 0.0, -500.0)
@@ -1205,6 +1207,11 @@ class LumpNav2Widget(ScriptedLoadableModuleWidget, VTKObservationMixin):
       self.ui.deleteLastFiducialNavigationButton.setEnabled(False)
       self.ui.selectPointsToEraseButton.setChecked(False)
       self.ui.selectPointsToEraseButton.setEnabled(False)
+
+    plusServerLauncherNode = self._parameterNode.GetNodeReference(self.logic.PLUS_SERVER_LAUNCHER_NODE)
+    if plusServerLauncherNode is not None:
+      hostname = plusServerLauncherNode.GetHostname()
+      self.ui.hostnameLineEdit.setText(hostname)
 
     # All the GUI updates are done
     self._updatingGUIFromParameterNode = False
@@ -1911,6 +1918,7 @@ class LumpNav2Logic(ScriptedLoadableModuleLogic, VTKObservationMixin):
     if not plusServerLauncherNode:
       plusServerLauncherNode = slicer.mrmlScene.AddNewNodeByClass("vtkMRMLPlusServerLauncherNode", self.PLUS_SERVER_LAUNCHER_NODE)
       plusServerLauncherNode.SaveWithSceneOff()
+      parameterNode.SetNodeReferenceID(self.PLUS_SERVER_LAUNCHER_NODE, plusServerLauncherNode.GetID())
 
     if plusServerLauncherNode.GetNodeReferenceID('plusServerRef') != plusServerNode.GetID():
       plusServerLauncherNode.AddAndObserveServerNode(plusServerNode)
