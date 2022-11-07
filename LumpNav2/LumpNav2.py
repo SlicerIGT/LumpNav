@@ -557,7 +557,7 @@ class LumpNav2Widget(ScriptedLoadableModuleWidget, VTKObservationMixin):
       self.ui.bottomAutoCenterCameraButton.setEnabled(True)
       self.ui.bottomCauteryCameraButton.setEnabled(True)
       slicer.app.layoutManager().setLayout(self.logic.LAYOUT_TRIPLE3D)
-      self.setBottomCameraView()
+      # self.setBottomCameraView()
 
   def onStartStopRecordingClicked(self, toggled):
     if toggled:
@@ -776,10 +776,16 @@ class LumpNav2Widget(ScriptedLoadableModuleWidget, VTKObservationMixin):
     if toggled:
       self.setLeftCameraView(self.LEFT_BREAST_VIEW)
       self.setRightCameraView(self.LEFT_BREAST_VIEW)
+      self.setBottomCameraView(self.LEFT_BREAST_VIEW)
     else:
       self.setLeftCameraView(self.DEFAULT_VIEW)
       self.setRightCameraView(self.DEFAULT_VIEW)
-    self.setBottomCameraView()
+      self.setBottomCameraView(self.DEFAULT_VIEW)
+    # Disable bullseye mode
+    for i in range(slicer.app.layoutManager().threeDViewCount):
+      viewNode = slicer.app.layoutManager().threeDWidget(i).mrmlViewNode()
+      self.disableBullseyeInViewNode(viewNode)
+    self.updateGUIButtons()
 
   def onRightBreastButtonClicked(self, toggled):
     logging.info(f"onRightButtonClicked({toggled})")
@@ -790,10 +796,16 @@ class LumpNav2Widget(ScriptedLoadableModuleWidget, VTKObservationMixin):
     if toggled:
       self.setLeftCameraView(self.RIGHT_BREAST_VIEW)
       self.setRightCameraView(self.RIGHT_BREAST_VIEW)
+      self.setBottomCameraView(self.RIGHT_BREAST_VIEW)
     else:
       self.setLeftCameraView(self.DEFAULT_VIEW)
       self.setRightCameraView(self.DEFAULT_VIEW)
-    self.setBottomCameraView()
+      self.setBottomCameraView(self.DEFAULT_VIEW)
+    # Disable bullseye mode
+    for i in range(slicer.app.layoutManager().threeDViewCount):
+      viewNode = slicer.app.layoutManager().threeDWidget(i).mrmlViewNode()
+      self.disableBullseyeInViewNode(viewNode)
+    self.updateGUIButtons()
 
   def getCurrentCameraView(self):
     if not self.ui.leftBreastButton.checked and not self.ui.rightBreastButton.checked:
@@ -838,13 +850,16 @@ class LumpNav2Widget(ScriptedLoadableModuleWidget, VTKObservationMixin):
     else:
       cameraNode.RotateTo(cameraNode.Anterior)
 
-  def setBottomCameraView(self):
+  def setBottomCameraView(self, currentView):
     cameraNode = self.getCamera("View3")
-    cameraNode.SetPosition(0.0, 0.0, -500.0)
-    cameraNode.SetViewUp(0.0, 0.0, 0.0)
-    cameraNode.SetFocalPoint(0.0, 0.0, 0.0)
-    cameraNode.SetViewAngle(20.0)
-    cameraNode.ResetClippingRange()
+    if currentView == self.DEFAULT_VIEW:
+      cameraNode.RotateTo(cameraNode.Anterior)
+    else:
+      cameraNode.SetPosition(0.0, 0.0, -500.0)
+      cameraNode.SetViewUp(0.0, 0.0, 0.0)
+      cameraNode.SetFocalPoint(0.0, 0.0, 0.0)
+      cameraNode.SetViewAngle(20.0)
+      cameraNode.ResetClippingRange()
 
   def onLeftCauteryCameraButtonClicked(self, toggled):
     logging.info("onLeftFollowCameraButtonClicked")
@@ -862,7 +877,7 @@ class LumpNav2Widget(ScriptedLoadableModuleWidget, VTKObservationMixin):
     logging.info("onBottomFollowCameraButtonClicked")
     self.onCauteryCameraButtonClicked("View3")
     if not self.ui.bottomCauteryCameraButton.checked:
-      self.setBottomCameraView()
+      self.setBottomCameraView(self.getCurrentCameraView())
 
   def onCauteryCameraButtonClicked(self, viewName):
     viewNode = self.getViewNode(viewName)
@@ -900,7 +915,7 @@ class LumpNav2Widget(ScriptedLoadableModuleWidget, VTKObservationMixin):
     logging.info("onBottomAutoCenterCameraButtonClicked")
     self.onAutoCenterButtonClicked('View3')
     if not self.ui.bottomCauteryCameraButton.checked:
-      self.setBottomCameraView()
+      self.setBottomCameraView(self.getCurrentCameraView())
 
   def onAutoCenterButtonClicked(self, viewName):
     viewNode = self.getViewNode(viewName)
@@ -1317,7 +1332,7 @@ class LumpNav2Logic(ScriptedLoadableModuleLogic, VTKObservationMixin):
   BREACH_MARKUPS_DISPLAY_SETTING = "LumpNav2/BreachMarkupsDisplaySetting"
   BREACH_MARKUPS_PROXIMITY_THRESHOLD = "LumpNav2/BreachMarkupsProximitySetting"
   BREACH_MARKUPS_SIZE_SETTING = "LumpNav2/BreachMarkupsSize"
-  BREACH_MARKUPS_SIZE_DEFAULT = "LumpNav2/BreachMarkupsSizeDefault"
+  BREACH_MARKUPS_SIZE_DEFAULT = 5
   DISPLAY_RULER_SETTING = "LumpNav2/DistanceRulerEnabled"
   DISPLAY_DISTANCE_SETTING = "LumpNav2/DistanceRulerTextEnabled"
   RULER_DISTANCE_DEFAULT_FONT_SIZE = 5
