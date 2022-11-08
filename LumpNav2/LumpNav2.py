@@ -153,6 +153,9 @@ class LumpNav2Widget(ScriptedLoadableModuleWidget, VTKObservationMixin):
   # Variables to store widget state
   SLICER_RECOMMENDED_VERSION = "5.0.0"
   SLICER_INTERFACE_VISIBLE = "LumpNav2/SlicerInterfaceVisible"
+  NORMAL_BRIGHTNESS = 300
+  BRIGHT_BRIGHTNESS = 220
+  BRIGHTEST_BRIGHTNESS = 140
   FONT_SIZE_DEFAULT = 20
   VIEW_COORD_HEIGHT_LIMIT = 0.6
   VIEW_COORD_WIDTH_LIMIT = 0.9
@@ -674,9 +677,11 @@ class LumpNav2Widget(ScriptedLoadableModuleWidget, VTKObservationMixin):
     logging.info(f"onStartPlusClicked({toggled})")
     if toggled:
       self.ui.startPlusButton.text = "Stop PLUS"
+      self.ui.plusConfigFileSelector.enabled = False
       self.ui.hostnameLineEdit.enabled = False
     else:
       self.ui.startPlusButton.text = "Start PLUS"
+      self.ui.plusConfigFileSelector.enabled = True
       self.ui.hostnameLineEdit.enabled = True
     self.logic.setPlusServerClicked(toggled)
 
@@ -706,15 +711,15 @@ class LumpNav2Widget(ScriptedLoadableModuleWidget, VTKObservationMixin):
 
   def onNormalBrightnessClicked(self):
     logging.info("onNormalBrightnessClicked")
-    self.logic.setBrightness(300)
+    self.logic.setBrightness(self.NORMAL_BRIGHTNESS)
 
   def onBrightBrightnessClicked(self):
     logging.info("onBrightBrightnessClicked")
-    self.logic.setBrightness(220)
+    self.logic.setBrightness(self.BRIGHT_BRIGHTNESS)
 
   def onBrightestBrightnessClicked(self):
     logging.info("onBrightestBrightnessClicked")
-    self.logic.setBrightness(140)
+    self.logic.setBrightness(self.BRIGHTEST_BRIGHTNESS)
 
   def onMarkPointsToggled(self, toggled):
     logging.info(f"onMarkPointsToggled({toggled})")
