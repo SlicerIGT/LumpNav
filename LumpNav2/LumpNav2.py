@@ -335,6 +335,10 @@ class LumpNav2Widget(ScriptedLoadableModuleWidget, VTKObservationMixin):
     if lastHostname != "":
       self.ui.hostnameLineEdit.text = lastHostname
     self.ui.hostnameLineEdit.connect('editingFinished()', self.onHostnameChanged)
+    configFilepath = slicer.util.settingsValue(self.logic.CONFIG_FILE_SETTING, self.logic.resourcePath(self.logic.CONFIG_FILE_DEFAULT))
+    if configFilepath != "":
+      self.ui.plusConfigFileSelector.currentPath = configFilepath
+    self.ui.plusConfigFileSelector.connect('currentPathChanged(const QString)', self.onPlusConfigFileChanged)
 
     # Add custom layouts
     self.logic.addCustomLayouts()
@@ -654,6 +658,12 @@ class LumpNav2Widget(ScriptedLoadableModuleWidget, VTKObservationMixin):
     else:
       self.ui.freezeUltrasoundButton.text = "Freeze"
     self.logic.setFreezeUltrasoundClicked(toggled)
+
+  def onPlusConfigFileChanged(self, configFilepath):
+    logging.info(f"onPlusConfigFileChanged({configFilepath})")
+    settings = qt.QSettings()
+    settings.setValue(self.logic.CONFIG_FILE_SETTING, configFilepath)
+    self.logic.setPlusConfigFile(configFilepath)
 
   def onHostnameChanged(self):
     newHostname = self.ui.hostnameLineEdit.text
@@ -2145,6 +2155,16 @@ class LumpNav2Logic(ScriptedLoadableModuleLogic, VTKObservationMixin):
         plusServerNode.StartServer()
       else:
         plusServerNode.StopServer()
+
+  def setPlusConfigFile(self, configFilepath):
+    parameterNode = self.getParameterNode()
+    plusServerNode = parameterNode.GetNodeReference(self.PLUS_SERVER_NODE)
+    configTextNode = parameterNode.GetNodeReference(self.CONFIG_TEXT_NODE)
+    configTextStorageNode = configTextNode.GetStorageNode()
+    configTextStorageNode.SaveWithSceneOff()
+    configTextStorageNode.SetFileName(configFilepath)
+    configTextStorageNode.ReadData(configTextNode)
+    plusServerNode.SetAndObserveConfigNode(configTextNode)
 
   def setHostname(self, hostname):
     parameterNode = self.getParameterNode()
