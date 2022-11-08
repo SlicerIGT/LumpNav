@@ -159,7 +159,7 @@ class LumpNav2Widget(ScriptedLoadableModuleWidget, VTKObservationMixin):
   DEFAULT_VIEW = 0
   LEFT_BREAST_VIEW = 1
   RIGHT_BREAST_VIEW = 2
-  LAST_SAVE_FOLDER = "LumpNav2/LastSaveFolder"
+  SAVE_FOLDER_SETTING = "LumpNav2/LastSaveFolder"
 
   # Tool calibration
   PIVOT_CALIBRATION = 0
@@ -327,17 +327,15 @@ class LumpNav2Widget(ScriptedLoadableModuleWidget, VTKObservationMixin):
     self.ui.breachMarkupsThresholdSpinBox.connect('valueChanged(int)', self.onBreachMarkupsProximityChanged)
     self.ui.exitButton.connect('clicked()', self.onExitButtonClicked)
     self.ui.saveSceneButton.connect('clicked()', self.onSaveSceneClicked)
-    lastSavePath = slicer.util.settingsValue(self.LAST_SAVE_FOLDER, "")
-    if lastSavePath != "":
-      self.ui.saveFolderSelector.directory = lastSavePath
+    lastSavePath = slicer.util.settingsValue(self.SAVE_FOLDER_SETTING, os.path.dirname(slicer.util.modulePath(self.logic.moduleName)))
+    self.ui.saveFolderSelector.directory = lastSavePath
     self.ui.saveFolderSelector.connect('directoryChanged(const QString)', self.onSavePathChanged)
-    lastHostname = slicer.util.settingsValue(self.logic.LAST_HOSTNAME, "")
+    lastHostname = slicer.util.settingsValue(self.logic.HOSTNAME_SETTING, "")
     if lastHostname != "":
       self.ui.hostnameLineEdit.text = lastHostname
     self.ui.hostnameLineEdit.connect('editingFinished()', self.onHostnameChanged)
     configFilepath = slicer.util.settingsValue(self.logic.CONFIG_FILE_SETTING, self.logic.resourcePath(self.logic.CONFIG_FILE_DEFAULT))
-    if configFilepath != "":
-      self.ui.plusConfigFileSelector.currentPath = configFilepath
+    self.ui.plusConfigFileSelector.currentPath = configFilepath
     self.ui.plusConfigFileSelector.connect('currentPathChanged(const QString)', self.onPlusConfigFileChanged)
 
     # Add custom layouts
@@ -442,7 +440,7 @@ class LumpNav2Widget(ScriptedLoadableModuleWidget, VTKObservationMixin):
       abspath = os.path.abspath(path)
       self.ui.saveFolderSelector.directory = abspath
       settings = qt.QSettings()
-      settings.setValue(self.LAST_SAVE_FOLDER, abspath)
+      settings.setValue(self.SAVE_FOLDER_SETTING, abspath)
       logging.info(f"onSavePathChanged({abspath})")
 
   def onSaveSceneClicked(self):  # common
@@ -668,7 +666,7 @@ class LumpNav2Widget(ScriptedLoadableModuleWidget, VTKObservationMixin):
   def onHostnameChanged(self):
     newHostname = self.ui.hostnameLineEdit.text
     settings = qt.QSettings()
-    settings.setValue(self.logic.LAST_HOSTNAME, newHostname)
+    settings.setValue(self.logic.HOSTNAME_SETTING, newHostname)
     self.logic.setHostname(newHostname)
     logging.info(f"onHostnameChanged({newHostname})")
 
@@ -1333,7 +1331,7 @@ class LumpNav2Logic(ScriptedLoadableModuleLogic, VTKObservationMixin):
   CONFIG_TEXT_NODE = "ConfigTextNode"
   PLUS_SERVER_NODE = "PlusServer"
   PLUS_SERVER_LAUNCHER_NODE = "PlusServerLauncher"
-  LAST_HOSTNAME = "LumpNav2/LastHostname"
+  HOSTNAME_SETTING = "LumpNav2/LastHostname"
 
   # Model names and settings
   NEEDLE_MODEL = "NeedleModel"
@@ -1934,7 +1932,7 @@ class LumpNav2Logic(ScriptedLoadableModuleLogic, VTKObservationMixin):
       plusServerLauncherNode.AddAndObserveServerNode(plusServerNode)
 
     # Set hostname from settings
-    lastHostname = slicer.util.settingsValue(self.LAST_HOSTNAME, "")
+    lastHostname = slicer.util.settingsValue(self.HOSTNAME_SETTING, "")
     if lastHostname != "":
       self.setHostname(lastHostname)
 
