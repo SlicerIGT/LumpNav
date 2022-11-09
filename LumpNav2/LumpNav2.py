@@ -2193,10 +2193,12 @@ class LumpNav2Logic(ScriptedLoadableModuleLogic, VTKObservationMixin):
   def setFreezeUltrasoundClicked(self, toggled):
     parameterNode = self.getParameterNode()
     plusServerNode = parameterNode.GetNodeReference(self.PLUS_SERVER_NODE)
-    if toggled:
-      plusServerNode.StopServer()
-    else:
-      plusServerNode.StartServer()
+    plusServerConnectorNode = plusServerNode.GetNodeReference("plusServerConnectorNodeRef")
+    if plusServerConnectorNode:
+      if toggled:
+        plusServerConnectorNode.Stop()
+      else:
+        plusServerConnectorNode.Start()
 
   def setPlusServerClicked(self, toggled):
     parameterNode = self.getParameterNode()
