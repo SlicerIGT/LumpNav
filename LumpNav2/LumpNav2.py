@@ -265,6 +265,10 @@ class LumpNav2Widget(ScriptedLoadableModuleWidget, VTKObservationMixin):
     # Tool calibration
     self.ui.cauteryCalibrationButton.connect('clicked()', self.onCauteryCalibrationButton)
     self.ui.undoCauteryCalibrationButton.connect('clicked()', self.onUndoCauteryCalibrationClicked)
+    self.ui.needleMinusFiveButton.connect('clicked()', self.onNeedleMinusFiveClicked)
+    self.ui.needleMinusOneButton.connect('clicked()', self.onNeedleMinusOneClicked)
+    self.ui.needlePlusOneButton.connect('clicked()', self.onNeedlePlusOneClicked)
+    self.ui.needlePlusFiveButton.connect('clicked()', self.onNeedlePlusFiveClicked)
 
     # contouring
     self.ui.normalBrightnessButton.connect('toggled(bool)', self.onNormalBrightnessClicked)
@@ -433,6 +437,26 @@ class LumpNav2Widget(ScriptedLoadableModuleWidget, VTKObservationMixin):
     pivotCalibrationFileWithPath = self.resourcePath(pivotCalibrationResultName + ".h5")
     slicer.util.saveNode(self.pivotCalibrationResultNode, pivotCalibrationFileWithPath)
     self.ui.cauteryCalibrationLabel.setText("Pivot calibration reverted")
+
+  def onNeedleMinusFiveClicked(self):
+    logging.info("onNeedleMinusFiveClicked")
+    self.logic.changeNeedleLength(-5)
+    self.updateGUIFromParameterNode()
+
+  def onNeedleMinusOneClicked(self):
+    logging.info("onNeedleMinusOneClicked")
+    self.logic.changeNeedleLength(-1)
+    self.updateGUIFromParameterNode()
+
+  def onNeedlePlusOneClicked(self):
+    logging.info("onNeedlePlusOneClicked")
+    self.logic.changeNeedleLength(1)
+    self.updateGUIFromParameterNode()
+
+  def onNeedlePlusFiveClicked(self):
+    logging.info("onNeedlePlusFiveClicked")
+    self.logic.changeNeedleLength(5)
+    self.updateGUIFromParameterNode()
 
   def onExitButtonClicked(self):
     mainwindow = slicer.util.mainWindow()
@@ -1221,6 +1245,13 @@ class LumpNav2Widget(ScriptedLoadableModuleWidget, VTKObservationMixin):
       self.ui.selectPointsToEraseButton.setChecked(False)
       self.ui.selectPointsToEraseButton.setEnabled(False)
 
+    needleTipToNeedle = self._parameterNode.GetNodeReference(self.logic.NEEDLETIP_TO_NEEDLE)
+    if needleTipToNeedle:
+      needleTipToNeedleMatrix = needleTipToNeedle.GetMatrixTransformToParent()
+      needleTipToNeedleLength = needleTipToNeedleMatrix.GetElement(2, 3)
+      needleLength = needleTipToNeedleLength - self.logic.NEEDLE_CLIP_LENGTH_MM
+      self.ui.needleLengthLabel.text = f"Needle length: {needleLength:.0f}mm"
+
     plusServerLauncherNode = self._parameterNode.GetNodeReference(self.logic.PLUS_SERVER_LAUNCHER_NODE)
     if plusServerLauncherNode is not None:
       hostname = plusServerLauncherNode.GetHostname()
@@ -1342,6 +1373,7 @@ class LumpNav2Logic(ScriptedLoadableModuleLogic, VTKObservationMixin):
   NEEDLE_MODEL = "NeedleModel"
   NEEDLE_VISIBILITY_SETTING = "LumpNav2/NeedleVisible"
   NEEDLETIP_TO_NEEDLE_SETTING = "NeedleTipToNeedleSetting"
+  NEEDLE_CLIP_LENGTH_MM = 17
   CAUTERY_MODEL = "CauteryModel"
   CAUTERY_VISIBILITY_SETTING = "LumpNav2/CauteryVisible"
   CAUTERY_MODEL_FILENAME = "CauteryModel.stl"
@@ -1492,6 +1524,22 @@ class LumpNav2Logic(ScriptedLoadableModuleLogic, VTKObservationMixin):
     layoutManager = slicer.app.layoutManager()
     if not layoutManager.layoutLogic().GetLayoutNode().SetLayoutDescription(self.LAYOUT_DUAL3D, layoutDual3D):
       layoutManager.layoutLogic().GetLayoutNode().AddLayoutDescription(self.LAYOUT_DUAL3D, layoutDual3D)
+
+  def changeNeedleLength(self, needleLength):
+    parameterNode = self.getParameterNode()
+    needleTipToNeedle = parameterNode.GetNodeReference(self.NEEDLETIP_TO_NEEDLE)
+    # Get current NeedleTipToNeedle transform matrix
+    needleTipToNeedleMatrix = vtk.vtkMatrix4x4()
+    needleTipToNeedle.GetMatrixTransformToParent(needleTipToNeedleMatrix)
+    # Create translation matrix
+    translationMatrix = vtk.vtkTransform()
+    translationMatrix.Translate(0, 0, needleLength)
+    # Compute translated NeedleTipToNeedle matrix
+    newNeedleTipToNeedleMatrix = vtk.vtkTransform()
+    newNeedleTipToNeedleMatrix.Concatenate(needleTipToNeedleMatrix)
+    newNeedleTipToNeedleMatrix.Concatenate(translationMatrix)
+    newNeedleTipToNeedleMatrix.Update()
+    needleTipToNeedle.SetAndObserveTransformToParent(newNeedleTipToNeedleMatrix)
 
   def setNeedleVisibility(self, visible):
     """

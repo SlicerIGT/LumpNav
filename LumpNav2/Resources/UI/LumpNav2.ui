@@ -51,7 +51,7 @@
        </widget>
       </item>
       <item>
-       <widget class="QLabel" name="label">
+       <widget class="QLabel" name="needleLengthLabel">
         <property name="text">
          <string>Needle length:</string>
         </property>
