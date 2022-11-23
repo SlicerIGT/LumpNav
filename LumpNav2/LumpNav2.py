@@ -159,9 +159,6 @@ class LumpNav2Widget(ScriptedLoadableModuleWidget, VTKObservationMixin):
   FONT_SIZE_DEFAULT = 20
   VIEW_COORD_HEIGHT_LIMIT = 0.6
   VIEW_COORD_WIDTH_LIMIT = 0.9
-  DEFAULT_VIEW = 0
-  LEFT_BREAST_VIEW = 1
-  RIGHT_BREAST_VIEW = 2
   SAVE_FOLDER_SETTING = "LumpNav2/LastSaveFolder"
 
   # Tool calibration
@@ -286,8 +283,8 @@ class LumpNav2Widget(ScriptedLoadableModuleWidget, VTKObservationMixin):
     self.ui.segmentationThresholdSlider.connect("valueChanged(int)", self.onSegmentationThresholdChanged)
 
     # navigation
-    self.ui.leftBreastButton.connect('toggled(bool)', self.onLeftBreastButtonClicked)
-    self.ui.rightBreastButton.connect('toggled(bool)', self.onRightBreastButtonClicked)
+    self.ui.leftBreastButton.connect('clicked()', self.onLeftBreastButtonClicked)
+    self.ui.rightBreastButton.connect('clicked()', self.onRightBreastButtonClicked)
     displayRulerEnabled = slicer.util.settingsValue(self.logic.DISPLAY_RULER_SETTING, True, converter=slicer.util.toBool)
     self.ui.displayRulerButton.checked = displayRulerEnabled
     self.ui.displayRulerButton.connect('toggled(bool)', self.onDisplayRulerButtonClicked)
@@ -803,125 +800,79 @@ class LumpNav2Widget(ScriptedLoadableModuleWidget, VTKObservationMixin):
     viewNode = slicer.util.getFirstNodeByName(viewName)
     return viewNode
 
-  def onLeftBreastButtonClicked(self, toggled):
-    logging.info(f"onLeftButtonClicked({toggled})")
-    if self.ui.rightBreastButton.checked:
-      rightBreastBlockSignalState = self.ui.rightBreastButton.blockSignals(True)
-      self.ui.rightBreastButton.setChecked(False)
-      self.ui.rightBreastButton.blockSignals(rightBreastBlockSignalState)
-    if toggled:
-      self.setLeftCameraView(self.LEFT_BREAST_VIEW)
-      self.setRightCameraView(self.LEFT_BREAST_VIEW)
-      self.setBottomCameraView(self.LEFT_BREAST_VIEW)
-    else:
-      self.setLeftCameraView(self.DEFAULT_VIEW)
-      self.setRightCameraView(self.DEFAULT_VIEW)
-      self.setBottomCameraView(self.DEFAULT_VIEW)
-    # Enable autocenter
+  def onLeftBreastButtonClicked(self):
+    logging.info(f"onLeftButtonClicked()")
+    cameraNode1 = self.getCamera('View1')
+    cameraNode2 = self.getCamera('View2')
+    cameraNode3 = self.getCamera('View3')
+    # TODO: Don't use magic numbers
+    cameraNode1.SetPosition(-242.0042709749552, 331.2026122150233, -36.6617924419265)
+    cameraNode1.SetViewUp(0.802637869051714, 0.5959392355990031, -0.025077452777348814)
+    cameraNode1.SetFocalPoint(0.0, 0.0, 0.0)
+    cameraNode1.SetViewAngle(25.0)
+    cameraNode1.ResetClippingRange()
+    cameraNode2.SetPosition(0.0, 500.0, 0.0)
+    cameraNode2.SetViewUp(1.0, 0.0, 0.0)
+    cameraNode2.SetFocalPoint(0.0, 0.0, 0.0)
+    cameraNode2.SetViewAngle(25.0)
+    cameraNode2.ResetClippingRange()
+    cameraNode3.SetPosition(0.0, 0.0, -500.0)
+    cameraNode3.SetViewUp(0.0, 0.0, 0.0)
+    cameraNode3.SetFocalPoint(0.0, 0.0, 0.0)
+    cameraNode3.SetViewAngle(20.0)
+    cameraNode3.ResetClippingRange()
+    # Enable auto-center
     for i in range(slicer.app.layoutManager().threeDViewCount):
       viewNode = slicer.app.layoutManager().threeDWidget(i).mrmlViewNode()
-      self.enableAutoCenterInViewNode(viewNode)
+      if not self.logic.viewpointLogic.getViewpointForViewNode(viewNode).isCurrentModeAutoCenter():
+        self.enableAutoCenterInViewNode(viewNode)
     self.updateGUIButtons()
 
-  def onRightBreastButtonClicked(self, toggled):
-    logging.info(f"onRightButtonClicked({toggled})")
-    if self.ui.leftBreastButton.checked:
-      leftBreastBlockSignalState = self.ui.leftBreastButton.blockSignals(True)
-      self.ui.leftBreastButton.setChecked(False)
-      self.ui.leftBreastButton.blockSignals(leftBreastBlockSignalState)
-    if toggled:
-      self.setLeftCameraView(self.RIGHT_BREAST_VIEW)
-      self.setRightCameraView(self.RIGHT_BREAST_VIEW)
-      self.setBottomCameraView(self.RIGHT_BREAST_VIEW)
-    else:
-      self.setLeftCameraView(self.DEFAULT_VIEW)
-      self.setRightCameraView(self.DEFAULT_VIEW)
-      self.setBottomCameraView(self.DEFAULT_VIEW)
-    # Enable autocenter
+  def onRightBreastButtonClicked(self):
+    logging.info(f"onRightButtonClicked()")
+    cameraNode1 = self.getCamera('View1')
+    cameraNode2 = self.getCamera('View2')
+    cameraNode3 = self.getCamera('View3')
+    # TODO: magic numbers
+    cameraNode1.SetPosition(275.4944476449362, 309.31555951664205, 42.169967768629164)
+    cameraNode1.SetViewUp(-0.749449157051234, 0.661802245162601, -0.018540477149624528)
+    cameraNode1.SetFocalPoint(0.0, 0.0, 0.0)
+    cameraNode1.SetViewAngle(25.0)
+    cameraNode1.ResetClippingRange()
+    cameraNode2.SetPosition(0.0, 500.0, 0.0)
+    cameraNode2.SetViewUp(-1.0, 0.0, 0.0)
+    cameraNode2.SetFocalPoint(0.0, 0.0, 0.0)
+    cameraNode2.SetViewAngle(25.0)
+    cameraNode2.ResetClippingRange()
+    cameraNode3.SetPosition(0.0, 0.0, -500.0)
+    cameraNode3.SetViewUp(0.0, 0.0, 0.0)
+    cameraNode3.SetFocalPoint(0.0, 0.0, 0.0)
+    cameraNode3.SetViewAngle(20.0)
+    cameraNode3.ResetClippingRange()
+    # Enable auto-center
     for i in range(slicer.app.layoutManager().threeDViewCount):
       viewNode = slicer.app.layoutManager().threeDWidget(i).mrmlViewNode()
-      self.enableAutoCenterInViewNode(viewNode)
+      if not self.logic.viewpointLogic.getViewpointForViewNode(viewNode).isCurrentModeAutoCenter():
+        self.enableAutoCenterInViewNode(viewNode)
     self.updateGUIButtons()
-
-  def getCurrentCameraView(self):
-    if not self.ui.leftBreastButton.checked and not self.ui.rightBreastButton.checked:
-      currentView = self.DEFAULT_VIEW
-    elif self.ui.leftBreastButton.checked:
-      currentView = self.LEFT_BREAST_VIEW
-    else:
-      currentView = self.RIGHT_BREAST_VIEW
-    return currentView
-
-  def setLeftCameraView(self, currentView):
-    cameraNode = self.getCamera('View1')
-    if currentView == self.LEFT_BREAST_VIEW:
-      cameraNode.SetPosition(-242.0042709749552, 331.2026122150233, -36.6617924419265)
-      cameraNode.SetViewUp(0.802637869051714, 0.5959392355990031, -0.025077452777348814)
-      cameraNode.SetFocalPoint(0.0, 0.0, 0.0)
-      cameraNode.SetViewAngle(25.0)
-      cameraNode.ResetClippingRange()
-    elif currentView == self.RIGHT_BREAST_VIEW:
-      cameraNode.SetPosition(275.4944476449362, 309.31555951664205, 42.169967768629164)
-      cameraNode.SetViewUp(-0.749449157051234, 0.661802245162601, -0.018540477149624528)
-      cameraNode.SetFocalPoint(0.0, 0.0, 0.0)
-      cameraNode.SetViewAngle(25.0)
-      cameraNode.ResetClippingRange()
-    else:
-      cameraNode.SetFocalPoint(0.0, 0.0, 0.0)
-      cameraNode.RotateTo(cameraNode.Anterior)
-
-  def setRightCameraView(self, currentView):
-    cameraNode = self.getCamera('View2')
-    if currentView == self.LEFT_BREAST_VIEW:
-      cameraNode.SetPosition(0.0, 500.0, 0.0)
-      cameraNode.SetViewUp(1.0, 0.0, 0.0)
-      cameraNode.SetFocalPoint(0.0, 0.0, 0.0)
-      cameraNode.SetViewAngle(25.0)
-      cameraNode.ResetClippingRange()
-    elif currentView == self.RIGHT_BREAST_VIEW:
-      cameraNode.SetPosition(0.0, 500.0, 0.0)
-      cameraNode.SetViewUp(-1.0, 0.0, 0.0)
-      cameraNode.SetFocalPoint(0.0, 0.0, 0.0)
-      cameraNode.SetViewAngle(25.0)
-      cameraNode.ResetClippingRange()
-    else:
-      cameraNode.SetFocalPoint(0.0, 0.0, 0.0)
-      cameraNode.RotateTo(cameraNode.Anterior)
-
-  def setBottomCameraView(self, currentView):
-    cameraNode = self.getCamera("View3")
-    if currentView == self.DEFAULT_VIEW:
-      cameraNode.SetFocalPoint(0.0, 0.0, 0.0)
-      cameraNode.RotateTo(cameraNode.Anterior)
-    else:
-      cameraNode.SetPosition(0.0, 0.0, -500.0)
-      cameraNode.SetViewUp(0.0, 0.0, 0.0)
-      cameraNode.SetFocalPoint(0.0, 0.0, 0.0)
-      cameraNode.SetViewAngle(20.0)
-      cameraNode.ResetClippingRange()
 
   def onLeftCauteryCameraButtonClicked(self, toggled):
     logging.info("onLeftFollowCameraButtonClicked")
     self.onCauteryCameraButtonClicked("View1")
-    if not self.ui.leftCauteryCameraButton.checked:
-      self.setLeftCameraView(self.getCurrentCameraView())
 
   def onRightCauteryCameraButtonClicked(self, toggled):
     logging.info("onRightFollowCameraButtonClicked")
     self.onCauteryCameraButtonClicked("View2")
-    if not self.ui.rightCauteryCameraButton.checked:
-      self.setRightCameraView(self.getCurrentCameraView())
 
   def onBottomCauteryCameraButtonClicked(self, toggled):
     logging.info("onBottomFollowCameraButtonClicked")
     self.onCauteryCameraButtonClicked("View3")
-    if not self.ui.bottomCauteryCameraButton.checked:
-      self.setBottomCameraView(self.getCurrentCameraView())
 
   def onCauteryCameraButtonClicked(self, viewName):
     viewNode = self.getViewNode(viewName)
     if self.logic.viewpointLogic.getViewpointForViewNode(viewNode).isCurrentModeBullseye():
       self.disableBullseyeInViewNode(viewNode)
+      self.enableAutoCenterInViewNode(viewNode)
     else:
       self.enableBullseyeInViewNode(viewNode)
     self.updateGUIButtons()
@@ -931,7 +882,6 @@ class LumpNav2Widget(ScriptedLoadableModuleWidget, VTKObservationMixin):
       self.logic.viewpointLogic.getViewpointForViewNode(viewNode).bullseyeStop()
 
   def enableBullseyeInViewNode(self, viewNode):
-    logging.debug("enableBullseyeInViewNode")
     self.disableViewpointInViewNode(viewNode)
     cauteryCameraToCautery = self._parameterNode.GetNodeReference(self.logic.CAUTERYCAMERA_TO_CAUTERY)
     self.logic.viewpointLogic.getViewpointForViewNode(viewNode).setViewNode(viewNode)
@@ -941,20 +891,14 @@ class LumpNav2Widget(ScriptedLoadableModuleWidget, VTKObservationMixin):
   def onLeftAutoCenterCameraButtonClicked(self, toggled):
     logging.info("onLeftAutoCenterButtonClicked")
     self.onAutoCenterButtonClicked('View1')
-    if not self.ui.leftCauteryCameraButton.checked:
-      self.setLeftCameraView(self.getCurrentCameraView())
 
   def onRightAutoCenterCameraButtonClicked(self, toggled):
     logging.info("onRightAutoCenterCameraButtonClicked")
     self.onAutoCenterButtonClicked('View2')
-    if not self.ui.rightCauteryCameraButton.checked:
-      self.setRightCameraView(self.getCurrentCameraView())
 
   def onBottomAutoCenterCameraButtonClicked(self, toggled):
     logging.info("onBottomAutoCenterCameraButtonClicked")
     self.onAutoCenterButtonClicked('View3')
-    if not self.ui.bottomCauteryCameraButton.checked:
-      self.setBottomCameraView(self.getCurrentCameraView())
 
   def onAutoCenterButtonClicked(self, viewName):
     viewNode = self.getViewNode(viewName)
