@@ -242,10 +242,6 @@ class LumpNav2Widget(ScriptedLoadableModuleWidget, VTKObservationMixin):
     self.eventFilter = LumpNavEventFilter(self)
     slicer.util.mainWindow().installEventFilter(self.eventFilter)
 
-    # Check settings and set default values if settings not found
-    cauteryCalibrationThresholdMm = slicer.util.settingsValue(self.CAUTERY_CALIBRATION_THRESHOLD_SETTING, str(self.CAUTERY_CALIBRATION_THRESHOLD_DEFAULT))
-    needleCalibrationThresholdMm = slicer.util.settingsValue(self.NEEDLE_CALIBRATION_THRESHOLD_SETTING, str(self.NEEDLE_CALIBRATION_THRESHOLD_DEFAULT))
-
     # Set state of custom UI button
     self.setCustomStyle(not self.getSlicerInterfaceVisible())
 
@@ -341,6 +337,12 @@ class LumpNav2Widget(ScriptedLoadableModuleWidget, VTKObservationMixin):
     configFilepath = slicer.util.settingsValue(self.logic.CONFIG_FILE_SETTING, self.logic.resourcePath(self.logic.CONFIG_FILE_DEFAULT))
     self.ui.plusConfigFileSelector.currentPath = configFilepath
     self.ui.plusConfigFileSelector.connect('currentPathChanged(const QString)', self.onPlusConfigFileChanged)
+    needleLengthOffset = slicer.util.settingsValue(
+      self.logic.NEEDLE_LENGTH_OFFSET_SETTING, self.logic.NEEDLE_LENGTH_OFFSET_DEFAULT, converter=lambda x: float(x)
+    )
+    if needleLengthOffset:
+      self.ui.needleLengthOffsetSpinBox.value = needleLengthOffset
+    self.ui.needleLengthOffsetSpinBox.connect('valueChanged(double)', self.onNeedleLengthOffsetChanged)
 
     # Add custom layouts
     self.logic.addCustomLayouts()
@@ -453,6 +455,12 @@ class LumpNav2Widget(ScriptedLoadableModuleWidget, VTKObservationMixin):
   def onNeedlePlusFiveClicked(self):
     logging.info("onNeedlePlusFiveClicked")
     self.logic.changeNeedleLength(5)
+    self.updateGUIFromParameterNode()
+
+  def onNeedleLengthOffsetChanged(self, value):
+    logging.info(f"onNeedleLengthOffsetChanged({value})")
+    settings = qt.QSettings()
+    settings.setValue(self.logic.NEEDLE_LENGTH_OFFSET_SETTING, value)
     self.updateGUIFromParameterNode()
 
   def onExitButtonClicked(self):
@@ -1191,9 +1199,12 @@ class LumpNav2Widget(ScriptedLoadableModuleWidget, VTKObservationMixin):
 
     needleTipToNeedle = self._parameterNode.GetNodeReference(self.logic.NEEDLETIP_TO_NEEDLE)
     if needleTipToNeedle:
+      needleLengthOffset = slicer.util.settingsValue(
+        self.logic.NEEDLE_LENGTH_OFFSET_SETTING, self.logic.NEEDLE_LENGTH_OFFSET_DEFAULT, converter=lambda x: float(x)
+      )
       needleTipToNeedleMatrix = needleTipToNeedle.GetMatrixTransformToParent()
       needleTipToNeedleLength = needleTipToNeedleMatrix.GetElement(2, 3)
-      needleLength = needleTipToNeedleLength - self.logic.NEEDLE_CLIP_LENGTH_MM
+      needleLength = needleTipToNeedleLength - needleLengthOffset
       self.ui.needleLengthLabel.text = f"Needle length: {needleLength:.0f}mm"
 
     plusServerLauncherNode = self._parameterNode.GetNodeReference(self.logic.PLUS_SERVER_LAUNCHER_NODE)
@@ -1317,7 +1328,8 @@ class LumpNav2Logic(ScriptedLoadableModuleLogic, VTKObservationMixin):
   NEEDLE_MODEL = "NeedleModel"
   NEEDLE_VISIBILITY_SETTING = "LumpNav2/NeedleVisible"
   NEEDLETIP_TO_NEEDLE_SETTING = "NeedleTipToNeedleSetting"
-  NEEDLE_CLIP_LENGTH_MM = 17
+  NEEDLE_LENGTH_OFFSET_SETTING = "LumpNav2/NeedleLengthOffset"
+  NEEDLE_LENGTH_OFFSET_DEFAULT = 17
   CAUTERY_MODEL = "CauteryModel"
   CAUTERY_VISIBILITY_SETTING = "LumpNav2/CauteryVisible"
   CAUTERY_MODEL_FILENAME = "CauteryModel.stl"
@@ -2131,8 +2143,17 @@ class LumpNav2Logic(ScriptedLoadableModuleLogic, VTKObservationMixin):
     cauteryTipToCautery = parameterNode.GetNodeReference(self.CAUTERYTIP_TO_CAUTERY)
     cauteryTipToCautery.GetMatrixTransformToNode(needleToReference, cauteryTipToNeedle)
     tumorMarkups_Needle = parameterNode.GetNodeReference(self.TUMOR_MARKUPS_NEEDLE)
-    tumorMarkups_Needle.AddControlPoint(cauteryTipToNeedle.GetElement(0,3), cauteryTipToNeedle.GetElement(1,3), cauteryTipToNeedle.GetElement(2,3))
-    logging.info("Tumor point placed at cautery tip, (%s, %s, %s)", cauteryTipToNeedle.GetElement(0,3), cauteryTipToNeedle.GetElement(1,3), cauteryTipToNeedle.GetElement(2,3))
+    tumorMarkups_Needle.AddControlPoint(
+      cauteryTipToNeedle.GetElement(0, 3),
+      cauteryTipToNeedle.GetElement(1, 3),
+      cauteryTipToNeedle.GetElement(2, 3)
+    )
+    logging.info(
+      "Tumor point placed at cautery tip, (%s, %s, %s)",
+      cauteryTipToNeedle.GetElement(0, 3),
+      cauteryTipToNeedle.GetElement(1, 3),
+      cauteryTipToNeedle.GetElement(2, 3)
+    )
 
   def setFreezeUltrasoundClicked(self, toggled):
     parameterNode = self.getParameterNode()

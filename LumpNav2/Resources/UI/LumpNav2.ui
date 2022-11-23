@@ -789,6 +789,20 @@
         </item>
        </layout>
       </item>
+      <item>
+       <layout class="QHBoxLayout" name="horizontalLayout_19">
+        <item>
+         <widget class="QLabel" name="needleLengthOffsetLabel">
+          <property name="text">
+           <string>Needle length offset:</string>
+          </property>
+         </widget>
+        </item>
+        <item>
+         <widget class="QDoubleSpinBox" name="needleLengthOffsetSpinBox"/>
+        </item>
+       </layout>
+      </item>
      </layout>
     </widget>
    </item>
