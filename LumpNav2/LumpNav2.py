@@ -1795,7 +1795,7 @@ class LumpNav2Logic(ScriptedLoadableModuleLogic, VTKObservationMixin):
                      "{}".format(cauteryCameraToCauteryFileWithPath))
         cauteryCameraToCautery = slicer.mrmlScene.AddNewNodeByClass("vtkMRMLLinearTransformNode", self.CAUTERYCAMERA_TO_CAUTERY)
         m = self.createMatrixFromString('1 0 0 0 '
-                                        '0 -1 0 -5 '
+                                        '0 1 0 5 '
                                         '0 0 -1 -40 '
                                         '0 0 0 1')
         cauteryCameraToCautery.SetMatrixTransformToParent(m)
