@@ -2430,6 +2430,10 @@ class LumpNav2Logic(ScriptedLoadableModuleLogic, VTKObservationMixin):
       centerOfMassFilter.SetUseScalarsAsWeights(False)
       centerOfMassFilter.Update()
       center = centerOfMassFilter.GetCenter()
+      needleToReference = parameterNode.GetNodeReference(self.NEEDLE_TO_REFERENCE)
+      needleToRASMatrix = vtk.vtkMatrix4x4()
+      needleToReference.GetMatrixTransformToWorld(needleToRASMatrix)
+      centerWorld = needleToRASMatrix.MultiplyFloatPoint(np.append(center, 1))
 
       # Calculate how far from center to put markups
       bounds = [0, 0, 0, 0, 0, 0]
@@ -2439,9 +2443,6 @@ class LumpNav2Logic(ScriptedLoadableModuleLogic, VTKObservationMixin):
 
       # Update RAS markup points
       RASMarkups = parameterNode.GetNodeReference(self.RAS_MARKUPS)
-      RASMarkups.RemoveAllMarkups()
-      RASMarkups.AddControlPoint(center, "")
-      centerWorld = RASMarkups.GetNthControlPointPositionWorld(0)
       RASMarkups.RemoveAllMarkups()
       RASMarkups.AddControlPointWorld(centerWorld[0] + distanceFromCenter, centerWorld[1], centerWorld[2], "R")
       RASMarkups.AddControlPointWorld(centerWorld[0], centerWorld[1] + distanceFromCenter, centerWorld[2], "A")
