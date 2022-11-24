@@ -262,6 +262,8 @@ class LumpNav2Widget(ScriptedLoadableModuleWidget, VTKObservationMixin):
     self.ui.needleMinusOneButton.connect('clicked()', self.onNeedleMinusOneClicked)
     self.ui.needlePlusOneButton.connect('clicked()', self.onNeedlePlusOneClicked)
     self.ui.needlePlusFiveButton.connect('clicked()', self.onNeedlePlusFiveClicked)
+    needleLength = self.logic.getNeedleLength()
+    self.ui.needleLengthLabel.text = f"Needle length: {needleLength:.0f}mm"
 
     # contouring
     self.ui.normalBrightnessButton.connect('toggled(bool)', self.onNormalBrightnessClicked)
@@ -276,7 +278,6 @@ class LumpNav2Widget(ScriptedLoadableModuleWidget, VTKObservationMixin):
     self.ui.freezeUltrasoundButton.connect('toggled(bool)', self.onFreezeUltrasoundClicked)
     self.ui.segmentationVisibility.connect('toggled(bool)', self.onSegmentationVisibilityToggled)
     self.pivotSamplingTimer.connect('timeout()', self.onPivotSamplingTimeout)
-    self.ui.segmentationThresholdSlider.connect("valueChanged(int)", self.onSegmentationThresholdChanged)
 
     # navigation
     self.ui.leftBreastButton.connect('clicked()', self.onLeftBreastButtonClicked)
@@ -337,6 +338,7 @@ class LumpNav2Widget(ScriptedLoadableModuleWidget, VTKObservationMixin):
     configFilepath = slicer.util.settingsValue(self.logic.CONFIG_FILE_SETTING, self.logic.resourcePath(self.logic.CONFIG_FILE_DEFAULT))
     self.ui.plusConfigFileSelector.currentPath = configFilepath
     self.ui.plusConfigFileSelector.connect('currentPathChanged(const QString)', self.onPlusConfigFileChanged)
+    self.ui.segmentationThresholdSlider.connect("valueChanged(int)", self.onSegmentationThresholdChanged)
     needleLengthOffset = slicer.util.settingsValue(
       self.logic.NEEDLE_LENGTH_OFFSET_SETTING, self.logic.NEEDLE_LENGTH_OFFSET_DEFAULT, converter=lambda x: float(x)
     )
@@ -439,29 +441,33 @@ class LumpNav2Widget(ScriptedLoadableModuleWidget, VTKObservationMixin):
 
   def onNeedleMinusFiveClicked(self):
     logging.info("onNeedleMinusFiveClicked")
-    self.logic.changeNeedleLength(-5)
-    self.updateGUIFromParameterNode()
+    self.onChangeNeedleLength(-5)
 
   def onNeedleMinusOneClicked(self):
     logging.info("onNeedleMinusOneClicked")
-    self.logic.changeNeedleLength(-1)
-    self.updateGUIFromParameterNode()
+    self.onChangeNeedleLength(-1)
 
   def onNeedlePlusOneClicked(self):
     logging.info("onNeedlePlusOneClicked")
-    self.logic.changeNeedleLength(1)
-    self.updateGUIFromParameterNode()
+    self.onChangeNeedleLength(1)
 
   def onNeedlePlusFiveClicked(self):
     logging.info("onNeedlePlusFiveClicked")
-    self.logic.changeNeedleLength(5)
-    self.updateGUIFromParameterNode()
+    self.onChangeNeedleLength(5)
+
+  def onChangeNeedleLength(self, diff):
+    needleLength = self.logic.getNeedleLength() + diff
+    self.logic.changeNeedleLength(diff)
+    self.logic.setNeedleModel(needleLength)
+    self.ui.needleLengthLabel.text = f"Needle length: {needleLength:.0f}mm"
 
   def onNeedleLengthOffsetChanged(self, value):
     logging.info(f"onNeedleLengthOffsetChanged({value})")
     settings = qt.QSettings()
     settings.setValue(self.logic.NEEDLE_LENGTH_OFFSET_SETTING, value)
-    self.updateGUIFromParameterNode()
+    needleLength = self.logic.getNeedleLength()
+    self.logic.setNeedleModel(needleLength)
+    self.ui.needleLengthLabel.text = f"Needle length: {needleLength:.0f}mm"
 
   def onExitButtonClicked(self):
     mainwindow = slicer.util.mainWindow()
@@ -1197,16 +1203,6 @@ class LumpNav2Widget(ScriptedLoadableModuleWidget, VTKObservationMixin):
       self.ui.selectPointsToEraseButton.setChecked(False)
       self.ui.selectPointsToEraseButton.setEnabled(False)
 
-    needleTipToNeedle = self._parameterNode.GetNodeReference(self.logic.NEEDLETIP_TO_NEEDLE)
-    if needleTipToNeedle:
-      needleLengthOffset = slicer.util.settingsValue(
-        self.logic.NEEDLE_LENGTH_OFFSET_SETTING, self.logic.NEEDLE_LENGTH_OFFSET_DEFAULT, converter=lambda x: float(x)
-      )
-      needleTipToNeedleMatrix = needleTipToNeedle.GetMatrixTransformToParent()
-      needleTipToNeedleLength = needleTipToNeedleMatrix.GetElement(2, 3)
-      needleLength = needleTipToNeedleLength - needleLengthOffset
-      self.ui.needleLengthLabel.text = f"Needle length: {needleLength:.0f}mm"
-
     plusServerLauncherNode = self._parameterNode.GetNodeReference(self.logic.PLUS_SERVER_LAUNCHER_NODE)
     if plusServerLauncherNode is not None:
       hostname = plusServerLauncherNode.GetHostname()
@@ -1481,7 +1477,19 @@ class LumpNav2Logic(ScriptedLoadableModuleLogic, VTKObservationMixin):
     if not layoutManager.layoutLogic().GetLayoutNode().SetLayoutDescription(self.LAYOUT_DUAL3D, layoutDual3D):
       layoutManager.layoutLogic().GetLayoutNode().AddLayoutDescription(self.LAYOUT_DUAL3D, layoutDual3D)
 
-  def changeNeedleLength(self, needleLength):
+  def getNeedleLength(self):
+    parameterNode = self.getParameterNode()
+    needleTipToNeedle = parameterNode.GetNodeReference(self.NEEDLETIP_TO_NEEDLE)
+    if needleTipToNeedle:
+      needleLengthOffset = slicer.util.settingsValue(
+        self.NEEDLE_LENGTH_OFFSET_SETTING, self.NEEDLE_LENGTH_OFFSET_DEFAULT, converter=lambda x: float(x)
+      )
+      needleTipToNeedleMatrix = needleTipToNeedle.GetMatrixTransformToParent()
+      needleTipToNeedleLength = needleTipToNeedleMatrix.GetElement(2, 3)
+      needleLength = needleTipToNeedleLength - needleLengthOffset
+      return needleLength
+
+  def changeNeedleLength(self, diff):
     parameterNode = self.getParameterNode()
     needleTipToNeedle = parameterNode.GetNodeReference(self.NEEDLETIP_TO_NEEDLE)
     # Get current NeedleTipToNeedle transform matrix
@@ -1489,13 +1497,32 @@ class LumpNav2Logic(ScriptedLoadableModuleLogic, VTKObservationMixin):
     needleTipToNeedle.GetMatrixTransformToParent(needleTipToNeedleMatrix)
     # Create translation matrix
     translationMatrix = vtk.vtkTransform()
-    translationMatrix.Translate(0, 0, needleLength)
+    translationMatrix.Translate(0, 0, diff)
     # Compute translated NeedleTipToNeedle matrix
     newNeedleTipToNeedleMatrix = vtk.vtkTransform()
     newNeedleTipToNeedleMatrix.Concatenate(needleTipToNeedleMatrix)
     newNeedleTipToNeedleMatrix.Concatenate(translationMatrix)
     newNeedleTipToNeedleMatrix.Update()
     needleTipToNeedle.SetAndObserveTransformToParent(newNeedleTipToNeedleMatrix)
+
+  def setNeedleModel(self, needleLength):
+    parameterNode = self.getParameterNode()
+    # Remove old needle model
+    oldNeedleModel = parameterNode.GetNodeReference(self.NEEDLE_MODEL)
+    slicer.mrmlScene.RemoveNode(oldNeedleModel)
+    # Create new needle model
+    createModelsLogic = slicer.modules.createmodels.logic()
+    needleModel = createModelsLogic.CreateNeedle(needleLength, 1.0, 2.0, 0)
+    needleModel.GetDisplayNode().SetColor(0.33, 1.0, 1.0)
+    needleModel.SetName(self.NEEDLE_MODEL)
+    needleModel.GetDisplayNode().SliceIntersectionVisibilityOn()
+    parameterNode.SetNodeReferenceID(self.NEEDLE_MODEL, needleModel.GetID())
+    # Place in NeedleTipToNeedle coordinate system
+    needleTipToNeedle = parameterNode.GetNodeReference(self.NEEDLETIP_TO_NEEDLE)
+    needleModel.SetAndObserveTransformNodeID(needleTipToNeedle.GetID())
+    # Set needle visibility
+    needleVisible = slicer.util.settingsValue(self.NEEDLE_VISIBILITY_SETTING, True, converter=slicer.util.toBool)
+    needleModel.SetDisplayVisibility(needleVisible)
 
   def setNeedleVisibility(self, visible):
     """
@@ -1569,26 +1596,9 @@ class LumpNav2Logic(ScriptedLoadableModuleLogic, VTKObservationMixin):
 
     self.viewpointLogic = Viewpoint.ViewpointLogic()
 
-    # Create models
-    createModelsLogic = slicer.modules.createmodels.logic()
-
-    # Needle model
-    needleModel = parameterNode.GetNodeReference(self.NEEDLE_MODEL)
-    if needleModel is None:
-      needleModel = createModelsLogic.CreateNeedle(60.0, 1.0, 2.0, 0)
-      needleModel.GetDisplayNode().SetColor(0.33, 1.0, 1.0)
-      needleModel.SetName(self.NEEDLE_MODEL)
-      needleModel.GetDisplayNode().SliceIntersectionVisibilityOn()
-      parameterNode.SetNodeReferenceID(self.NEEDLE_MODEL, needleModel.GetID())
-
-    needleVisible = slicer.util.settingsValue(self.NEEDLE_VISIBILITY_SETTING, True, converter=slicer.util.toBool)
-    needleModel.SetDisplayVisibility(needleVisible)
-
-    needleTipToNeedle = parameterNode.GetNodeReference(self.NEEDLETIP_TO_NEEDLE)
-    needleModel.SetAndObserveTransformNodeID(needleTipToNeedle.GetID())
-
     settings = qt.QSettings()
     needleTipToNeedle_settings = slicer.util.settingsValue(self.NEEDLETIP_TO_NEEDLE_SETTING, "")
+    needleTipToNeedle = parameterNode.GetNodeReference(self.NEEDLETIP_TO_NEEDLE)
     if needleTipToNeedle_settings == "":
       needleTipToNeedle_settings = slicer.util.arrayFromTransformMatrix(needleTipToNeedle)
       needleTipToNeedle_settings = needleTipToNeedle_settings.tolist()
@@ -1600,6 +1610,23 @@ class LumpNav2Logic(ScriptedLoadableModuleLogic, VTKObservationMixin):
       needleTipToNeedle_settings = slicer.util.vtkMatrixFromArray(needleTipToNeedle_settings)
       needleTipToNeedle.SetMatrixTransformToParent(needleTipToNeedle_settings)
     self.addObserver(needleTipToNeedle, slicer.vtkMRMLLinearTransformNode.TransformModifiedEvent, self.onNeedleTipToNeedleModified)
+
+    # Create models
+    createModelsLogic = slicer.modules.createmodels.logic()
+
+    # Needle model
+    needleLength = self.getNeedleLength()
+    needleModel = parameterNode.GetNodeReference(self.NEEDLE_MODEL)
+    if needleModel is None:
+      needleModel = createModelsLogic.CreateNeedle(needleLength, 1.0, 2.0, 0)
+      needleModel.GetDisplayNode().SetColor(0.33, 1.0, 1.0)
+      needleModel.SetName(self.NEEDLE_MODEL)
+      needleModel.GetDisplayNode().SliceIntersectionVisibilityOn()
+      parameterNode.SetNodeReferenceID(self.NEEDLE_MODEL, needleModel.GetID())
+    needleModel.SetAndObserveTransformNodeID(needleTipToNeedle.GetID())
+
+    needleVisible = slicer.util.settingsValue(self.NEEDLE_VISIBILITY_SETTING, True, converter=slicer.util.toBool)
+    needleModel.SetDisplayVisibility(needleVisible)
 
     # Cautery model
     cauteryModel = parameterNode.GetNodeReference(self.CAUTERY_MODEL)
