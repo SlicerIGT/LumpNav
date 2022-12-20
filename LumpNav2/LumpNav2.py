@@ -362,7 +362,9 @@ class LumpNav2Widget(ScriptedLoadableModuleWidget, VTKObservationMixin):
       if lastPivotCalibration is None:
         lastPivotCalibration = slicer.mrmlScene.AddNewNodeByClass("vtkMRMLLinearTransformNode", self.LAST_PIVOT_CALIBRATION_RESULT)
         self._parameterNode.SetNodeReferenceID(self.LAST_PIVOT_CALIBRATION_RESULT, lastPivotCalibration.GetID())
-      lastPivotCalibration.SetMatrixTransformToParent(self.pivotCalibrationResultNode.GetMatrixTransformToParent())
+      pivotCalibrationResultMatrix = vtk.vtkMatrix4x4()
+      self.pivotCalibrationResultNode.GetMatrixTransformToParent(pivotCalibrationResultMatrix)
+      lastPivotCalibration.SetMatrixTransformToParent(pivotCalibrationResultMatrix)
     self.startPivotCalibration(cauteryToNeedle, cauteryTipToCautery)
 
   def startPivotCalibration(self, toolToReferenceTransformNode, toolTipToToolTransformNode):
@@ -433,7 +435,9 @@ class LumpNav2Widget(ScriptedLoadableModuleWidget, VTKObservationMixin):
 
     # Replace current calibration with previous one and save
     lastPivotCalibration = self._parameterNode.GetNodeReference(self.LAST_PIVOT_CALIBRATION_RESULT)
-    self.pivotCalibrationResultNode.SetMatrixTransformToParent(lastPivotCalibration.GetMatrixTransformToParent())
+    lastPivotCalibrationMatrix = vtk.vtkMatrix4x4()
+    lastPivotCalibration.GetMatrixTransformToParent(lastPivotCalibrationMatrix)
+    self.pivotCalibrationResultNode.SetMatrixTransformToParent(lastPivotCalibrationMatrix)
     pivotCalibrationResultName = self.pivotCalibrationResultNode.GetName()
     pivotCalibrationFileWithPath = self.resourcePath(pivotCalibrationResultName + ".h5")
     slicer.util.saveNode(self.pivotCalibrationResultNode, pivotCalibrationFileWithPath)
@@ -456,18 +460,16 @@ class LumpNav2Widget(ScriptedLoadableModuleWidget, VTKObservationMixin):
     self.onChangeNeedleLength(5)
 
   def onChangeNeedleLength(self, diff):
-    needleLength = self.logic.getNeedleLength() + diff
-    self.logic.changeNeedleLength(diff)
-    self.logic.setNeedleModel(needleLength)
-    self.ui.needleLengthLabel.text = f"Needle length: {needleLength:.0f}mm"
+    currentOffset = slicer.util.settingsValue(
+      self.logic.NEEDLE_LENGTH_OFFSET_SETTING, self.logic.NEEDLE_LENGTH_OFFSET_DEFAULT, converter=lambda x: float(x)
+    )
+    self.ui.needleLengthOffsetSpinBox.setValue(currentOffset - diff)
 
   def onNeedleLengthOffsetChanged(self, value):
     logging.info(f"onNeedleLengthOffsetChanged({value})")
     settings = qt.QSettings()
     settings.setValue(self.logic.NEEDLE_LENGTH_OFFSET_SETTING, value)
-    needleLength = self.logic.getNeedleLength()
-    self.logic.setNeedleModel(needleLength)
-    self.ui.needleLengthLabel.text = f"Needle length: {needleLength:.0f}mm"
+    self.logic.setNeedleModel()
 
   def onExitButtonClicked(self):
     mainwindow = slicer.util.mainWindow()
@@ -1208,6 +1210,10 @@ class LumpNav2Widget(ScriptedLoadableModuleWidget, VTKObservationMixin):
       hostname = plusServerLauncherNode.GetHostname()
       self.ui.hostnameLineEdit.setText(hostname)
 
+    # Needle length text
+    needleLength = self.logic.getNeedleLength()
+    self.ui.needleLengthLabel.text = f"Needle length: {needleLength:.0f}mm"
+
     # All the GUI updates are done
     self._updatingGUIFromParameterNode = False
 
@@ -1484,38 +1490,24 @@ class LumpNav2Logic(ScriptedLoadableModuleLogic, VTKObservationMixin):
       needleLengthOffset = slicer.util.settingsValue(
         self.NEEDLE_LENGTH_OFFSET_SETTING, self.NEEDLE_LENGTH_OFFSET_DEFAULT, converter=lambda x: float(x)
       )
-      needleTipToNeedleMatrix = needleTipToNeedle.GetMatrixTransformToParent()
+      needleTipToNeedleMatrix = vtk.vtkMatrix4x4()
+      needleTipToNeedle.GetMatrixTransformToParent(needleTipToNeedleMatrix)
       needleTipToNeedleLength = needleTipToNeedleMatrix.GetElement(2, 3)
       needleLength = needleTipToNeedleLength - needleLengthOffset
       return needleLength
 
-  def changeNeedleLength(self, diff):
-    parameterNode = self.getParameterNode()
-    needleTipToNeedle = parameterNode.GetNodeReference(self.NEEDLETIP_TO_NEEDLE)
-    # Get current NeedleTipToNeedle transform matrix
-    needleTipToNeedleMatrix = vtk.vtkMatrix4x4()
-    needleTipToNeedle.GetMatrixTransformToParent(needleTipToNeedleMatrix)
-    # Create translation matrix
-    translationMatrix = vtk.vtkTransform()
-    translationMatrix.Translate(0, 0, diff)
-    # Compute translated NeedleTipToNeedle matrix
-    newNeedleTipToNeedleMatrix = vtk.vtkTransform()
-    newNeedleTipToNeedleMatrix.Concatenate(needleTipToNeedleMatrix)
-    newNeedleTipToNeedleMatrix.Concatenate(translationMatrix)
-    newNeedleTipToNeedleMatrix.Update()
-    needleTipToNeedle.SetAndObserveTransformToParent(newNeedleTipToNeedleMatrix)
-
-  def setNeedleModel(self, needleLength):
+  def setNeedleModel(self):
     parameterNode = self.getParameterNode()
     # Remove old needle model
     oldNeedleModel = parameterNode.GetNodeReference(self.NEEDLE_MODEL)
     slicer.mrmlScene.RemoveNode(oldNeedleModel)
     # Create new needle model
     createModelsLogic = slicer.modules.createmodels.logic()
+    needleLength = self.getNeedleLength()
     needleModel = createModelsLogic.CreateNeedle(needleLength, 1.0, 2.0, 0)
     needleModel.GetDisplayNode().SetColor(0.33, 1.0, 1.0)
     needleModel.SetName(self.NEEDLE_MODEL)
-    needleModel.GetDisplayNode().SliceIntersectionVisibilityOn()
+    needleModel.GetDisplayNode().Visibility2DOn()
     parameterNode.SetNodeReferenceID(self.NEEDLE_MODEL, needleModel.GetID())
     # Place in NeedleTipToNeedle coordinate system
     needleTipToNeedle = parameterNode.GetNodeReference(self.NEEDLETIP_TO_NEEDLE)
@@ -1621,7 +1613,7 @@ class LumpNav2Logic(ScriptedLoadableModuleLogic, VTKObservationMixin):
       needleModel = createModelsLogic.CreateNeedle(needleLength, 1.0, 2.0, 0)
       needleModel.GetDisplayNode().SetColor(0.33, 1.0, 1.0)
       needleModel.SetName(self.NEEDLE_MODEL)
-      needleModel.GetDisplayNode().SliceIntersectionVisibilityOn()
+      needleModel.GetDisplayNode().Visibility2DOn()
       parameterNode.SetNodeReferenceID(self.NEEDLE_MODEL, needleModel.GetID())
     needleModel.SetAndObserveTransformNodeID(needleTipToNeedle.GetID())
 
@@ -1666,7 +1658,7 @@ class LumpNav2Logic(ScriptedLoadableModuleLogic, VTKObservationMixin):
       modelDisplayNode = tumorModel_Needle.GetDisplayNode()
       modelDisplayNode.SetColor(0, 1, 0)  # Green
       modelDisplayNode.BackfaceCullingOff()
-      modelDisplayNode.SliceIntersectionVisibilityOn()
+      modelDisplayNode.Visibility2DOn()
       modelDisplayNode.SetSliceIntersectionThickness(4)
       modelDisplayNode.SetOpacity(0.3)  # Between 0-1, 1 being opaque
       parameterNode.SetNodeReferenceID(self.TUMOR_MODEL, tumorModel_Needle.GetID())
@@ -2523,6 +2515,8 @@ class LumpNav2Logic(ScriptedLoadableModuleLogic, VTKObservationMixin):
     needleTipToNeedle_settings = needleTipToNeedle_settings.tolist()
     needleTipToNeedle_settings = json.dumps(needleTipToNeedle_settings)
     settings.setValue(self.NEEDLETIP_TO_NEEDLE_SETTING, needleTipToNeedle_settings)
+    # Update needle model
+    self.setNeedleModel()
 
   def setDisplayCauteryStateClicked(self, pressed):
     parameterNode = self.getParameterNode()

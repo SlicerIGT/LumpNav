@@ -799,7 +799,11 @@
          </widget>
         </item>
         <item>
-         <widget class="QDoubleSpinBox" name="needleLengthOffsetSpinBox"/>
+         <widget class="QDoubleSpinBox" name="needleLengthOffsetSpinBox">
+          <property name="minimum">
+           <double>-99.989999999999995</double>
+          </property>
+         </widget>
         </item>
        </layout>
       </item>
