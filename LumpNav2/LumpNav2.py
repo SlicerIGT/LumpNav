@@ -307,6 +307,12 @@ class LumpNav2Widget(ScriptedLoadableModuleWidget, VTKObservationMixin):
     self.ui.deleteTumorBreachButton.connect('clicked()', self.onDeleteTumorBreachButtonClicked)
     self.ui.increaseBreachFiducialSize.connect('clicked()', self.onIncreaseBreachFiducialSize)
     self.ui.decreaseBreachFiducialSize.connect('clicked()', self.onDecreaseBreachFiducialSize)
+    # Event recording
+    self.ui.eventTable.setSelectionBehavior(qt.QAbstractItemView.SelectRows)
+    self.ui.eventTable.connect('cellChanged(int, int)', self.onEventTableChanged)
+    self.ui.eventTable.connect('itemSelectionChanged()', self.onEventSelectionChanged)
+    self.ui.addEventButton.connect('clicked()', self.onAddEventButtonClicked)
+    self.ui.deleteEventButton.connect('clicked()', self.onDeleteEventButtonClicked)
 
     # settings panel
     self.ui.customUiButton.connect('toggled(bool)', self.onCustomUiClicked)
@@ -993,6 +999,53 @@ class LumpNav2Widget(ScriptedLoadableModuleWidget, VTKObservationMixin):
     self.ui.bottomAutoCenterCameraButton.blockSignals(autoCenterBlockSignalState)
     self.ui.bottomCauteryCameraButton.blockSignals(bullseyeBlockSignalState)
 
+  def onEventTableChanged(self, row, column):
+    self.logic.updateEvent
+
+  def onEventSelectionChanged(self):
+    if self.ui.eventTable.selectionModel().isSelected(self.ui.eventTable.currentIndex()):
+      self.ui.deleteEventButton.setEnabled(True)
+    else:
+      self.ui.deleteEventButton.setEnabled(False)
+
+  def onAddEventButtonClicked(self):
+    logging.info("onAddEventButtonClicked")
+    self.logic.addEvent()
+    self.updateEventTable()
+
+  def onDeleteEventButtonClicked(self):
+    logging.info("onDeleteEventButtonClicked")
+    currentRow = self.ui.eventTable.currentRow()
+    self.logic.deleteEvent(currentRow)
+    self.updateEventTable()
+
+  def updateEventTable(self):
+    # Block signals and reset table
+    selectedRow = self.ui.eventTable.currentRow()
+    blockSignals = self.ui.eventTable.blockSignals(True)
+    self.ui.eventTable.clearContents()
+    self.ui.eventTable.setRowCount(0)
+
+    # Populate event table
+    eventTableNode = self._parameterNode.GetNodeReference(self.logic.EVENT_TABLE_NODE)
+    n_rows = eventTableNode.GetNumberOfRows()
+    for r in range(n_rows):
+      self.ui.eventTable.insertRow(r)
+      for c in range(self.logic.LAST_COLUMN):
+        item = qt.QTableWidgetItem()
+        item.setData(0, eventTableNode.GetCellText(r, c))
+        if c != self.logic.EVENT_DESCRIPTION_COLUMN:
+          item.setFlags(item.flags() and not qt.Qt.ItemIsEditable)
+        self.ui.eventTable.setItem(r, c, item)
+
+    # Reselect row and unblock signals
+    if selectedRow > n_rows - 1:
+      self.ui.eventTable.selectRow(n_rows - 1)
+    else:
+      self.ui.eventTable.selectRow(selectedRow)
+    self.onEventSelectionChanged()
+    self.ui.eventTable.blockSignals(blockSignals)
+
   def setCustomStyle(self, visible):
     """
     Applies UI customization. Hide Slicer widgets and apply custom stylesheet.
@@ -1368,6 +1421,11 @@ class LumpNav2Logic(ScriptedLoadableModuleLogic, VTKObservationMixin):
   TUMOR_MARKUPS_NEEDLE = "TumorMarkups_Needle"
   BREACH_WARNING = "LumpNavBreachWarning"
   BREACH_MARKUPS_NEEDLE = "BreachMarkups_Needle"
+  EVENT_TABLE_NODE = "EventTableNode"
+  TIME_COLUMN = 0
+  SEQUENCE_TIME_COLUMN = 1
+  EVENT_DESCRIPTION_COLUMN = 2
+  LAST_COLUMN = 3
 
   RAS_MARKUPS = "DirectionMarkups_RAS"
 
@@ -1793,6 +1851,15 @@ class LumpNav2Logic(ScriptedLoadableModuleLogic, VTKObservationMixin):
         cauteryCameraToCautery.SetMatrixTransformToParent(m)
       parameterNode.SetNodeReferenceID(self.CAUTERYCAMERA_TO_CAUTERY, cauteryCameraToCautery.GetID())
     cauteryCameraToCautery.SetAndObserveTransformNodeID(cauteryTipToCautery.GetID())
+
+    # Event recording
+    eventTableNode = parameterNode.GetNodeReference(self.EVENT_TABLE_NODE)
+    if eventTableNode is None:
+      eventTableNode = slicer.mrmlScene.AddNewNodeByClass("vtkMRMLTableNode", self.EVENT_TABLE_NODE)
+      for i in range(self.LAST_COLUMN):
+        eventTableNode.AddColumn()
+      eventTableNode.SetUseColumnNameAsColumnHeader(True)
+      parameterNode.SetNodeReferenceID(self.EVENT_TABLE_NODE, eventTableNode.GetID())
 
     # OpenIGTLink connection
     self.setupPlusServer()
@@ -2525,6 +2592,18 @@ class LumpNav2Logic(ScriptedLoadableModuleLogic, VTKObservationMixin):
     #cauteryClassificationLogic.init()
     cauteryClassificationLogic.setup()
     cauteryClassificationLogic.setUseModelClicked(pressed)
+
+  def addEvent(self):
+    parameterNode = self.getParameterNode()
+    eventTableNode = parameterNode.GetNodeReference(self.EVENT_TABLE_NODE)
+    lastRowIndex = eventTableNode.AddEmptyRow()
+    for i in range(self.LAST_COLUMN):
+      eventTableNode.SetCellText(lastRowIndex, i, "i am here")
+
+  def deleteEvent(self, row):
+    parameterNode = self.getParameterNode()
+    eventTableNode = parameterNode.GetNodeReference(self.EVENT_TABLE_NODE)
+    eventTableNode.RemoveRow(row)
 
   @staticmethod
   def calculateDistance(point1, point2):
