@@ -243,10 +243,10 @@
       <string>Navigation</string>
      </property>
      <property name="checked">
-      <bool>true</bool>
+      <bool>false</bool>
      </property>
      <property name="collapsed">
-      <bool>false</bool>
+      <bool>true</bool>
      </property>
      <layout class="QVBoxLayout" name="verticalLayout_4">
       <item>
@@ -589,7 +589,7 @@
            </column>
            <column>
             <property name="text">
-             <string>Sequence Time</string>
+             <string>Sequence Index</string>
             </property>
            </column>
            <column>
@@ -598,6 +598,20 @@
             </property>
            </column>
           </widget>
+         </item>
+         <item>
+          <layout class="QHBoxLayout" name="horizontalLayout_21">
+           <item>
+            <widget class="ctkDirectoryButton" name="eventTableExportDirectoryButton"/>
+           </item>
+           <item>
+            <widget class="QPushButton" name="eventTableExportButton">
+             <property name="text">
+              <string>Export to CSV</string>
+             </property>
+            </widget>
+           </item>
+          </layout>
          </item>
         </layout>
        </widget>

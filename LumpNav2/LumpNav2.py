@@ -1,4 +1,5 @@
 import os
+import datetime
 import time
 import json
 from packaging import version
@@ -313,6 +314,7 @@ class LumpNav2Widget(ScriptedLoadableModuleWidget, VTKObservationMixin):
     self.ui.eventTable.connect('itemSelectionChanged()', self.onEventSelectionChanged)
     self.ui.addEventButton.connect('clicked()', self.onAddEventButtonClicked)
     self.ui.deleteEventButton.connect('clicked()', self.onDeleteEventButtonClicked)
+    self.ui.eventTableExportButton.connect('clicked()', self.onEventTableExportClicked)
 
     # settings panel
     self.ui.customUiButton.connect('toggled(bool)', self.onCustomUiClicked)
@@ -1000,7 +1002,8 @@ class LumpNav2Widget(ScriptedLoadableModuleWidget, VTKObservationMixin):
     self.ui.bottomCauteryCameraButton.blockSignals(bullseyeBlockSignalState)
 
   def onEventTableChanged(self, row, column):
-    self.logic.updateEvent
+    newCellValue = self.ui.eventTable.item(row, column).text()
+    self.logic.updateEventTable(row, column, newCellValue)
 
   def onEventSelectionChanged(self):
     if self.ui.eventTable.selectionModel().isSelected(self.ui.eventTable.currentIndex()):
@@ -1035,7 +1038,7 @@ class LumpNav2Widget(ScriptedLoadableModuleWidget, VTKObservationMixin):
         item = qt.QTableWidgetItem()
         item.setData(0, eventTableNode.GetCellText(r, c))
         if c != self.logic.EVENT_DESCRIPTION_COLUMN:
-          item.setFlags(item.flags() and not qt.Qt.ItemIsEditable)
+          item.setFlags(item.flags() & ~qt.Qt.ItemIsEditable)
         self.ui.eventTable.setItem(r, c, item)
 
     # Reselect row and unblock signals
@@ -1045,6 +1048,17 @@ class LumpNav2Widget(ScriptedLoadableModuleWidget, VTKObservationMixin):
       self.ui.eventTable.selectRow(selectedRow)
     self.onEventSelectionChanged()
     self.ui.eventTable.blockSignals(blockSignals)
+
+  def onEventTableExportClicked(self):
+    eventTableNode = self._parameterNode.GetNodeReference(self.logic.EVENT_TABLE_NODE)
+    saveDirectory = self.ui.eventTableExportDirectoryButton.directory
+    savePath = saveDirectory + "/events.csv"
+    try:
+      slicer.util.saveNode(eventTableNode, savePath)
+      logging.info(f"Events csv saved to: {savePath}")
+      slicer.util.messageBox(f"Events csv saved to {savePath}.")
+    except Exception as e:
+      slicer.util.errorDisplay(f"Events could not be saved: {str(e)}")
 
   def setCustomStyle(self, visible):
     """
@@ -1858,6 +1872,9 @@ class LumpNav2Logic(ScriptedLoadableModuleLogic, VTKObservationMixin):
       eventTableNode = slicer.mrmlScene.AddNewNodeByClass("vtkMRMLTableNode", self.EVENT_TABLE_NODE)
       for i in range(self.LAST_COLUMN):
         eventTableNode.AddColumn()
+      eventTableNode.RenameColumn(self.TIME_COLUMN, "Time")
+      eventTableNode.RenameColumn(self.SEQUENCE_TIME_COLUMN, "Sequence Index")
+      eventTableNode.RenameColumn(self.EVENT_DESCRIPTION_COLUMN, "Description")
       eventTableNode.SetUseColumnNameAsColumnHeader(True)
       parameterNode.SetNodeReferenceID(self.EVENT_TABLE_NODE, eventTableNode.GetID())
 
@@ -2597,13 +2614,24 @@ class LumpNav2Logic(ScriptedLoadableModuleLogic, VTKObservationMixin):
     parameterNode = self.getParameterNode()
     eventTableNode = parameterNode.GetNodeReference(self.EVENT_TABLE_NODE)
     lastRowIndex = eventTableNode.AddEmptyRow()
-    for i in range(self.LAST_COLUMN):
-      eventTableNode.SetCellText(lastRowIndex, i, "i am here")
+    sequenceBrowserNode = parameterNode.GetNodeReference(self.TRACKING_SEQUENCE_BROWSER)
+    lastItem = sequenceBrowserNode.SelectLastItem()
+    if lastItem == -1:
+      sequenceIndex = ""
+    else:
+      sequenceIndex = sequenceBrowserNode.GetMasterSequenceNode().GetNthIndexValue(sequenceBrowserNode.SelectLastItem())
+    eventTableNode.SetCellText(lastRowIndex, self.TIME_COLUMN, datetime.datetime.now().strftime("%m/%d/%Y, %H:%M:%S"))
+    eventTableNode.SetCellText(lastRowIndex, self.SEQUENCE_TIME_COLUMN, sequenceIndex)
 
   def deleteEvent(self, row):
     parameterNode = self.getParameterNode()
     eventTableNode = parameterNode.GetNodeReference(self.EVENT_TABLE_NODE)
     eventTableNode.RemoveRow(row)
+
+  def updateEventTable(self, row, column, value):
+    parameterNode = self.getParameterNode()
+    eventTableNode = parameterNode.GetNodeReference(self.EVENT_TABLE_NODE)
+    eventTableNode.SetCellText(row, column, value)
 
   @staticmethod
   def calculateDistance(point1, point2):
