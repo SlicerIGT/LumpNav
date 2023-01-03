@@ -650,7 +650,7 @@ class LumpNav2Widget(ScriptedLoadableModuleWidget, VTKObservationMixin):
     logging.info("onDeleteTumorBreachButtonClicked")
     parameterNode = self._parameterNode
     breachMarkups_Needle = parameterNode.GetNodeReference(self.logic.BREACH_MARKUPS_NEEDLE)
-    breachMarkups_Needle.RemoveAllMarkups()
+    breachMarkups_Needle.RemoveAllControlPoints()
 
   def onDisplayRulerButtonClicked(self, toggled):
     logging.info(f"onDisplayRulerButtonClicked({toggled})")
@@ -2217,7 +2217,7 @@ class LumpNav2Logic(ScriptedLoadableModuleLogic, VTKObservationMixin):
     parameterNode = self.getParameterNode()
     tumorMarkups_Needle = parameterNode.GetNodeReference(self.TUMOR_MARKUPS_NEEDLE)
     tumorMarkups_Needle.GetNthControlPointPosition(numberOfPoints-1,deleted_coord)
-    tumorMarkups_Needle.RemoveMarkup(numberOfPoints-1)
+    tumorMarkups_Needle.RemoveNthControlPoint(numberOfPoints-1)
     logging.info("Deleted last fiducial at %s", deleted_coord)
     if numberOfPoints <= 1:
       sphereSource = vtk.vtkSphereSource()
@@ -2230,7 +2230,7 @@ class LumpNav2Logic(ScriptedLoadableModuleLogic, VTKObservationMixin):
   def setDeleteAllFiducialsClicked(self):
     parameterNode = self.getParameterNode()
     tumorMarkups_Needle = parameterNode.GetNodeReference(self.TUMOR_MARKUPS_NEEDLE)
-    tumorMarkups_Needle.RemoveAllMarkups()
+    tumorMarkups_Needle.RemoveAllControlPoints()
     logging.info("Deleted all fiducials")
 
     sphereSource = vtk.vtkSphereSource()
@@ -2477,8 +2477,8 @@ class LumpNav2Logic(ScriptedLoadableModuleLogic, VTKObservationMixin):
       mostRecentPoint = [0.0, 0.0, 0.0]
       tumorMarkups_Needle.GetNthControlPointPosition(numberOfPoints - 1, mostRecentPoint)
       closestPoint, closestPointPosition = self.returnClosestPoint(tumorMarkups_Needle, mostRecentPoint)
-      tumorMarkups_Needle.RemoveMarkup(closestPoint)
-      tumorMarkups_Needle.RemoveMarkup(tumorMarkups_Needle.GetNumberOfControlPoints() - 1)
+      tumorMarkups_Needle.RemoveNthControlPoint(closestPoint)
+      tumorMarkups_Needle.RemoveNthControlPoint(tumorMarkups_Needle.GetNumberOfControlPoints() - 1)
       logging.info("Used eraser to remove point at %s", closestPointPosition)
       self.createTumorFromMarkups()
 
@@ -2519,7 +2519,7 @@ class LumpNav2Logic(ScriptedLoadableModuleLogic, VTKObservationMixin):
 
       # Update RAS markup points
       RASMarkups = parameterNode.GetNodeReference(self.RAS_MARKUPS)
-      RASMarkups.RemoveAllMarkups()
+      RASMarkups.RemoveAllControlPoints()
       RASMarkups.AddControlPointWorld(centerWorld[0] + distanceFromCenter, centerWorld[1], centerWorld[2], "R")
       RASMarkups.AddControlPointWorld(centerWorld[0], centerWorld[1] + distanceFromCenter, centerWorld[2], "A")
       RASMarkups.AddControlPointWorld(centerWorld[0], centerWorld[1], centerWorld[2] + distanceFromCenter, "S")
