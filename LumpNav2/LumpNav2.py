@@ -1272,6 +1272,9 @@ class LumpNav2Widget(ScriptedLoadableModuleWidget, VTKObservationMixin):
       self.ui.selectPointsToEraseButton.setChecked(False)
       self.ui.selectPointsToEraseButton.setEnabled(False)
 
+    # Update event UI when event table is changed by tumor breach
+    self.updateEventTable()
+
     plusServerLauncherNode = self._parameterNode.GetNodeReference(self.logic.PLUS_SERVER_LAUNCHER_NODE)
     if plusServerLauncherNode is not None:
       hostname = plusServerLauncherNode.GetHostname()
@@ -1406,6 +1409,7 @@ class LumpNav2Logic(ScriptedLoadableModuleLogic, VTKObservationMixin):
   TUMOR_MODEL = "TumorModel"
   STICK_MODEL = "StickModel"
   WARNING_SOUND_SETTING = "LumpNav2/WarningSoundEnabled"
+  BREACH_STATUS = "LumpNav2/BreachStatus"
   BREACH_MARKUPS_DISPLAY_SETTING = "LumpNav2/BreachMarkupsDisplaySetting"
   BREACH_MARKUPS_PROXIMITY_THRESHOLD = "LumpNav2/BreachMarkupsProximitySetting"
   BREACH_MARKUPS_SIZE_SETTING = "LumpNav2/BreachMarkupsSize"
@@ -1847,6 +1851,7 @@ class LumpNav2Logic(ScriptedLoadableModuleLogic, VTKObservationMixin):
       breachMarkups_Needle.SetDisplayVisibility(breachMarkupsDisplay)
       parameterNode.SetNodeReferenceID(self.BREACH_MARKUPS_NEEDLE, breachMarkups_Needle.GetID())
     breachMarkups_Needle.SetAndObserveTransformNodeID(needleToReference.GetID())
+    parameterNode.SetParameter(self.BREACH_STATUS, "False")
 
     cauteryCameraToCautery = parameterNode.GetNodeReference(self.CAUTERYCAMERA_TO_CAUTERY)
     if cauteryCameraToCautery is None:
@@ -2539,6 +2544,11 @@ class LumpNav2Logic(ScriptedLoadableModuleLogic, VTKObservationMixin):
         textProperty.SetColor(1, 0, 0)
         view.forceRender()
 
+      # Add breach event to event table
+      if parameterNode.GetParameter(self.BREACH_STATUS) == "False":
+        self.addEvent(description="Tumor margin breach")
+        parameterNode.SetParameter(self.BREACH_STATUS, "True")
+
       # Get coordinate of cautery tip in needle coordinate system
       needleToReference = parameterNode.GetNodeReference(self.NEEDLE_TO_REFERENCE)
       cauteryTipToNeedle = vtk.vtkMatrix4x4()
@@ -2561,6 +2571,7 @@ class LumpNav2Logic(ScriptedLoadableModuleLogic, VTKObservationMixin):
         textProperty = view.cornerAnnotation().GetTextProperty()
         textProperty.SetColor(1, 1, 1)
         view.forceRender()
+      parameterNode.SetParameter(self.BREACH_STATUS, "False")
 
   def hasFiducialWithinDistance(self, markupsNode, point, threshold):
     numberOfPoints = markupsNode.GetNumberOfControlPoints()
@@ -2610,7 +2621,7 @@ class LumpNav2Logic(ScriptedLoadableModuleLogic, VTKObservationMixin):
     cauteryClassificationLogic.setup()
     cauteryClassificationLogic.setUseModelClicked(pressed)
 
-  def addEvent(self):
+  def addEvent(self, description=None):
     parameterNode = self.getParameterNode()
     eventTableNode = parameterNode.GetNodeReference(self.EVENT_TABLE_NODE)
     lastRowIndex = eventTableNode.AddEmptyRow()
@@ -2622,6 +2633,7 @@ class LumpNav2Logic(ScriptedLoadableModuleLogic, VTKObservationMixin):
       sequenceIndex = sequenceBrowserNode.GetMasterSequenceNode().GetNthIndexValue(sequenceBrowserNode.SelectLastItem())
     eventTableNode.SetCellText(lastRowIndex, self.TIME_COLUMN, datetime.datetime.now().strftime("%m/%d/%Y, %H:%M:%S"))
     eventTableNode.SetCellText(lastRowIndex, self.SEQUENCE_TIME_COLUMN, sequenceIndex)
+    eventTableNode.SetCellText(lastRowIndex, self.EVENT_DESCRIPTION_COLUMN, description)
 
   def deleteEvent(self, row):
     parameterNode = self.getParameterNode()
