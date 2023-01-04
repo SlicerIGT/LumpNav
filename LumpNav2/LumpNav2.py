@@ -1018,8 +1018,10 @@ class LumpNav2Widget(ScriptedLoadableModuleWidget, VTKObservationMixin):
 
   def onDeleteEventButtonClicked(self):
     logging.info("onDeleteEventButtonClicked")
-    currentRow = self.ui.eventTable.currentRow()
-    self.logic.deleteEvent(currentRow)
+    selectedRows = self.ui.eventTable.selectionModel().selectedRows()
+    for i in range(len(selectedRows) - 1, -1, -1):
+      row = selectedRows[i]
+      self.logic.deleteEvent(row.row())
     self.updateEventTable()
 
   def updateEventTable(self):
