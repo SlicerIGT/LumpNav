@@ -557,6 +557,9 @@ class LumpNav2Widget(ScriptedLoadableModuleWidget, VTKObservationMixin):
       self.ui.contouringCollapsibleButton.collapsed = True
       self.ui.navigationCollapsibleButton.collapsed = True
       slicer.app.layoutManager().setLayout(self.logic.LAYOUT_2D3D)
+      viewNode = slicer.app.layoutManager().threeDWidget(0).mrmlViewNode()
+      if not self.logic.viewpointLogic.getViewpointForViewNode(viewNode).isCurrentModeAutoCenter():
+        self.enableAutoCenterInViewNode(viewNode)
 
   def onContouringCollapsed(self, collapsed):
     if not collapsed:
@@ -1122,6 +1125,9 @@ class LumpNav2Widget(ScriptedLoadableModuleWidget, VTKObservationMixin):
     # Choose layout based on which collapsible button is open
     if self.ui.toolsCollapsibleButton.checked:
       slicer.app.layoutManager().setLayout(self.logic.LAYOUT_2D3D)
+      viewNode = slicer.app.layoutManager().threeDWidget(0).mrmlViewNode()
+      if not self.logic.viewpointLogic.getViewpointForViewNode(viewNode).isCurrentModeAutoCenter():
+        self.enableAutoCenterInViewNode(viewNode)
 
     if self.ui.contouringCollapsibleButton.checked:
       slicer.app.layoutManager().setLayout(6)
@@ -1867,7 +1873,7 @@ class LumpNav2Logic(ScriptedLoadableModuleLogic, VTKObservationMixin):
         cauteryCameraToCautery = slicer.mrmlScene.AddNewNodeByClass("vtkMRMLLinearTransformNode", self.CAUTERYCAMERA_TO_CAUTERY)
         m = self.createMatrixFromString('1 0 0 0 '
                                         '0 1 0 5 '
-                                        '0 0 -1 -40 '
+                                        '0 0 -1 -200 '
                                         '0 0 0 1')
         cauteryCameraToCautery.SetMatrixTransformToParent(m)
       parameterNode.SetNodeReferenceID(self.CAUTERYCAMERA_TO_CAUTERY, cauteryCameraToCautery.GetID())
