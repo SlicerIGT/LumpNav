@@ -1,0 +1,135 @@
+<PlusConfiguration version="2.8" PlusRevision="Plus-2.8.0.2019-06-17 - Win32">
+  <DataCollection StartupDelaySec="1.0">
+    <DeviceSet Name="Breast lumpectomy phantom L14 - auto depth and clip, continuous tracker save" Description="EM sensors: 1 Probe, 2 Reference, 3 Needle, 4 Cautery. Uses Ultrasonix calibration, valid at any depth. Automatic clipping. Recording is supported. Tracking data is continuously recorded." />
+    <Device
+      Id="TrackerDevice"
+      Type="Ascension3DG"
+      AcquisitionRate="50"
+      LocalTimeOffsetSec="0.0"
+      FilterAcWideNotch="1"
+      ToolReferenceFrame="Tracker">
+      <DataSources>
+        <DataSource Type="Tool" Id="Probe" BufferSize="500" PortName="0" AveragedItemsForFiltering="20" />
+        <DataSource Type="Tool" Id="Reference" BufferSize="500" PortName="1" AveragedItemsForFiltering="20" />
+        <DataSource Type="Tool" Id="Needle" BufferSize="500" PortName="2" AveragedItemsForFiltering="20" />
+        <DataSource Type="Tool" Id="Cautery" BufferSize="500" PortName="3" AveragedItemsForFiltering="20" />
+      </DataSources>
+      <OutputChannels>
+        <OutputChannel Id="TrackerStream">
+          <DataSource Id="Probe" />
+          <DataSource Id="Reference" />
+          <DataSource Id="Needle" />
+          <DataSource Id="Cautery" />
+        </OutputChannel>
+      </OutputChannels>
+    </Device>
+    <Device
+      Id="VideoDevice"
+      Type="SonixVideo"
+      AcquisitionRate="30"
+      LocalTimeOffsetSec="0.0"
+      IP="localhost"
+      Depth="50"
+      CompressionStatus="0"
+      SoundVelocity="1500"
+      AutoClipEnabled="FALSE"
+      ImageToTransducerTransformName="ImageToTransducer">
+      <DataSources>
+        <DataSource
+          Type="Video"
+          Id="Video"
+          PortName="B"
+          PortUsImageOrientation="UF"
+          BufferSize="200"
+          AveragedItemsForFiltering="20"
+          ClipRectangleOrigin="145 0 0"
+          ClipRectangleSize="525 615 1" />
+      </DataSources>
+      <OutputChannels>
+        <OutputChannel Id="VideoStream" VideoDataSourceId="Video" />
+      </OutputChannels>
+    </Device>
+    <Device Id="TrackedVideoDevice" Type="VirtualMixer">
+      <InputChannels>
+        <InputChannel Id="TrackerStream" />
+        <InputChannel Id="VideoStream" />
+      </InputChannels>
+      <OutputChannels>
+        <OutputChannel Id="TrackedVideoStream" />
+      </OutputChannels>
+    </Device>
+    <Device Id="CaptureDevice" Type="VirtualDiscCapture" BaseFilename="LumpNavTrackedVideo.mhd" EnableCapturingOnStart="FALSE" EnableFileCompression="FALSE">
+      <InputChannels>
+        <InputChannel Id="TrackedVideoStream" />
+      </InputChannels>
+    </Device>
+    <Device
+      Id="CaptureDeviceTracker"
+      Type="VirtualDiscCapture"
+      BaseFilename="LumpNavTracking.mhd"
+      EnableCapturingOnStart="TRUE"
+      EnableFileCompression="FALSE"
+      RequestedFrameRate="15"
+      FrameBufferSize="450">
+      <InputChannels>
+        <InputChannel Id="TrackerStream" />
+      </InputChannels>
+    </Device>
+  </DataCollection>
+
+  <PlusOpenIGTLinkServer
+    MaxNumberOfIgtlMessagesToSend="10"
+	  MaxTimeSpentWithProcessingMs="50"
+	  ListeningPort="18944"
+    SendValidTransformsOnly="true"
+    OutputChannelId="TrackedVideoStream">
+    <DefaultClientInfo>
+      <MessageTypes>
+        <Message Type="IMAGE" />
+        <Message Type="TRANSFORM" />
+      </MessageTypes>
+      <TransformNames>
+        <!-- The following transforms are to check if these markers are visible to the camera -->
+        <Transform Name="ProbeToTracker" />
+        <Transform Name="ReferenceToTracker" />
+        <Transform Name="NeedleToTracker" />
+	      <Transform Name="CauteryToTracker" />
+        
+        <Transform Name="TransdToReference" /> <!-- Depth-independent (mm to mm) ultrasound image tracking -->
+        
+        <Transform Name="NeedleToProbe" />    <!-- For Image to Probe calibration with needle as stylus -->
+        <Transform Name="CauteryToNeedle" />  <!-- For cautery calibration in sterile field -->
+        
+		    <Transform Name="NeedleToReference" />
+		    <Transform Name="ImageToReference" /> <!-- Only for debugging! -->
+        <Transform Name="ProbeToReference" />
+        <Transform Name="CauteryToReference" />
+      </TransformNames>
+      <ImageNames>
+        <Image Name="Image" EmbeddedTransformToFrame="Image" />
+      </ImageNames>
+    </DefaultClientInfo>
+  </PlusOpenIGTLinkServer>
+
+  <CoordinateDefinitions>
+  <!-- The next three transforms define probe calibration at a certain depth.
+       Updates for all other depths will be computed in Slicer by updating ImageToTransd.
+       Calibrated at Goodwin 60 mm depth, 2022-04-08   -->
+  <Transform From="Image" To="Probe" Matrix="
+    0.00500335 0.116407  -0.00675413 51.1101 
+    -0.116566  0.00516393 0.00265006 42.863 
+    0.00294202 0.00663217 0.116484   -27.4766 
+    0          0          0          1" />
+  <Transform From="Image" To="TransdPixel" Matrix="
+    1 0 0 -256
+    0 1 0 0
+    0 0 1 0
+    0 0 0 1" />
+  <Transform From="TransdPixel" To="Transd" Matrix="
+    0.116  0 0 0
+    0 0.116  0 0
+    0 0 0.116  0
+    0 0 0      1" />
+  </CoordinateDefinitions>
+
+</PlusConfiguration>

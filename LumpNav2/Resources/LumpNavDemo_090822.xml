@@ -67,10 +67,10 @@
        Updates for all other depths will be computed in Slicer by updating ImageToTransd.
        Calibrated at Goodwin 60 mm depth, 2022-04-08   -->
   <Transform From="Image" To="Probe" Matrix="
-    0.00500335 0.116407 -0.00675413 51.1101 
--0.116566 0.00516393 0.00265006 42.863 
-0.00294202 0.00663217 0.116484 -27.4766 
-0 0 0 1 
+    0.00500335 0.116407  -0.00675413 51.1101 
+    -0.116566  0.00516393 0.00265006 42.863 
+    0.00294202 0.00663217 0.116484   -27.4766 
+    0          0          0          1 
     " />
   <Transform From="Image" To="TransdPixel" Matrix="
     1 0 0 -256
@@ -81,7 +81,7 @@
     0.116  0 0 0
     0 0.116  0 0
     0 0 0.116  0
-    0 0 0        1" />
+    0 0 0      1" />
   </CoordinateDefinitions>
 
   <PlusOpenIGTLinkServer
