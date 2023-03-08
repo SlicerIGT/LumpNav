@@ -6,8 +6,8 @@
    <rect>
     <x>0</x>
     <y>0</y>
-    <width>509</width>
-    <height>1289</height>
+    <width>510</width>
+    <height>1330</height>
    </rect>
   </property>
   <property name="cursor">
@@ -570,11 +570,20 @@
          </item>
          <item>
           <widget class="QTableWidget" name="eventTable">
+           <property name="sizePolicy">
+            <sizepolicy hsizetype="Preferred" vsizetype="Preferred">
+             <horstretch>0</horstretch>
+             <verstretch>0</verstretch>
+            </sizepolicy>
+           </property>
+           <property name="showGrid">
+            <bool>true</bool>
+           </property>
            <property name="columnCount">
             <number>3</number>
            </property>
            <attribute name="horizontalHeaderCascadingSectionResizes">
-            <bool>false</bool>
+            <bool>true</bool>
            </attribute>
            <attribute name="horizontalHeaderShowSortIndicator" stdset="0">
             <bool>false</bool>
@@ -601,11 +610,30 @@
          </item>
          <item>
           <layout class="QHBoxLayout" name="horizontalLayout_21">
+           <property name="sizeConstraint">
+            <enum>QLayout::SetDefaultConstraint</enum>
+           </property>
            <item>
-            <widget class="ctkDirectoryButton" name="eventTableExportDirectoryButton"/>
+            <widget class="ctkDirectoryButton" name="eventTableExportDirectoryButton">
+             <property name="sizePolicy">
+              <sizepolicy hsizetype="Ignored" vsizetype="Fixed">
+               <horstretch>0</horstretch>
+               <verstretch>0</verstretch>
+              </sizepolicy>
+             </property>
+             <property name="elideMode">
+              <enum>Qt::ElideMiddle</enum>
+             </property>
+            </widget>
            </item>
            <item>
             <widget class="QPushButton" name="eventTableExportButton">
+             <property name="sizePolicy">
+              <sizepolicy hsizetype="Minimum" vsizetype="Fixed">
+               <horstretch>0</horstretch>
+               <verstretch>0</verstretch>
+              </sizepolicy>
+             </property>
              <property name="text">
               <string>Export to CSV</string>
              </property>
@@ -648,6 +676,9 @@
             <verstretch>0</verstretch>
            </sizepolicy>
           </property>
+          <property name="sizeAdjustPolicy">
+           <enum>ctkPathLineEdit::AdjustToMinimumContentsLength</enum>
+          </property>
          </widget>
         </item>
        </layout>
@@ -664,7 +695,7 @@
         <item>
          <widget class="QLineEdit" name="hostnameLineEdit">
           <property name="sizePolicy">
-           <sizepolicy hsizetype="Preferred" vsizetype="Fixed">
+           <sizepolicy hsizetype="Maximum" vsizetype="Fixed">
             <horstretch>0</horstretch>
             <verstretch>0</verstretch>
            </sizepolicy>
@@ -680,7 +711,7 @@
         <item>
          <widget class="QPushButton" name="startPlusButton">
           <property name="sizePolicy">
-           <sizepolicy hsizetype="Expanding" vsizetype="Fixed">
+           <sizepolicy hsizetype="MinimumExpanding" vsizetype="Fixed">
             <horstretch>0</horstretch>
             <verstretch>0</verstretch>
            </sizepolicy>
@@ -705,12 +736,25 @@
          </widget>
         </item>
         <item>
-         <widget class="ctkDirectoryButton" name="saveFolderSelector"/>
+         <widget class="ctkDirectoryButton" name="saveFolderSelector">
+          <property name="sizePolicy">
+           <sizepolicy hsizetype="Ignored" vsizetype="Fixed">
+            <horstretch>0</horstretch>
+            <verstretch>0</verstretch>
+           </sizepolicy>
+          </property>
+         </widget>
         </item>
        </layout>
       </item>
       <item>
        <widget class="QPushButton" name="customUiButton">
+        <property name="sizePolicy">
+         <sizepolicy hsizetype="Minimum" vsizetype="Fixed">
+          <horstretch>0</horstretch>
+          <verstretch>0</verstretch>
+         </sizepolicy>
+        </property>
         <property name="text">
          <string>Custom UI</string>
         </property>
@@ -724,6 +768,12 @@
       </item>
       <item>
        <widget class="QPushButton" name="trackingSequenceBrowserButton">
+        <property name="sizePolicy">
+         <sizepolicy hsizetype="Minimum" vsizetype="Fixed">
+          <horstretch>0</horstretch>
+          <verstretch>0</verstretch>
+         </sizepolicy>
+        </property>
         <property name="text">
          <string>Record Tracking</string>
         </property>
@@ -737,6 +787,12 @@
       </item>
       <item>
        <widget class="QPushButton" name="needleVisibilityButton">
+        <property name="sizePolicy">
+         <sizepolicy hsizetype="Minimum" vsizetype="Fixed">
+          <horstretch>0</horstretch>
+          <verstretch>0</verstretch>
+         </sizepolicy>
+        </property>
         <property name="text">
          <string>Needle Visibility</string>
         </property>
@@ -816,6 +872,12 @@
         </item>
         <item>
          <widget class="QSlider" name="segmentationThresholdSlider">
+          <property name="sizePolicy">
+           <sizepolicy hsizetype="Expanding" vsizetype="Fixed">
+            <horstretch>0</horstretch>
+            <verstretch>0</verstretch>
+           </sizepolicy>
+          </property>
           <property name="maximum">
            <number>305</number>
           </property>
@@ -860,6 +922,12 @@
         </item>
         <item>
          <widget class="QSpinBox" name="breachMarkupsThresholdSpinBox">
+          <property name="sizePolicy">
+           <sizepolicy hsizetype="Maximum" vsizetype="Fixed">
+            <horstretch>0</horstretch>
+            <verstretch>0</verstretch>
+           </sizepolicy>
+          </property>
           <property name="maximum">
            <number>10</number>
           </property>
@@ -881,6 +949,12 @@
         </item>
         <item>
          <widget class="QDoubleSpinBox" name="needleLengthOffsetSpinBox">
+          <property name="sizePolicy">
+           <sizepolicy hsizetype="Maximum" vsizetype="Fixed">
+            <horstretch>0</horstretch>
+            <verstretch>0</verstretch>
+           </sizepolicy>
+          </property>
           <property name="minimum">
            <double>-1000.000000000000000</double>
           </property>
