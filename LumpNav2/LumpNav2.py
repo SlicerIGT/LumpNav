@@ -560,12 +560,15 @@ class LumpNav2Widget(ScriptedLoadableModuleWidget, VTKObservationMixin):
       viewNode = slicer.app.layoutManager().threeDWidget(0).mrmlViewNode()
       if not self.logic.viewpointLogic.getViewpointForViewNode(viewNode).isCurrentModeAutoCenter():
         self.enableAutoCenterInViewNode(viewNode)
+      slicer.util.resetSliceViews()
 
   def onContouringCollapsed(self, collapsed):
     if not collapsed:
       self.ui.toolsCollapsibleButton.collapsed = True
       self.ui.navigationCollapsibleButton.collapsed = True
       slicer.app.layoutManager().setLayout(6)
+      slicer.app.layoutManager().resetSliceViews()
+      slicer.util.resetSliceViews()
 
   def onNavigationCollapsed(self, collapsed):
     """
@@ -1394,7 +1397,7 @@ class LumpNav2Logic(ScriptedLoadableModuleLogic, VTKObservationMixin):
 
   # Ultrasound image
   IMAGE_IMAGE = "Image_Image"
-  DEFAULT_US_DEPTH = 90
+  DEFAULT_US_DEPTH = 50
 
   # OpenIGTLink PLUS connection
   CONFIG_FILE_SETTING = "LumpNav2/PlusConfigFile"
@@ -2079,13 +2082,10 @@ class LumpNav2Logic(ScriptedLoadableModuleLogic, VTKObservationMixin):
     parameterNode = self.getParameterNode()
     imageToTransd = parameterNode.GetNodeReference(self.IMAGE_TO_TRANSD)
     transdToNeedle = parameterNode.GetNodeReference(self.TRANSD_TO_NEEDLE)
-    needleTipToNeedle = parameterNode.GetNodeReference(self.NEEDLETIP_TO_NEEDLE)
 
     if toggled:
       # Rearrange transform hierarchy so that Needle is effectively world
       imageToTransd.SetAndObserveTransformNodeID(transdToNeedle.GetID())
-      transdToNeedle.SetAndObserveTransformNodeID(None)
-      needleTipToNeedle.SetAndObserveTransformNodeID(None)
 
       # Start prediction
       self.setRegionOfInterestNode(toggled)
@@ -2100,8 +2100,6 @@ class LumpNav2Logic(ScriptedLoadableModuleLogic, VTKObservationMixin):
       transdToReference = parameterNode.GetNodeReference(self.TRANSD_TO_REFERENCE)
       needleToReference = parameterNode.GetNodeReference(self.NEEDLE_TO_REFERENCE)
       imageToTransd.SetAndObserveTransformNodeID(transdToReference.GetID())
-      transdToNeedle.SetAndObserveTransformNodeID(needleToReference.GetID())
-      needleTipToNeedle.SetAndObserveTransformNodeID(needleToReference.GetID())
 
       # If reconstruction is live, moving ROI will automatically move the reconstruction volume
       roiNode = parameterNode.GetNodeReference(self.ROI_NODE)
@@ -2136,10 +2134,9 @@ class LumpNav2Logic(ScriptedLoadableModuleLogic, VTKObservationMixin):
       # Create new ROI node
       roiNode = slicer.mrmlScene.AddNewNodeByClass("vtkMRMLMarkupsROINode", self.ROI_NODE)
       parameterNode.SetNodeReferenceID(self.ROI_NODE, roiNode.GetID())
+      needleToReference = parameterNode.GetNodeReference(self.NEEDLE_TO_REFERENCE)
+      roiNode.SetAndObserveTransformNodeID(needleToReference.GetID())
       roiNode.SetDisplayVisibility(False)
-    else:
-      # Move ROI out of transform hierarchy
-      roiNode.SetAndObserveTransformNodeID(None)
 
     # Set center of ROI to be center of current image
     imageImage = parameterNode.GetNodeReference(self.IMAGE_IMAGE)
