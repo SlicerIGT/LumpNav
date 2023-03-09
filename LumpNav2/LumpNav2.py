@@ -567,7 +567,6 @@ class LumpNav2Widget(ScriptedLoadableModuleWidget, VTKObservationMixin):
       self.ui.toolsCollapsibleButton.collapsed = True
       self.ui.navigationCollapsibleButton.collapsed = True
       slicer.app.layoutManager().setLayout(6)
-      slicer.app.layoutManager().resetSliceViews()
       slicer.util.resetSliceViews()
 
   def onNavigationCollapsed(self, collapsed):
