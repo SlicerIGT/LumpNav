@@ -189,6 +189,7 @@ class LumpNav2Widget(ScriptedLoadableModuleWidget, VTKObservationMixin):
     self.observedCauteryModel = None
     self.observedTrackingSeqBrNode = None
     self.observedUltrasoundSeqBrNode = None
+    self.observedEventTableNode = None
 
     # Timer for pivot calibration controls
     self.pivotCalibrationLogic = slicer.modules.pivotcalibration.logic()
@@ -1283,7 +1284,12 @@ class LumpNav2Widget(ScriptedLoadableModuleWidget, VTKObservationMixin):
       self.ui.selectPointsToEraseButton.setEnabled(False)
 
     # Update event UI when event table is changed by tumor breach
-    self.updateEventTable()
+    currentEventTableNode = self._parameterNode.GetNodeReference(self.logic.EVENT_TABLE_NODE)
+    if self.observedEventTableNode and currentEventTableNode != self.observedEventTableNode:
+      self.removeObserver(self.observedEventTableNode, vtk.vtkCommand.ModifiedEvent, self.updateGUIFromMRML)
+      self.observedEventTableNode = currentEventTableNode
+      if self.observedEventTableNode is not None:
+        self.addObserver(self.observedEventTableNode, vtk.vtkCommand.ModifiedEvent, self.updateGUIFromMRML)
 
     plusServerLauncherNode = self._parameterNode.GetNodeReference(self.logic.PLUS_SERVER_LAUNCHER_NODE)
     if plusServerLauncherNode is not None:
@@ -1342,6 +1348,10 @@ class LumpNav2Widget(ScriptedLoadableModuleWidget, VTKObservationMixin):
     ultrasoundSqBr = self._parameterNode.GetNodeReference(self.logic.ULTRASOUND_SEQUENCE_BROWSER)
     if ultrasoundSqBr is not None:
       self.ui.startStopRecordingButton.checked = ultrasoundSqBr.GetRecordingActive()
+    
+    eventTable = self._parameterNode.GetNodeReference(self.logic.EVENT_TABLE_NODE)
+    if eventTable is not None:
+      self.updateEventTable()
 
     self._updatingGUIFromMRML = False
 
@@ -1978,7 +1988,7 @@ class LumpNav2Logic(ScriptedLoadableModuleLogic, VTKObservationMixin):
     """
 
     imageToTransdPixel = vtk.vtkTransform()
-    imageToTransdPixel.Translate(-255.5, 0, 0)
+    imageToTransdPixel.Translate(-255.5, -40, 0)
 
     pxToMm = self.scaling_Intercept + self.scaling_Slope * depthMm
 
@@ -2115,7 +2125,7 @@ class LumpNav2Logic(ScriptedLoadableModuleLogic, VTKObservationMixin):
     reconstructionVolume = parameterNode.GetNodeReference(self.RECONSTRUCTION_VOLUME)
     if segmentationVolume is not None and reconstructionVolume is not None:
       if toggled:
-        slicer.util.setSliceViewerLayers(foreground=segmentationVolume, foregroundOpacity=0.5)
+        slicer.util.setSliceViewerLayers(foreground=reconstructionVolume, foregroundOpacity=0.5)
         reconstructionVolume.SetDisplayVisibility(True)
       else:
         slicer.util.setSliceViewerLayers(foreground=None)
