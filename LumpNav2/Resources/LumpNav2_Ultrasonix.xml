@@ -1,6 +1,6 @@
 <PlusConfiguration version="2.8" PlusRevision="Plus-2.8.0.2019-06-17 - Win32">
   <DataCollection StartupDelaySec="1.0">
-    <DeviceSet Name="Breast lumpectomy phantom L14 - auto depth and clip, continuous tracker save" Description="EM sensors: 1 Probe, 2 Reference, 3 Needle, 4 Cautery. Uses Ultrasonix calibration, valid at any depth. Automatic clipping. Recording is supported. Tracking data is continuously recorded." />
+    <DeviceSet Name="Breast lumpectomy L14 - auto depth and clip, continuous tracker save" Description="EM sensors: 1 Probe, 2 Reference, 3 Needle, 4 Cautery. Uses Ultrasonix calibration, valid at any depth. Automatic clipping. Recording is supported. Tracking data is continuously recorded." />
     <Device
       Id="TrackerDevice"
       Type="Ascension3DG"
