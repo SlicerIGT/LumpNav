@@ -278,7 +278,6 @@ class LumpNav2Widget(ScriptedLoadableModuleWidget, VTKObservationMixin):
     self.ui.markPointCauteryTipButton.connect('clicked()', self.onMarkPointCauteryTipClicked)
     self.ui.startStopRecordingButton.connect('toggled(bool)', self.onStartStopRecordingClicked)
     self.ui.freezeUltrasoundButton.connect('toggled(bool)', self.onFreezeUltrasoundClicked)
-    self.ui.segmentationVisibility.connect('toggled(bool)', self.onSegmentationVisibilityToggled)
     self.pivotSamplingTimer.connect('timeout()', self.onPivotSamplingTimeout)
 
     # navigation
@@ -354,6 +353,7 @@ class LumpNav2Widget(ScriptedLoadableModuleWidget, VTKObservationMixin):
     if needleLengthOffset:
       self.ui.needleLengthOffsetSpinBox.value = needleLengthOffset
     self.ui.needleLengthOffsetSpinBox.connect('valueChanged(double)', self.onNeedleLengthOffsetChanged)
+    self.ui.segmentationVisibility.connect('toggled(bool)', self.onSegmentationVisibilityToggled)
 
     # Add custom layouts
     self.logic.addCustomLayouts()
@@ -1482,7 +1482,6 @@ class LumpNav2Logic(ScriptedLoadableModuleLogic, VTKObservationMixin):
     self.segmentationLogic = slicer.modules.segmentationunet.widgetRepresentation().self().logic
     self.firstOutputReady = False
     self.reconstructionLogic = slicer.modules.volumereconstruction.logic()
-    self.reconstructionActive = False
     self.transferFunctionPoints = None
     self.lastSliderValue = 50
 
@@ -1856,6 +1855,9 @@ class LumpNav2Logic(ScriptedLoadableModuleLogic, VTKObservationMixin):
       displayDistanceEnabled = slicer.util.settingsValue(self.DISPLAY_DISTANCE_SETTING, True, converter=slicer.util.toBool)
       self.setRulerDistanceVisibility(displayDistanceEnabled)
 
+      # Prevent warning that there is no surface model (before tumor contouring)
+      self.setBreachWarningOn(False)
+
     breachMarkups_Needle = parameterNode.GetNodeReference(self.BREACH_MARKUPS_NEEDLE)
     if breachMarkups_Needle is None:
       breachMarkups_Needle = slicer.mrmlScene.AddNewNodeByClass("vtkMRMLMarkupsFiducialNode", self.BREACH_MARKUPS_NEEDLE)
@@ -2107,12 +2109,7 @@ class LumpNav2Logic(ScriptedLoadableModuleLogic, VTKObservationMixin):
 
       # Move transforms back
       transdToReference = parameterNode.GetNodeReference(self.TRANSD_TO_REFERENCE)
-      needleToReference = parameterNode.GetNodeReference(self.NEEDLE_TO_REFERENCE)
       imageToTransd.SetAndObserveTransformNodeID(transdToReference.GetID())
-
-      # If reconstruction is live, moving ROI will automatically move the reconstruction volume
-      roiNode = parameterNode.GetNodeReference(self.ROI_NODE)
-      roiNode.SetAndObserveTransformNodeID(needleToReference.GetID())
 
   def setUltrasoundSequenceBrowser(self, isRecording):
     parameterNode = self.getParameterNode()
@@ -2125,7 +2122,7 @@ class LumpNav2Logic(ScriptedLoadableModuleLogic, VTKObservationMixin):
     reconstructionVolume = parameterNode.GetNodeReference(self.RECONSTRUCTION_VOLUME)
     if segmentationVolume is not None and reconstructionVolume is not None:
       if toggled:
-        slicer.util.setSliceViewerLayers(foreground=reconstructionVolume, foregroundOpacity=0.5)
+        slicer.util.setSliceViewerLayers(foreground=segmentationVolume, foregroundOpacity=0.5)
         reconstructionVolume.SetDisplayVisibility(True)
       else:
         slicer.util.setSliceViewerLayers(foreground=None)
@@ -2147,23 +2144,20 @@ class LumpNav2Logic(ScriptedLoadableModuleLogic, VTKObservationMixin):
       roiNode.SetAndObserveTransformNodeID(needleToReference.GetID())
       roiNode.SetDisplayVisibility(False)
 
-    # Set center of ROI to be center of current image
-    imageImage = parameterNode.GetNodeReference(self.IMAGE_IMAGE)
-    bounds = [0, 0, 0, 0, 0, 0]
-    imageImage.GetSliceBounds(bounds, vtk.vtkMatrix4x4())
-    sliceCenter = [(bounds[0] + bounds[1]) / 2, (bounds[2] + bounds[3]) / 2, (bounds[4] + bounds[5]) / 2]
-    roiNode.SetXYZ(sliceCenter)
-    roiNode.SetRadiusXYZ(100, 100, 100)
-    logging.info(f"Added a 10x10x10cm ROI at position: {sliceCenter}")
+      # Set center of ROI to be center of current image
+      imageImage = parameterNode.GetNodeReference(self.IMAGE_IMAGE)
+      bounds = [0, 0, 0, 0, 0, 0]
+      imageImage.GetSliceBounds(bounds, vtk.vtkMatrix4x4())
+      sliceCenter = [(bounds[0] + bounds[1]) / 2, (bounds[2] + bounds[3]) / 2, (bounds[4] + bounds[5]) / 2]
+      roiNode.SetXYZ(sliceCenter)
+      roiNode.SetRadiusXYZ(100, 100, 100)
+      logging.info(f"Added a 10x10x10cm ROI at position: {sliceCenter}")
 
   def setVolumeReconstruction(self, toggled):
     parameterNode = self.getParameterNode()
     reconstructionNode = parameterNode.GetNodeReference(self.RECONSTRUCTION_NODE)
 
     if toggled:
-      if self.reconstructionActive:
-        return
-
       logging.info("Starting volume reconstruction")
       # Set up nodes for live reconstruction
       if reconstructionNode is None:
@@ -2171,33 +2165,30 @@ class LumpNav2Logic(ScriptedLoadableModuleLogic, VTKObservationMixin):
         parameterNode.SetNodeReferenceID(self.RECONSTRUCTION_NODE, reconstructionNode.GetID())
         reconstructionNode.SetLiveVolumeReconstruction(True)
         reconstructionNode.SetInterpolationMode(1)  # linear interpolation
-
-      reconstructionNode.SetAndObserveInputVolumeNode(parameterNode.GetNodeReference(self.PREDICTION_VOLUME))
-      reconstructionNode.SetAndObserveInputROINode(parameterNode.GetNodeReference(self.ROI_NODE))
+        reconstructionNode.SetAndObserveInputVolumeNode(parameterNode.GetNodeReference(self.PREDICTION_VOLUME))
+        reconstructionNode.SetAndObserveInputROINode(parameterNode.GetNodeReference(self.ROI_NODE))
 
       # Create volume node for reconstruction output
       reconstructionVolume = parameterNode.GetNodeReference(self.RECONSTRUCTION_VOLUME)
       if reconstructionVolume is None:
         reconstructionVolume = slicer.mrmlScene.AddNewNodeByClass("vtkMRMLScalarVolumeNode", self.RECONSTRUCTION_VOLUME)
         parameterNode.SetNodeReferenceID(self.RECONSTRUCTION_VOLUME, reconstructionVolume.GetID())
-
-      reconstructionNode.SetAndObserveOutputVolumeNode(reconstructionVolume)
-      volRenLogic = slicer.modules.volumerendering.logic()
-      reconstructionDisplayNode = volRenLogic.CreateVolumeRenderingDisplayNode()
-      reconstructionDisplayNode.UnRegister(volRenLogic)
-      slicer.mrmlScene.AddNode(reconstructionDisplayNode)
-      reconstructionVolume.AddAndObserveDisplayNodeID(reconstructionDisplayNode.GetID())
-      volRenLogic.UpdateDisplayNodeFromVolumeNode(reconstructionDisplayNode, reconstructionVolume)
-      reconstructionDisplayNode.SetAndObserveROINodeID(parameterNode.GetNodeReference(self.ROI_NODE).GetID())
-      self.setVolumeRenderingProperty(reconstructionVolume, 50, 220)
-      reconstructionVolume.SetDisplayVisibility(False)
+        reconstructionNode.SetAndObserveOutputVolumeNode(reconstructionVolume)
+        volRenLogic = slicer.modules.volumerendering.logic()
+        reconstructionDisplayNode = volRenLogic.CreateVolumeRenderingDisplayNode()
+        reconstructionDisplayNode.UnRegister(volRenLogic)
+        slicer.mrmlScene.AddNode(reconstructionDisplayNode)
+        reconstructionVolume.AddAndObserveDisplayNodeID(reconstructionDisplayNode.GetID())
+        volRenLogic.UpdateDisplayNodeFromVolumeNode(reconstructionDisplayNode, reconstructionVolume)
+        reconstructionDisplayNode.SetAndObserveROINodeID(parameterNode.GetNodeReference(self.ROI_NODE).GetID())
+        self.setVolumeRenderingProperty(reconstructionVolume, 50, 220)
+        reconstructionVolume.SetDisplayVisibility(False)
+        
       self.reconstructionLogic.StartLiveVolumeReconstruction(reconstructionNode)
-      self.reconstructionActive = True
 
     else:
       logging.info("Stopping volume reconstruction")
       self.reconstructionLogic.StopLiveVolumeReconstruction(reconstructionNode)
-      self.reconstructionActive = False
 
   def setVolumeRenderingProperty(self, volumeNode, window, level):
     # Manually define volume property for volume rendering
@@ -2513,7 +2504,7 @@ class LumpNav2Logic(ScriptedLoadableModuleLogic, VTKObservationMixin):
       if distanceToPoint < distanceToClosest:
         closestIndex = fiducialIndex
         distanceToClosest = distanceToPoint
-    fiducialNode.GetNthFiducialPosition(closestIndex, fiducialPosition)
+    fiducialNode.GetNthControlPointPosition(closestIndex, fiducialPosition)
     return closestIndex, fiducialPosition
 
   def setRASMarkups(self, observer, eventid):
