@@ -1916,7 +1916,6 @@ class LumpNav2Logic(ScriptedLoadableModuleLogic, VTKObservationMixin):
       eventTableNode.RenameColumn(self.EVENT_DESCRIPTION_COLUMN, "Description")
       eventTableNode.SetUseColumnNameAsColumnHeader(True)
       parameterNode.SetNodeReferenceID(self.EVENT_TABLE_NODE, eventTableNode.GetID())
-      self.addObserver(eventTableNode, vtk.vtkCommand.ModifiedEvent, self.updateEventTable)
 
     # OpenIGTLink connection
     self.setupPlusServer()
