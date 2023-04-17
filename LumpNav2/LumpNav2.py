@@ -190,6 +190,8 @@ class LumpNav2Widget(ScriptedLoadableModuleWidget, VTKObservationMixin):
     self.observedTrackingSeqBrNode = None
     self.observedUltrasoundSeqBrNode = None
     self.observedEventTableNode = None
+    self.observedPlusServerLauncherNode = None
+    self.observedNeedleTipToNeedleNode = None
 
     # Timer for pivot calibration controls
     self.pivotCalibrationLogic = slicer.modules.pivotcalibration.logic()
@@ -478,6 +480,11 @@ class LumpNav2Widget(ScriptedLoadableModuleWidget, VTKObservationMixin):
     settings = qt.QSettings()
     settings.setValue(self.logic.NEEDLE_LENGTH_OFFSET_SETTING, value)
     self.logic.setNeedleModel()
+    self.updateNeedleLengthLabel()
+  
+  def updateNeedleLengthLabel(self, caller=None, event=None):
+    needleLength = self.logic.getNeedleLength()
+    self.ui.needleLengthLabel.text = f"Needle length: {needleLength:.0f}mm"
 
   def onExitButtonClicked(self):
     mainwindow = slicer.util.mainWindow()
@@ -1281,21 +1288,24 @@ class LumpNav2Widget(ScriptedLoadableModuleWidget, VTKObservationMixin):
       self.ui.selectPointsToEraseButton.setEnabled(False)
 
     # Update event UI when event table is changed by tumor breach
-    currentEventTableNode = self._parameterNode.GetNodeReference(self.logic.EVENT_TABLE_NODE)
-    if self.observedEventTableNode and currentEventTableNode != self.observedEventTableNode:
-      self.removeObserver(self.observedEventTableNode, vtk.vtkCommand.ModifiedEvent, self.updateGUIFromMRML)
+    if not self.observedEventTableNode:
+      currentEventTableNode = self._parameterNode.GetNodeReference(self.logic.EVENT_TABLE_NODE)
       self.observedEventTableNode = currentEventTableNode
       if self.observedEventTableNode is not None:
         self.addObserver(self.observedEventTableNode, vtk.vtkCommand.ModifiedEvent, self.updateGUIFromMRML)
 
-    plusServerLauncherNode = self._parameterNode.GetNodeReference(self.logic.PLUS_SERVER_LAUNCHER_NODE)
-    if plusServerLauncherNode is not None:
-      hostname = plusServerLauncherNode.GetHostname()
-      self.ui.hostnameLineEdit.setText(hostname)
+    if not self.observedPlusServerLauncherNode:
+      plusServerLauncherNode = self._parameterNode.GetNodeReference(self.logic.PLUS_SERVER_LAUNCHER_NODE)
+      self.observedPlusServerLauncherNode = plusServerLauncherNode
+      if self.observedPlusServerLauncherNode is not None:
+        self.addObserver(self.observedPlusServerLauncherNode, vtk.vtkCommand.ModifiedEvent, self.updateGUIFromMRML)
 
     # Needle length text
-    needleLength = self.logic.getNeedleLength()
-    self.ui.needleLengthLabel.text = f"Needle length: {needleLength:.0f}mm"
+    if not self.observedNeedleTipToNeedleNode:
+      needleTipToNeedle = self._parameterNode.GetNodeReference(self.logic.NEEDLETIP_TO_NEEDLE)
+      self.observedNeedleTipToNeedleNode = needleTipToNeedle
+      if self.observedNeedleTipToNeedleNode is not None:
+        self.addObserver(self.observedNeedleTipToNeedleNode, vtk.vtkCommand.ModifiedEvent, self.updateNeedleLengthLabel)
 
     # All the GUI updates are done
     self._updatingGUIFromParameterNode = False
@@ -1349,6 +1359,11 @@ class LumpNav2Widget(ScriptedLoadableModuleWidget, VTKObservationMixin):
     eventTable = self._parameterNode.GetNodeReference(self.logic.EVENT_TABLE_NODE)
     if eventTable is not None:
       self.updateEventTable()
+
+    plusServerLauncherNode = self._parameterNode.GetNodeReference(self.logic.PLUS_SERVER_LAUNCHER_NODE)
+    if plusServerLauncherNode is not None:
+      hostname = plusServerLauncherNode.GetHostname()
+      self.ui.hostnameLineEdit.setText(hostname)
 
     self._updatingGUIFromMRML = False
 
@@ -1901,6 +1916,7 @@ class LumpNav2Logic(ScriptedLoadableModuleLogic, VTKObservationMixin):
       eventTableNode.RenameColumn(self.EVENT_DESCRIPTION_COLUMN, "Description")
       eventTableNode.SetUseColumnNameAsColumnHeader(True)
       parameterNode.SetNodeReferenceID(self.EVENT_TABLE_NODE, eventTableNode.GetID())
+      self.addObserver(eventTableNode, vtk.vtkCommand.ModifiedEvent, self.updateEventTable)
 
     # OpenIGTLink connection
     self.setupPlusServer()
