@@ -346,7 +346,7 @@ class LumpNav2Widget(ScriptedLoadableModuleWidget, VTKObservationMixin):
     configFilepath = slicer.util.settingsValue(self.logic.CONFIG_FILE_SETTING, self.logic.resourcePath(self.logic.CONFIG_FILE_DEFAULT))
     self.ui.plusConfigFileSelector.currentPath = configFilepath
     self.ui.plusConfigFileSelector.connect('currentPathChanged(const QString)', self.onPlusConfigFileChanged)
-    self.ui.segmentationThresholdSlider.connect("valueChanged(int)", self.onSegmentationThresholdChanged)
+    self.ui.segmentationThresholdSlider.connect("thresholdValuesChanged(double, double)", self.onSegmentationThresholdChanged)
     needleLengthOffset = slicer.util.settingsValue(
       self.logic.NEEDLE_LENGTH_OFFSET_SETTING, self.logic.NEEDLE_LENGTH_OFFSET_DEFAULT, converter=lambda x: float(x)
     )
@@ -620,6 +620,10 @@ class LumpNav2Widget(ScriptedLoadableModuleWidget, VTKObservationMixin):
     else:
       self.ui.startStopRecordingButton.text = "Start Ultrasound Recording"
     self.logic.onUltrasoundSequenceBrowserClicked(toggled)
+    reconstructionVolume = self._parameterNode.GetNodeReference(self.logic.RECONSTRUCTION_VOLUME)
+    if self.ui.segmentationThresholdSlider.mrmlVolumeNode() != reconstructionVolume:
+      self.ui.segmentationThresholdSlider.setMRMLVolumeNode(reconstructionVolume)
+      self.ui.segmentationThresholdSlider.setThresholdBounds(200, 254)  # TODO: magic numbers
 
   def onBreachLocationButtonClicked(self, toggled):
     logging.info(f"onBreachLocationButtonClicked({toggled})")
@@ -813,14 +817,12 @@ class LumpNav2Widget(ScriptedLoadableModuleWidget, VTKObservationMixin):
       self.ui.segmentationVisibility.text = "Hide AI Segmentation"
     else:
       self.ui.segmentationVisibility.text = "Show AI Segmentation"
+    self.ui.segmentationThresholdSlider.enabled = toggled
     self.logic.setSegmentationVisibility(toggled)
 
-  def onSegmentationThresholdChanged(self, value):
-    pct = value / (255 + 50) * -100 + 100
-    self.ui.thresholdSliderValue.text = str(round(pct)) + "%"
+  def onSegmentationThresholdChanged(self, lower, upper):
     reconstructionVolume = self._parameterNode.GetNodeReference(self.logic.RECONSTRUCTION_VOLUME)
-    if reconstructionVolume:
-      self.logic.setVolumeRenderingProperty(reconstructionVolume, 50, value - 50 / 2)
+    self.logic.setSegmentationThreshold(reconstructionVolume, lower, upper)
 
   def getViewNode(self, viewName):
     """
@@ -2093,16 +2095,15 @@ class LumpNav2Logic(ScriptedLoadableModuleLogic, VTKObservationMixin):
     parameterNode = self.getParameterNode()
     imageToTransd = parameterNode.GetNodeReference(self.IMAGE_TO_TRANSD)
     transdToNeedle = parameterNode.GetNodeReference(self.TRANSD_TO_NEEDLE)
+    self.setRegionOfInterestNode(toggled)
+    self.setVolumeReconstruction(toggled)
 
     if toggled:
       # Rearrange transform hierarchy so that Needle is effectively world
       imageToTransd.SetAndObserveTransformNodeID(transdToNeedle.GetID())
 
       # Start prediction
-      self.setRegionOfInterestNode(toggled)
       self.segmentationLogic.resumePrediction()
-      self.setVolumeReconstruction(toggled)
-
     else:
       # Stop prediction
       self.segmentationLogic.pausePrediction()
@@ -2122,7 +2123,7 @@ class LumpNav2Logic(ScriptedLoadableModuleLogic, VTKObservationMixin):
     reconstructionVolume = parameterNode.GetNodeReference(self.RECONSTRUCTION_VOLUME)
     if segmentationVolume is not None and reconstructionVolume is not None:
       if toggled:
-        slicer.util.setSliceViewerLayers(foreground=segmentationVolume, foregroundOpacity=0.5)
+        slicer.util.setSliceViewerLayers(foreground=reconstructionVolume, foregroundOpacity=0.5)
         reconstructionVolume.SetDisplayVisibility(True)
       else:
         slicer.util.setSliceViewerLayers(foreground=None)
@@ -2169,58 +2170,40 @@ class LumpNav2Logic(ScriptedLoadableModuleLogic, VTKObservationMixin):
         reconstructionNode.SetAndObserveInputROINode(parameterNode.GetNodeReference(self.ROI_NODE))
 
       # Create volume node for reconstruction output
+      volRenLogic = slicer.modules.volumerendering.logic()
       reconstructionVolume = parameterNode.GetNodeReference(self.RECONSTRUCTION_VOLUME)
       if reconstructionVolume is None:
         reconstructionVolume = slicer.mrmlScene.AddNewNodeByClass("vtkMRMLScalarVolumeNode", self.RECONSTRUCTION_VOLUME)
         parameterNode.SetNodeReferenceID(self.RECONSTRUCTION_VOLUME, reconstructionVolume.GetID())
         reconstructionNode.SetAndObserveOutputVolumeNode(reconstructionVolume)
-        volRenLogic = slicer.modules.volumerendering.logic()
-        reconstructionDisplayNode = volRenLogic.CreateVolumeRenderingDisplayNode()
-        reconstructionDisplayNode.UnRegister(volRenLogic)
-        slicer.mrmlScene.AddNode(reconstructionDisplayNode)
-        reconstructionVolume.AddAndObserveDisplayNodeID(reconstructionDisplayNode.GetID())
-        volRenLogic.UpdateDisplayNodeFromVolumeNode(reconstructionDisplayNode, reconstructionVolume)
-        reconstructionDisplayNode.SetAndObserveROINodeID(parameterNode.GetNodeReference(self.ROI_NODE).GetID())
-        self.setVolumeRenderingProperty(reconstructionVolume, 50, 220)
+
+        reconstructionVolume.CreateDefaultDisplayNodes()
+        reconstructionDisplayNode = reconstructionVolume.GetScalarVolumeDisplayNode()
+        reconstructionDisplayNode.SetAndObserveColorNodeID("vtkMRMLColorTableNodeGreen")
+
+        volRenDisplayNode = volRenLogic.CreateVolumeRenderingDisplayNode()
+        volRenDisplayNode.UnRegister(volRenLogic)
+        slicer.mrmlScene.AddNode(volRenDisplayNode)
+        reconstructionVolume.AddAndObserveDisplayNodeID(volRenDisplayNode.GetID())
+        volRenLogic.UpdateDisplayNodeFromVolumeNode(volRenDisplayNode, reconstructionVolume)
+        volRenDisplayNode.SetAndObserveROINodeID(parameterNode.GetNodeReference(self.ROI_NODE).GetID())
+        volRenDisplayNode.SetFollowVolumeDisplayNode(True)
+
+        reconstructionDisplayNode.AutoWindowLevelOff()
+        reconstructionDisplayNode.SetWindowLevel(400, 200)
+        self.setSegmentationThreshold(reconstructionVolume, 240, 254)  # TODO: how to set from widget?
         reconstructionVolume.SetDisplayVisibility(False)
-        
+
       self.reconstructionLogic.StartLiveVolumeReconstruction(reconstructionNode)
 
     else:
       logging.info("Stopping volume reconstruction")
       self.reconstructionLogic.StopLiveVolumeReconstruction(reconstructionNode)
 
-  def setVolumeRenderingProperty(self, volumeNode, window, level):
-    # Manually define volume property for volume rendering
-    volRenLogic = slicer.modules.volumerendering.logic()
-    displayNode = volRenLogic.GetFirstVolumeRenderingDisplayNode(volumeNode)
-
-    upper = min(265, level + window / 2)
-    lower = max(0, level - window / 2)
-    p0 = lower
-    p1 = lower + (upper - lower) * 0.15
-    p2 = lower + (upper - lower) * 0.4
-    p3 = upper
-    self.transferFunctionPoints = [p0, p1, p2, p3]
-
-    opacityTransferFunction = vtk.vtkPiecewiseFunction()
-    opacityTransferFunction.AddPoint(p0, 0.0)
-    opacityTransferFunction.AddPoint(p1, 0.3)
-    opacityTransferFunction.AddPoint(p2, 0.6)
-    opacityTransferFunction.AddPoint(p3, 1.0)
-
-    colorTransferFunction = vtk.vtkColorTransferFunction()
-    colorTransferFunction.AddRGBPoint(p0, 0.25, 0.10, 0.00)
-    colorTransferFunction.AddRGBPoint(p1, 0.15, 0.20, 0.00)
-    colorTransferFunction.AddRGBPoint(p2, 0.05, 0.35, 0.00)
-    colorTransferFunction.AddRGBPoint(p3, 0.00, 0.50, 0.00)
-
-    # The property describes how the data will look
-    volumeProperty = displayNode.GetVolumePropertyNode().GetVolumeProperty()
-    volumeProperty.SetColor(colorTransferFunction)
-    volumeProperty.SetScalarOpacity(opacityTransferFunction)
-    volumeProperty.ShadeOn()
-    volumeProperty.SetInterpolationTypeToLinear()
+  def setSegmentationThreshold(self, volumeNode, lower, upper):
+    displayNode = volumeNode.GetDisplayNode()
+    displayNode.SetThreshold(lower, upper)
+    displayNode.ApplyThresholdOn()
 
   def setDeleteLastFiducialClicked(self, numberOfPoints):
     deleted_coord = [0.0, 0.0, 0.0]
@@ -2615,8 +2598,6 @@ class LumpNav2Logic(ScriptedLoadableModuleLogic, VTKObservationMixin):
     needleTipToNeedle_settings = needleTipToNeedle_settings.tolist()
     needleTipToNeedle_settings = json.dumps(needleTipToNeedle_settings)
     settings.setValue(self.NEEDLETIP_TO_NEEDLE_SETTING, needleTipToNeedle_settings)
-    # Update needle model
-    self.setNeedleModel()
 
   def setDisplayCauteryStateClicked(self, pressed):
     parameterNode = self.getParameterNode()

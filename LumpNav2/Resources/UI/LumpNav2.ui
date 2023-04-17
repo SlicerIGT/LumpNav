@@ -862,41 +862,26 @@
        </widget>
       </item>
       <item>
-       <layout class="QHBoxLayout" name="horizontalLayout_10">
-        <item>
-         <widget class="QLabel" name="label_3">
-          <property name="text">
-           <string>Segmentation threshold:</string>
-          </property>
-         </widget>
-        </item>
-        <item>
-         <widget class="QSlider" name="segmentationThresholdSlider">
-          <property name="sizePolicy">
-           <sizepolicy hsizetype="Expanding" vsizetype="Fixed">
-            <horstretch>0</horstretch>
-            <verstretch>0</verstretch>
-           </sizepolicy>
-          </property>
-          <property name="maximum">
-           <number>305</number>
-          </property>
-          <property name="sliderPosition">
-           <number>245</number>
-          </property>
-          <property name="orientation">
-           <enum>Qt::Horizontal</enum>
-          </property>
-         </widget>
-        </item>
-        <item>
-         <widget class="QLabel" name="thresholdSliderValue">
-          <property name="text">
-           <string>20%</string>
-          </property>
-         </widget>
-        </item>
-       </layout>
+       <widget class="qMRMLVolumeThresholdWidget" name="segmentationThresholdSlider">
+        <property name="enabled">
+         <bool>true</bool>
+        </property>
+        <property name="autoThreshold">
+         <number>0</number>
+        </property>
+        <property name="lowerThreshold">
+         <double>99.000000000000000</double>
+        </property>
+        <property name="upperThreshold">
+         <double>99.000000000000000</double>
+        </property>
+        <property name="lowerThresholdBound">
+         <double>99.000000000000000</double>
+        </property>
+        <property name="upperThresholdBound">
+         <double>254.000000000000000</double>
+        </property>
+       </widget>
       </item>
       <item>
        <widget class="QPushButton" name="warningSoundButton">
@@ -999,6 +984,11 @@
    <class>ctkPathLineEdit</class>
    <extends>QWidget</extends>
    <header>ctkPathLineEdit.h</header>
+  </customwidget>
+  <customwidget>
+   <class>qMRMLVolumeThresholdWidget</class>
+   <extends>QWidget</extends>
+   <header>qMRMLVolumeThresholdWidget.h</header>
   </customwidget>
   <customwidget>
    <class>qMRMLWidget</class>
