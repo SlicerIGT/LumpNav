@@ -346,7 +346,6 @@ class LumpNav2Widget(ScriptedLoadableModuleWidget, VTKObservationMixin):
     configFilepath = slicer.util.settingsValue(self.logic.CONFIG_FILE_SETTING, self.logic.resourcePath(self.logic.CONFIG_FILE_DEFAULT))
     self.ui.plusConfigFileSelector.currentPath = configFilepath
     self.ui.plusConfigFileSelector.connect('currentPathChanged(const QString)', self.onPlusConfigFileChanged)
-    self.ui.segmentationThresholdSlider.connect("thresholdValuesChanged(double, double)", self.onSegmentationThresholdChanged)
     needleLengthOffset = slicer.util.settingsValue(
       self.logic.NEEDLE_LENGTH_OFFSET_SETTING, self.logic.NEEDLE_LENGTH_OFFSET_DEFAULT, converter=lambda x: float(x)
     )
@@ -819,10 +818,6 @@ class LumpNav2Widget(ScriptedLoadableModuleWidget, VTKObservationMixin):
       self.ui.segmentationVisibility.text = "Show AI Segmentation"
     self.ui.segmentationThresholdSlider.enabled = toggled
     self.logic.setSegmentationVisibility(toggled)
-
-  def onSegmentationThresholdChanged(self, lower, upper):
-    reconstructionVolume = self._parameterNode.GetNodeReference(self.logic.RECONSTRUCTION_VOLUME)
-    self.logic.setSegmentationThreshold(reconstructionVolume, lower, upper)
 
   def getViewNode(self, viewName):
     """
@@ -2191,7 +2186,8 @@ class LumpNav2Logic(ScriptedLoadableModuleLogic, VTKObservationMixin):
 
         reconstructionDisplayNode.AutoWindowLevelOff()
         reconstructionDisplayNode.SetWindowLevel(400, 200)
-        self.setSegmentationThreshold(reconstructionVolume, 240, 254)  # TODO: how to set from widget?
+        reconstructionDisplayNode.SetThreshold(240, 254)
+        reconstructionDisplayNode.ApplyThresholdOn()
         reconstructionVolume.SetDisplayVisibility(False)
 
       self.reconstructionLogic.StartLiveVolumeReconstruction(reconstructionNode)
@@ -2200,17 +2196,12 @@ class LumpNav2Logic(ScriptedLoadableModuleLogic, VTKObservationMixin):
       logging.info("Stopping volume reconstruction")
       self.reconstructionLogic.StopLiveVolumeReconstruction(reconstructionNode)
 
-  def setSegmentationThreshold(self, volumeNode, lower, upper):
-    displayNode = volumeNode.GetDisplayNode()
-    displayNode.SetThreshold(lower, upper)
-    displayNode.ApplyThresholdOn()
-
   def setDeleteLastFiducialClicked(self, numberOfPoints):
     deleted_coord = [0.0, 0.0, 0.0]
     parameterNode = self.getParameterNode()
     tumorMarkups_Needle = parameterNode.GetNodeReference(self.TUMOR_MARKUPS_NEEDLE)
-    tumorMarkups_Needle.GetNthControlPointPosition(numberOfPoints-1,deleted_coord)
-    tumorMarkups_Needle.RemoveNthControlPoint(numberOfPoints-1)
+    tumorMarkups_Needle.GetNthControlPointPosition(numberOfPoints - 1,deleted_coord)
+    tumorMarkups_Needle.RemoveNthControlPoint(numberOfPoints - 1)
     logging.info("Deleted last fiducial at %s", deleted_coord)
     if numberOfPoints <= 1:
       sphereSource = vtk.vtkSphereSource()
