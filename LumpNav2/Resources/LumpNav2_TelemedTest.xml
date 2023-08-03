@@ -34,7 +34,14 @@
       Type="TelemedVideo"
       DepthMm="50">
       <DataSources>
-        <DataSource Type="Video" Id="Video" PortUsImageOrientation="UF" />
+        <DataSource 
+          Type="Video"
+          Id="Video"
+          PortUsImageOrientation="UF"
+          BufferSize="200"
+          AveragedItemsForFiltering="20"
+          ClipRectangleOrigin="145 0 0"
+          ClipRectangleSize="525 615 1" />
       </DataSources>
       <OutputChannels>
         <OutputChannel Id="VideoStream" VideoDataSourceId="Video" />
