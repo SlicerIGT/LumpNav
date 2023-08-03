@@ -29,10 +29,10 @@
     </Device>
 
     <Device
-	  Id="VideoDevice"
-	  LocalTimeOffsetSec="0.0"
-	  Type="TelemedVideo"
-	  DepthMm="60">
+      Id="VideoDevice"
+      LocalTimeOffsetSec="0.0"
+      Type="TelemedVideo"
+      DepthMm="50">
       <DataSources>
         <DataSource Type="Video" Id="Video" PortUsImageOrientation="UF" />
       </DataSources>
