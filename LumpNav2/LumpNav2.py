@@ -312,8 +312,7 @@ class LumpNav2Widget(ScriptedLoadableModuleWidget, VTKObservationMixin):
     self.ui.decreaseBreachFiducialSize.connect('clicked()', self.onDecreaseBreachFiducialSize)
     # Event recording
     self.ui.eventTable.setSelectionBehavior(qt.QAbstractItemView.SelectRows)
-    self.ui.eventTable.connect('cellChanged(int, int)', self.onEventTableChanged)
-    self.ui.eventTable.connect('itemSelectionChanged()', self.onEventSelectionChanged)
+    self.ui.eventTable.connect('selectionChanged()', self.onEventSelectionChanged)
     self.ui.addEventButton.connect('clicked()', self.onAddEventButtonClicked)
     self.ui.deleteEventButton.connect('clicked()', self.onDeleteEventButtonClicked)
     self.ui.eventTableExportButton.connect('clicked()', self.onEventTableExportClicked)
@@ -1011,10 +1010,6 @@ class LumpNav2Widget(ScriptedLoadableModuleWidget, VTKObservationMixin):
     self.ui.bottomAutoCenterCameraButton.blockSignals(autoCenterBlockSignalState)
     self.ui.bottomCauteryCameraButton.blockSignals(bullseyeBlockSignalState)
 
-  def onEventTableChanged(self, row, column):
-    newCellValue = self.ui.eventTable.item(row, column).text()
-    self.logic.updateEventTable(row, column, newCellValue)
-
   def onEventSelectionChanged(self):
     if self.ui.eventTable.selectionModel().isSelected(self.ui.eventTable.currentIndex()):
       self.ui.deleteEventButton.setEnabled(True)
@@ -1024,7 +1019,6 @@ class LumpNav2Widget(ScriptedLoadableModuleWidget, VTKObservationMixin):
   def onAddEventButtonClicked(self):
     logging.info("onAddEventButtonClicked")
     self.logic.addEvent()
-    self.updateEventTable()
 
   def onDeleteEventButtonClicked(self):
     logging.info("onDeleteEventButtonClicked")
@@ -1032,34 +1026,6 @@ class LumpNav2Widget(ScriptedLoadableModuleWidget, VTKObservationMixin):
     for i in range(len(selectedRows) - 1, -1, -1):
       row = selectedRows[i]
       self.logic.deleteEvent(row.row())
-    self.updateEventTable()
-
-  def updateEventTable(self):
-    # Block signals and reset table
-    selectedRow = self.ui.eventTable.currentRow()
-    blockSignals = self.ui.eventTable.blockSignals(True)
-    self.ui.eventTable.clearContents()
-    self.ui.eventTable.setRowCount(0)
-
-    # Populate event table
-    eventTableNode = self._parameterNode.GetNodeReference(self.logic.EVENT_TABLE_NODE)
-    n_rows = eventTableNode.GetNumberOfRows()
-    for r in range(n_rows):
-      self.ui.eventTable.insertRow(r)
-      for c in range(self.logic.LAST_COLUMN):
-        item = qt.QTableWidgetItem()
-        item.setData(0, eventTableNode.GetCellText(r, c))
-        if c != self.logic.EVENT_DESCRIPTION_COLUMN:
-          item.setFlags(item.flags() & ~qt.Qt.ItemIsEditable)
-        self.ui.eventTable.setItem(r, c, item)
-
-    # Reselect row and unblock signals
-    if selectedRow > n_rows - 1:
-      self.ui.eventTable.selectRow(n_rows - 1)
-    else:
-      self.ui.eventTable.selectRow(selectedRow)
-    self.onEventSelectionChanged()
-    self.ui.eventTable.blockSignals(blockSignals)
 
   def onEventTableExportClicked(self):
     eventTableNode = self._parameterNode.GetNodeReference(self.logic.EVENT_TABLE_NODE)
@@ -1358,7 +1324,8 @@ class LumpNav2Widget(ScriptedLoadableModuleWidget, VTKObservationMixin):
     
     eventTable = self._parameterNode.GetNodeReference(self.logic.EVENT_TABLE_NODE)
     if eventTable is not None:
-      self.updateEventTable()
+      self.ui.eventTable.setMRMLTableNode(eventTable)
+      self.ui.eventTable.horizontalHeader().setSectionResizeMode(qt.QHeaderView.Stretch)
 
     plusServerLauncherNode = self._parameterNode.GetNodeReference(self.logic.PLUS_SERVER_LAUNCHER_NODE)
     if plusServerLauncherNode is not None:
@@ -2631,11 +2598,6 @@ class LumpNav2Logic(ScriptedLoadableModuleLogic, VTKObservationMixin):
     parameterNode = self.getParameterNode()
     eventTableNode = parameterNode.GetNodeReference(self.EVENT_TABLE_NODE)
     eventTableNode.RemoveRow(row)
-
-  def updateEventTable(self, row, column, value):
-    parameterNode = self.getParameterNode()
-    eventTableNode = parameterNode.GetNodeReference(self.EVENT_TABLE_NODE)
-    eventTableNode.SetCellText(row, column, value)
 
   @staticmethod
   def calculateDistance(point1, point2):
