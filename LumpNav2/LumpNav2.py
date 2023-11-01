@@ -1458,7 +1458,6 @@ class LumpNav2Logic(ScriptedLoadableModuleLogic, VTKObservationMixin):
     self.scaling_Intercept = 0.01663333
     self.scaling_Slope = 0.00192667
 
-    self.segmentationLogic = slicer.modules.segmentationunet.widgetRepresentation().self().logic
     self.firstOutputReady = False
     self.reconstructionLogic = slicer.modules.volumereconstruction.logic()
     self.transferFunctionPoints = None
@@ -1887,16 +1886,6 @@ class LumpNav2Logic(ScriptedLoadableModuleLogic, VTKObservationMixin):
     # OpenIGTLink connection
     self.setupPlusServer()
 
-    # Set nodes for segmentation logic
-    self.segmentationLogic.setModelPath(self.resourcePath(self.AI_MODEL_PATH))
-    self.segmentationLogic.setInputImage(parameterNode.GetNodeReference(self.IMAGE_IMAGE))
-    self.segmentationLogic.setOutputImage(parameterNode.GetNodeReference(self.PREDICTION_VOLUME))
-    self.segmentationLogic.setOutputTransform(parameterNode.GetNodeReference(self.PREDICTION_TO_NEEDLE))
-
-    # Start segmentation to avoid delay when user starts recording
-    self.segmentationLogic.setRealTimePrediction(True)
-    self.segmentationLogic.pausePrediction()
-
   def setupTransformHierarchy(self):
     """
     Sets up transform nodes in the scene if they don't exist yet.
@@ -2062,28 +2051,31 @@ class LumpNav2Logic(ScriptedLoadableModuleLogic, VTKObservationMixin):
   def onUltrasoundSequenceBrowserClicked(self, toggled):
     self.setUltrasoundSequenceBrowser(toggled)
     self.setLivePrediction(toggled)
-    if toggled:
-      self.segmentationLogic.resumePrediction()
-    else:
-      self.segmentationLogic.pausePrediction()
 
   def setLivePrediction(self, toggled):
     logging.info(f"setLivePrediction({toggled})")
     parameterNode = self.getParameterNode()
     imageToTransd = parameterNode.GetNodeReference(self.IMAGE_TO_TRANSD)
     transdToNeedle = parameterNode.GetNodeReference(self.TRANSD_TO_NEEDLE)
-    self.setRegionOfInterestNode(toggled)
-    self.setVolumeReconstruction(toggled)
 
     if toggled:
+      logging.info("Starting volume reconstruction")
+
       # Rearrange transform hierarchy so that Needle is effectively world
       imageToTransd.SetAndObserveTransformNodeID(transdToNeedle.GetID())
 
-      # Start prediction
-      self.segmentationLogic.resumePrediction()
+      # TODO: should always be taking getting prediction from other script, 
+      # TODO: but when toggled, actually makes reconstruction from prediction
+      self.setRegionOfInterestNode()
+      reconstructionNode = self.setVolumeReconstructionNode()
+      self.reconstructionLogic.StartLiveVolumeReconstruction(reconstructionNode)
+
     else:
-      # Stop prediction
-      self.segmentationLogic.pausePrediction()
+      logging.info("Stopping volume reconstruction")
+
+      # Stop reconstruction
+      reconstructionNode = parameterNode.GetNodeReference(self.RECONSTRUCTION_NODE)
+      self.reconstructionLogic.StopLiveVolumeReconstruction(reconstructionNode)
 
       # Move transforms back
       transdToReference = parameterNode.GetNodeReference(self.TRANSD_TO_REFERENCE)
@@ -2094,6 +2086,7 @@ class LumpNav2Logic(ScriptedLoadableModuleLogic, VTKObservationMixin):
     sequenceBrowserUltrasound = parameterNode.GetNodeReference(self.ULTRASOUND_SEQUENCE_BROWSER)
     sequenceBrowserUltrasound.SetRecordingActive(isRecording)
 
+  # TODO: change to contour visibility, if it exists
   def setSegmentationVisibility(self, toggled):
     parameterNode = self.getParameterNode()
     segmentationVolume = parameterNode.GetNodeReference(self.PREDICTION_VOLUME)
@@ -2108,10 +2101,7 @@ class LumpNav2Logic(ScriptedLoadableModuleLogic, VTKObservationMixin):
     else:
       logging.warning("setSegmentationVisibility() called but no segmentation volume found")
 
-  def setRegionOfInterestNode(self, toggled):
-    if not toggled:
-      return
-
+  def setRegionOfInterestNode(self):
     parameterNode = self.getParameterNode()
     roiNode = parameterNode.GetNodeReference(self.ROI_NODE)
     if roiNode is None:
@@ -2131,52 +2121,46 @@ class LumpNav2Logic(ScriptedLoadableModuleLogic, VTKObservationMixin):
       roiNode.SetRadiusXYZ(100, 100, 100)
       logging.info(f"Added a 10x10x10cm ROI at position: {sliceCenter}")
 
-  def setVolumeReconstruction(self, toggled):
+  def setVolumeReconstruction(self):
     parameterNode = self.getParameterNode()
     reconstructionNode = parameterNode.GetNodeReference(self.RECONSTRUCTION_NODE)
 
-    if toggled:
-      logging.info("Starting volume reconstruction")
-      # Set up nodes for live reconstruction
-      if reconstructionNode is None:
-        reconstructionNode = slicer.mrmlScene.AddNewNodeByClass("vtkMRMLVolumeReconstructionNode", self.RECONSTRUCTION_NODE)
-        parameterNode.SetNodeReferenceID(self.RECONSTRUCTION_NODE, reconstructionNode.GetID())
-        reconstructionNode.SetLiveVolumeReconstruction(True)
-        reconstructionNode.SetInterpolationMode(1)  # linear interpolation
-        reconstructionNode.SetAndObserveInputVolumeNode(parameterNode.GetNodeReference(self.PREDICTION_VOLUME))
-        reconstructionNode.SetAndObserveInputROINode(parameterNode.GetNodeReference(self.ROI_NODE))
+    # Set up nodes for live reconstruction
+    if reconstructionNode is None:
+      reconstructionNode = slicer.mrmlScene.AddNewNodeByClass("vtkMRMLVolumeReconstructionNode", self.RECONSTRUCTION_NODE)
+      parameterNode.SetNodeReferenceID(self.RECONSTRUCTION_NODE, reconstructionNode.GetID())
+      reconstructionNode.SetLiveVolumeReconstruction(True)
+      reconstructionNode.SetInterpolationMode(1)  # linear interpolation
+      reconstructionNode.SetAndObserveInputVolumeNode(parameterNode.GetNodeReference(self.PREDICTION_VOLUME))
+      reconstructionNode.SetAndObserveInputROINode(parameterNode.GetNodeReference(self.ROI_NODE))
 
-      # Create volume node for reconstruction output
-      volRenLogic = slicer.modules.volumerendering.logic()
-      reconstructionVolume = parameterNode.GetNodeReference(self.RECONSTRUCTION_VOLUME)
-      if reconstructionVolume is None:
-        reconstructionVolume = slicer.mrmlScene.AddNewNodeByClass("vtkMRMLScalarVolumeNode", self.RECONSTRUCTION_VOLUME)
-        parameterNode.SetNodeReferenceID(self.RECONSTRUCTION_VOLUME, reconstructionVolume.GetID())
-        reconstructionNode.SetAndObserveOutputVolumeNode(reconstructionVolume)
+    # Create volume node for reconstruction output
+    volRenLogic = slicer.modules.volumerendering.logic()
+    reconstructionVolume = parameterNode.GetNodeReference(self.RECONSTRUCTION_VOLUME)
+    if reconstructionVolume is None:
+      reconstructionVolume = slicer.mrmlScene.AddNewNodeByClass("vtkMRMLScalarVolumeNode", self.RECONSTRUCTION_VOLUME)
+      parameterNode.SetNodeReferenceID(self.RECONSTRUCTION_VOLUME, reconstructionVolume.GetID())
+      reconstructionNode.SetAndObserveOutputVolumeNode(reconstructionVolume)
 
-        reconstructionVolume.CreateDefaultDisplayNodes()
-        reconstructionDisplayNode = reconstructionVolume.GetScalarVolumeDisplayNode()
-        reconstructionDisplayNode.SetAndObserveColorNodeID("vtkMRMLColorTableNodeGreen")
+      reconstructionVolume.CreateDefaultDisplayNodes()
+      reconstructionDisplayNode = reconstructionVolume.GetScalarVolumeDisplayNode()
+      reconstructionDisplayNode.SetAndObserveColorNodeID("vtkMRMLColorTableNodeGreen")
 
-        volRenDisplayNode = volRenLogic.CreateVolumeRenderingDisplayNode()
-        volRenDisplayNode.UnRegister(volRenLogic)
-        slicer.mrmlScene.AddNode(volRenDisplayNode)
-        reconstructionVolume.AddAndObserveDisplayNodeID(volRenDisplayNode.GetID())
-        volRenLogic.UpdateDisplayNodeFromVolumeNode(volRenDisplayNode, reconstructionVolume)
-        volRenDisplayNode.SetAndObserveROINodeID(parameterNode.GetNodeReference(self.ROI_NODE).GetID())
-        volRenDisplayNode.SetFollowVolumeDisplayNode(True)
+      volRenDisplayNode = volRenLogic.CreateVolumeRenderingDisplayNode()
+      volRenDisplayNode.UnRegister(volRenLogic)
+      slicer.mrmlScene.AddNode(volRenDisplayNode)
+      reconstructionVolume.AddAndObserveDisplayNodeID(volRenDisplayNode.GetID())
+      volRenLogic.UpdateDisplayNodeFromVolumeNode(volRenDisplayNode, reconstructionVolume)
+      volRenDisplayNode.SetAndObserveROINodeID(parameterNode.GetNodeReference(self.ROI_NODE).GetID())
+      volRenDisplayNode.SetFollowVolumeDisplayNode(True)
 
-        reconstructionDisplayNode.AutoWindowLevelOff()
-        reconstructionDisplayNode.SetWindowLevel(400, 200)
-        reconstructionDisplayNode.SetThreshold(240, 254)
-        reconstructionDisplayNode.ApplyThresholdOn()
-        reconstructionVolume.SetDisplayVisibility(False)
+      reconstructionDisplayNode.AutoWindowLevelOff()
+      reconstructionDisplayNode.SetWindowLevel(400, 200)
+      reconstructionDisplayNode.SetThreshold(240, 254)
+      reconstructionDisplayNode.ApplyThresholdOn()
+      reconstructionVolume.SetDisplayVisibility(False)
 
-      self.reconstructionLogic.StartLiveVolumeReconstruction(reconstructionNode)
-
-    else:
-      logging.info("Stopping volume reconstruction")
-      self.reconstructionLogic.StopLiveVolumeReconstruction(reconstructionNode)
+      return reconstructionNode
 
   def setDeleteLastFiducialClicked(self, numberOfPoints):
     deleted_coord = [0.0, 0.0, 0.0]
