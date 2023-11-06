@@ -1373,7 +1373,6 @@ class LumpNav2Logic(ScriptedLoadableModuleLogic, VTKObservationMixin):
   IMAGE_TO_TRANSD = "ImageToTransd"
   CAUTERYCAMERA_TO_CAUTERY = "CauteryCameraToCautery"
   TRANSD_TO_NEEDLE = "TransdToNeedle"
-  PREDICTION_TO_NEEDLE = "PredictionToNeedle"
 
   CONTOUR_STATUS = "ContourStatus"
   CONTOUR_ADDING = "ContourAdding"
@@ -1394,6 +1393,9 @@ class LumpNav2Logic(ScriptedLoadableModuleLogic, VTKObservationMixin):
   PLUS_SERVER_NODE = "PlusServer"
   PLUS_SERVER_LAUNCHER_NODE = "PlusServerLauncher"
   HOSTNAME_SETTING = "LumpNav2/LastHostname"
+  PREDICTION_CONNECTOR_NODE = "PredictionConnectorNode"
+  PREDICTION_HOSTNAME = "localhost"
+  PREDICTION_PORT = 18945
 
   # Model names and settings
   NEEDLE_MODEL = "NeedleModel"
@@ -1920,7 +1922,6 @@ class LumpNav2Logic(ScriptedLoadableModuleLogic, VTKObservationMixin):
     # Ultrasound image tracking
     transdToReference = self.addLinearTransformToScene(self.TRANSD_TO_REFERENCE, parentTransform=referenceToRas)
     imageToTransd = self.addLinearTransformToScene(self.IMAGE_TO_TRANSD, parentTransform=transdToReference)
-    predictionToNeedle = self.addLinearTransformToScene(self.PREDICTION_TO_NEEDLE)
     self.updateImageToTransdFromDepth(self.DEFAULT_US_DEPTH)
 
     imageImage = parameterNode.GetNodeReference(self.IMAGE_IMAGE)
@@ -1945,7 +1946,7 @@ class LumpNav2Logic(ScriptedLoadableModuleLogic, VTKObservationMixin):
       imageArray = np.zeros((1, 615, 525), dtype="uint8")
       slicer.util.updateVolumeFromArray(predictionImage, imageArray)
       parameterNode.SetNodeReferenceID(self.PREDICTION_VOLUME, predictionImage.GetID())
-    predictionImage.SetAndObserveTransformNodeID(predictionToNeedle.GetID())
+    predictionImage.SetAndObserveTransformNodeID(imageToTransd.GetID())
 
     # TransdToNeedle to display tumour reconstruction in needle coordinate system
     transdToNeedle = self.addLinearTransformToScene(self.TRANSD_TO_NEEDLE, parentTransform=needleToReference)
@@ -2043,6 +2044,13 @@ class LumpNav2Logic(ScriptedLoadableModuleLogic, VTKObservationMixin):
     if lastHostname != "":
       self.setHostname(lastHostname)
 
+    # Start client connector for prediction image
+    predictionConnectorNode = parameterNode.GetNodeReference(self.PREDICTION_CONNECTOR_NODE)
+    if not predictionConnectorNode:
+      predictionConnectorNode = slicer.mrmlScene.AddNewNodeByClass("vtkMRMLIGTLConnectorNode", self.PREDICTION_CONNECTOR_NODE)
+      predictionConnectorNode.SetTypeClient(self.PREDICTION_HOSTNAME, self.PREDICTION_PORT)
+      parameterNode.SetNodeReferenceID(self.PREDICTION_CONNECTOR_NODE, predictionConnectorNode.GetID())
+
   def setTrackingSequenceBrowser(self, recording):
     parameterNode = self.getParameterNode()
     sequenceBrowserTracking = parameterNode.GetNodeReference(self.TRACKING_SEQUENCE_BROWSER)
@@ -2063,9 +2071,8 @@ class LumpNav2Logic(ScriptedLoadableModuleLogic, VTKObservationMixin):
 
       # Rearrange transform hierarchy so that Needle is effectively world
       imageToTransd.SetAndObserveTransformNodeID(transdToNeedle.GetID())
+      transdToNeedle.SetAndObserveTransformNodeID(None)
 
-      # TODO: should always be taking getting prediction from other script, 
-      # TODO: but when toggled, actually makes reconstruction from prediction
       self.setRegionOfInterestNode()
       reconstructionNode = self.setVolumeReconstructionNode()
       self.reconstructionLogic.StartLiveVolumeReconstruction(reconstructionNode)
@@ -2078,8 +2085,14 @@ class LumpNav2Logic(ScriptedLoadableModuleLogic, VTKObservationMixin):
       self.reconstructionLogic.StopLiveVolumeReconstruction(reconstructionNode)
 
       # Move transforms back
+      needleToReference = parameterNode.GetNodeReference(self.NEEDLE_TO_REFERENCE)
       transdToReference = parameterNode.GetNodeReference(self.TRANSD_TO_REFERENCE)
+      transdToNeedle.SetAndObserveTransformNodeID(needleToReference.GetID())
       imageToTransd.SetAndObserveTransformNodeID(transdToReference.GetID())
+
+      # Move reconstruction to needle coordinate system
+      reconstructionVolume = parameterNode.GetNodeReference(self.RECONSTRUCTION_VOLUME)
+      reconstructionVolume.SetAndObserveTransformNodeID(needleToReference.GetID())
 
   def setUltrasoundSequenceBrowser(self, isRecording):
     parameterNode = self.getParameterNode()
@@ -2106,10 +2119,8 @@ class LumpNav2Logic(ScriptedLoadableModuleLogic, VTKObservationMixin):
     roiNode = parameterNode.GetNodeReference(self.ROI_NODE)
     if roiNode is None:
       # Create new ROI node
-      roiNode = slicer.mrmlScene.AddNewNodeByClass("vtkMRMLMarkupsROINode", self.ROI_NODE)
+      roiNode = slicer.mrmlScene.AddNewNodeByClass("vtkMRMLAnnotationROINode", self.ROI_NODE)
       parameterNode.SetNodeReferenceID(self.ROI_NODE, roiNode.GetID())
-      needleToReference = parameterNode.GetNodeReference(self.NEEDLE_TO_REFERENCE)
-      roiNode.SetAndObserveTransformNodeID(needleToReference.GetID())
       roiNode.SetDisplayVisibility(False)
 
       # Set center of ROI to be center of current image
@@ -2121,11 +2132,11 @@ class LumpNav2Logic(ScriptedLoadableModuleLogic, VTKObservationMixin):
       roiNode.SetRadiusXYZ(100, 100, 100)
       logging.info(f"Added a 10x10x10cm ROI at position: {sliceCenter}")
 
-  def setVolumeReconstruction(self):
+  def setVolumeReconstructionNode(self):
     parameterNode = self.getParameterNode()
-    reconstructionNode = parameterNode.GetNodeReference(self.RECONSTRUCTION_NODE)
 
-    # Set up nodes for live reconstruction
+    # Create volume reconstruction node if it doesn't exist
+    reconstructionNode = parameterNode.GetNodeReference(self.RECONSTRUCTION_NODE)
     if reconstructionNode is None:
       reconstructionNode = slicer.mrmlScene.AddNewNodeByClass("vtkMRMLVolumeReconstructionNode", self.RECONSTRUCTION_NODE)
       parameterNode.SetNodeReferenceID(self.RECONSTRUCTION_NODE, reconstructionNode.GetID())
@@ -2135,32 +2146,21 @@ class LumpNav2Logic(ScriptedLoadableModuleLogic, VTKObservationMixin):
       reconstructionNode.SetAndObserveInputROINode(parameterNode.GetNodeReference(self.ROI_NODE))
 
     # Create volume node for reconstruction output
-    volRenLogic = slicer.modules.volumerendering.logic()
     reconstructionVolume = parameterNode.GetNodeReference(self.RECONSTRUCTION_VOLUME)
     if reconstructionVolume is None:
       reconstructionVolume = slicer.mrmlScene.AddNewNodeByClass("vtkMRMLScalarVolumeNode", self.RECONSTRUCTION_VOLUME)
+      reconstructionVolume.CreateDefaultDisplayNodes()
       parameterNode.SetNodeReferenceID(self.RECONSTRUCTION_VOLUME, reconstructionVolume.GetID())
+
+      reconstructionVolume.SetAndObserveTransformNodeID(None)
       reconstructionNode.SetAndObserveOutputVolumeNode(reconstructionVolume)
 
-      reconstructionVolume.CreateDefaultDisplayNodes()
-      reconstructionDisplayNode = reconstructionVolume.GetScalarVolumeDisplayNode()
-      reconstructionDisplayNode.SetAndObserveColorNodeID("vtkMRMLColorTableNodeGreen")
-
-      volRenDisplayNode = volRenLogic.CreateVolumeRenderingDisplayNode()
-      volRenDisplayNode.UnRegister(volRenLogic)
-      slicer.mrmlScene.AddNode(volRenDisplayNode)
-      reconstructionVolume.AddAndObserveDisplayNodeID(volRenDisplayNode.GetID())
-      volRenLogic.UpdateDisplayNodeFromVolumeNode(volRenDisplayNode, reconstructionVolume)
+      volRenLogic = slicer.modules.volumerendering.logic()
+      volRenDisplayNode = volRenLogic.CreateDefaultVolumeRenderingNodes(reconstructionVolume)
       volRenDisplayNode.SetAndObserveROINodeID(parameterNode.GetNodeReference(self.ROI_NODE).GetID())
-      volRenDisplayNode.SetFollowVolumeDisplayNode(True)
-
-      reconstructionDisplayNode.AutoWindowLevelOff()
-      reconstructionDisplayNode.SetWindowLevel(400, 200)
-      reconstructionDisplayNode.SetThreshold(240, 254)
-      reconstructionDisplayNode.ApplyThresholdOn()
       reconstructionVolume.SetDisplayVisibility(False)
 
-      return reconstructionNode
+    return reconstructionNode
 
   def setDeleteLastFiducialClicked(self, numberOfPoints):
     deleted_coord = [0.0, 0.0, 0.0]
@@ -2221,11 +2221,14 @@ class LumpNav2Logic(ScriptedLoadableModuleLogic, VTKObservationMixin):
   def setPlusServerClicked(self, toggled):
     parameterNode = self.getParameterNode()
     plusServerNode = parameterNode.GetNodeReference(self.PLUS_SERVER_NODE)
+    predictionConnectorNode = parameterNode.GetNodeReference(self.PREDICTION_CONNECTOR_NODE)
     if plusServerNode:
       if toggled:
         plusServerNode.StartServer()
+        predictionConnectorNode.Start()
       else:
         plusServerNode.StopServer()
+        predictionConnectorNode.Stop()
 
   def setPlusConfigFile(self, configFilepath):
     parameterNode = self.getParameterNode()
