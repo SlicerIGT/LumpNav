@@ -354,6 +354,7 @@ class LumpNav2Widget(ScriptedLoadableModuleWidget, VTKObservationMixin):
       self.ui.needleLengthOffsetSpinBox.value = needleLengthOffset
     self.ui.needleLengthOffsetSpinBox.connect('valueChanged(double)', self.onNeedleLengthOffsetChanged)
     self.ui.segmentationVisibility.connect('toggled(bool)', self.onSegmentationVisibilityToggled)
+    self.ui.thresholdSlider.connect("valueChanged(double)", self.onThresholdSliderChanged)
 
     # Add custom layouts
     self.logic.addCustomLayouts()
@@ -574,6 +575,7 @@ class LumpNav2Widget(ScriptedLoadableModuleWidget, VTKObservationMixin):
       self.ui.navigationCollapsibleButton.collapsed = True
       slicer.app.layoutManager().setLayout(6)
       slicer.util.resetSliceViews()
+      slicer.app.layoutManager().sliceWidget('Red').sliceController().setCompositingToAdd()
 
   def onNavigationCollapsed(self, collapsed):
     """
@@ -625,10 +627,6 @@ class LumpNav2Widget(ScriptedLoadableModuleWidget, VTKObservationMixin):
     else:
       self.ui.startStopRecordingButton.text = "Start Ultrasound Recording"
     self.logic.onUltrasoundSequenceBrowserClicked(toggled)
-    reconstructionVolume = self._parameterNode.GetNodeReference(self.logic.RECONSTRUCTION_VOLUME)
-    if self.ui.segmentationThresholdSlider.mrmlVolumeNode() != reconstructionVolume:
-      self.ui.segmentationThresholdSlider.setMRMLVolumeNode(reconstructionVolume)
-      self.ui.segmentationThresholdSlider.setThresholdBounds(200, 254)  # TODO: magic numbers
 
   def onBreachLocationButtonClicked(self, toggled):
     logging.info(f"onBreachLocationButtonClicked({toggled})")
@@ -818,12 +816,16 @@ class LumpNav2Widget(ScriptedLoadableModuleWidget, VTKObservationMixin):
 
   def onSegmentationVisibilityToggled(self, toggled):
     logging.info("onSegmentationVisibilityToggled")
+    settings = qt.QSettings()
+    settings.setValue(self.logic.AI_VISIBILITY_SETTING, "True" if toggled else "False")
     if toggled:
       self.ui.segmentationVisibility.text = "Hide AI Segmentation"
     else:
       self.ui.segmentationVisibility.text = "Show AI Segmentation"
-    self.ui.segmentationThresholdSlider.enabled = toggled
     self.logic.setSegmentationVisibility(toggled)
+
+  def onThresholdSliderChanged(self, value):
+    self._parameterNode.SetParameter(self.logic.AI_THRESHOLD, str(value))
 
   def getViewNode(self, viewName):
     """
@@ -1272,6 +1274,8 @@ class LumpNav2Widget(ScriptedLoadableModuleWidget, VTKObservationMixin):
       self.observedNeedleTipToNeedleNode = needleTipToNeedle
       if self.observedNeedleTipToNeedleNode is not None:
         self.addObserver(self.observedNeedleTipToNeedleNode, vtk.vtkCommand.ModifiedEvent, self.updateNeedleLengthLabel)
+    
+    self.ui.thresholdSlider.value = float(self._parameterNode.GetParameter(self.logic.AI_THRESHOLD))
 
     # All the GUI updates are done
     self._updatingGUIFromParameterNode = False
@@ -1426,6 +1430,12 @@ class LumpNav2Logic(ScriptedLoadableModuleLogic, VTKObservationMixin):
   PREDICTION_VOLUME = "Prediction"
   RECONSTRUCTION_NODE = "ReconstructionNode"
   RECONSTRUCTION_VOLUME = "ReconstructionVolume"
+  TUMOR_MODEL_AI = "TumorModelAI"
+  AI_THRESHOLD = "ReconstructionThreshold"
+  DEFAULT_THRESHOLD = 127.0
+  DEFAULT_SMOOTH = 15
+  DEFAULT_DECIMATE = 0.25
+  AI_VISIBILITY_SETTING = "LumpNav2/AIVisible"
 
   # Layout codes
   LAYOUT_2D3D = 501
@@ -1482,6 +1492,8 @@ class LumpNav2Logic(ScriptedLoadableModuleLogic, VTKObservationMixin):
       parameterNode.SetParameter("Threshold", "100.0")
     if not parameterNode.GetParameter("Invert"):
       parameterNode.SetParameter("Invert", "false")
+    if not parameterNode.GetParameter(self.AI_THRESHOLD):
+      parameterNode.SetParameter(self.AI_THRESHOLD, str(self.DEFAULT_THRESHOLD))
 
     parameterNode = self.getParameterNode()
     parameterNode.SetAttribute("TipToSurfaceDistanceTextScale", "3")
@@ -2094,25 +2106,27 @@ class LumpNav2Logic(ScriptedLoadableModuleLogic, VTKObservationMixin):
       reconstructionVolume = parameterNode.GetNodeReference(self.RECONSTRUCTION_VOLUME)
       reconstructionVolume.SetAndObserveTransformNodeID(needleToReference.GetID())
 
+      # Convert to convex hull
+      self.createConvexHullFromVolume()
+
   def setUltrasoundSequenceBrowser(self, isRecording):
     parameterNode = self.getParameterNode()
     sequenceBrowserUltrasound = parameterNode.GetNodeReference(self.ULTRASOUND_SEQUENCE_BROWSER)
     sequenceBrowserUltrasound.SetRecordingActive(isRecording)
 
-  # TODO: change to contour visibility, if it exists
   def setSegmentationVisibility(self, toggled):
     parameterNode = self.getParameterNode()
-    segmentationVolume = parameterNode.GetNodeReference(self.PREDICTION_VOLUME)
-    reconstructionVolume = parameterNode.GetNodeReference(self.RECONSTRUCTION_VOLUME)
-    if segmentationVolume is not None and reconstructionVolume is not None:
+    predictionVolume = parameterNode.GetNodeReference(self.PREDICTION_VOLUME)
+    tumorModelAI = parameterNode.GetNodeReference(self.TUMOR_MODEL_AI)
+    if predictionVolume and tumorModelAI:
       if toggled:
-        slicer.util.setSliceViewerLayers(foreground=reconstructionVolume, foregroundOpacity=0.5)
-        reconstructionVolume.SetDisplayVisibility(True)
+        slicer.util.setSliceViewerLayers(foreground=predictionVolume, foregroundOpacity=0.5)
+        tumorModelAI.SetDisplayVisibility(True)
       else:
         slicer.util.setSliceViewerLayers(foreground=None)
-        reconstructionVolume.SetDisplayVisibility(False)
+        tumorModelAI.SetDisplayVisibility(False)
     else:
-      logging.warning("setSegmentationVisibility() called but no segmentation volume found")
+      logging.warning("setSegmentationVisibility() called but no reconstruction found")
 
   def setRegionOfInterestNode(self):
     parameterNode = self.getParameterNode()
@@ -2161,6 +2175,70 @@ class LumpNav2Logic(ScriptedLoadableModuleLogic, VTKObservationMixin):
       reconstructionVolume.SetDisplayVisibility(False)
 
     return reconstructionNode
+  
+  def createConvexHullFromVolume(self):
+    logging.info("Creating surface model from volume")
+
+    parameterNode = self.getParameterNode()
+    reconstructionVolume = parameterNode.GetNodeReference(self.RECONSTRUCTION_VOLUME)
+    
+    # Create model for AI tumor
+    tumorModelAI = parameterNode.GetNodeReference(self.TUMOR_MODEL_AI)
+    if tumorModelAI is None:
+      tumorModelAI = slicer.mrmlScene.AddNewNodeByClass("vtkMRMLModelNode", self.TUMOR_MODEL_AI)
+      tumorModelAI.CreateDefaultDisplayNodes()
+      tumorModelAI.SetAndObserveTransformNodeID(parameterNode.GetNodeReference(self.NEEDLE_TO_REFERENCE).GetID())
+      parameterNode.SetNodeReferenceID(self.TUMOR_MODEL_AI, tumorModelAI.GetID())
+    
+    # Set visibility of model from settings
+    visibleAI = slicer.util.settingsValue(self.AI_VISIBILITY_SETTING, False, converter=slicer.util.toBool)
+    tumorModelAI.SetDisplayVisibility(visibleAI)
+
+    # Set up grayscale model maker CLI node
+    parameters = {
+        "InputVolume": reconstructionVolume.GetID(),
+        "OutputGeometry": tumorModelAI.GetID(),
+        "Threshold": float(parameterNode.GetParameter(self.AI_THRESHOLD)),
+        "Smooth": self.DEFAULT_SMOOTH,
+        "Decimate": self.DEFAULT_DECIMATE,
+        "SplitNormals": True,
+        "PointNormals": True
+    }
+    modelMaker = slicer.modules.grayscalemodelmaker
+
+    # Run the CLI
+    cliNode = slicer.cli.runSync(modelMaker, None, parameters)
+
+    # Process results
+    if cliNode.GetStatus() & cliNode.ErrorsMask:
+        # error
+        errorText = cliNode.GetErrorText()
+        slicer.mrmlScene.RemoveNode(cliNode)
+        raise ValueError("CLI execution failed: " + errorText)
+    # success
+    slicer.mrmlScene.RemoveNode(cliNode)
+    
+    # Change color to green
+    displayNode = tumorModelAI.GetDisplayNode()
+    displayNode.SetColor(0, 0, 1)
+    displayNode.SetOpacity(0.3)
+
+    # Extract largest portion
+    connectivityFilter = vtk.vtkPolyDataConnectivityFilter()
+    connectivityFilter.SetInputData(tumorModelAI.GetPolyData())
+    connectivityFilter.SetExtractionModeToLargestRegion()
+
+    # Clean up model
+    cleanFilter = vtk.vtkCleanPolyData()
+    cleanFilter.SetInputConnection(connectivityFilter.GetOutputPort())
+
+    # Convert to convex hull
+    convexHull = vtk.vtkDelaunay3D()
+    convexHull.SetInputConnection(cleanFilter.GetOutputPort())
+    outerSurface = vtk.vtkGeometryFilter()
+    outerSurface.SetInputConnection(convexHull.GetOutputPort())
+    outerSurface.Update()
+    tumorModelAI.SetAndObservePolyData(outerSurface.GetOutput())
 
   def setDeleteLastFiducialClicked(self, numberOfPoints):
     deleted_coord = [0.0, 0.0, 0.0]

@@ -825,28 +825,6 @@
        </widget>
       </item>
       <item>
-       <widget class="qMRMLVolumeThresholdWidget" name="segmentationThresholdSlider">
-        <property name="enabled">
-         <bool>true</bool>
-        </property>
-        <property name="autoThreshold">
-         <number>0</number>
-        </property>
-        <property name="lowerThreshold">
-         <double>99.000000000000000</double>
-        </property>
-        <property name="upperThreshold">
-         <double>99.000000000000000</double>
-        </property>
-        <property name="lowerThresholdBound">
-         <double>99.000000000000000</double>
-        </property>
-        <property name="upperThresholdBound">
-         <double>254.000000000000000</double>
-        </property>
-       </widget>
-      </item>
-      <item>
        <widget class="QPushButton" name="warningSoundButton">
         <property name="text">
          <string>Breach Warning Sound</string>
@@ -858,6 +836,27 @@
          <bool>false</bool>
         </property>
        </widget>
+      </item>
+      <item>
+       <layout class="QHBoxLayout" name="horizontalLayout_10">
+        <item>
+         <widget class="QLabel" name="label">
+          <property name="text">
+           <string>Reconstruction threshold:</string>
+          </property>
+         </widget>
+        </item>
+        <item>
+         <widget class="ctkSliderWidget" name="thresholdSlider">
+          <property name="maximum">
+           <double>255.000000000000000</double>
+          </property>
+          <property name="value">
+           <double>127.000000000000000</double>
+          </property>
+         </widget>
+        </item>
+       </layout>
       </item>
       <item>
        <layout class="QHBoxLayout" name="horizontalLayout_9">
@@ -949,14 +948,14 @@
    <header>ctkPathLineEdit.h</header>
   </customwidget>
   <customwidget>
+   <class>ctkSliderWidget</class>
+   <extends>QWidget</extends>
+   <header>ctkSliderWidget.h</header>
+  </customwidget>
+  <customwidget>
    <class>qMRMLTableView</class>
    <extends>QTableView</extends>
    <header>qMRMLTableView.h</header>
-  </customwidget>
-  <customwidget>
-   <class>qMRMLVolumeThresholdWidget</class>
-   <extends>QWidget</extends>
-   <header>qMRMLVolumeThresholdWidget.h</header>
   </customwidget>
   <customwidget>
    <class>qMRMLWidget</class>
