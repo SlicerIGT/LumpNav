@@ -32,7 +32,7 @@
 	  Id="VideoDevice"
 	  LocalTimeOffsetSec="0.0"
 	  Type="TelemedVideo"
-	  DepthMm="60">
+	  DepthMm="50">
       <DataSources>
         <DataSource Type="Video" Id="Video" PortUsImageOrientation="UF" />
       </DataSources>
@@ -77,20 +77,22 @@
   </DataCollection>
 
   <CoordinateDefinitions>
+<!-- Calibrated on 2023-11-07 in Goodwin Hall-->
     <Transform From="Image" To="Probe" Matrix="
-      0.00500335 0.116407 -0.00675413 51.1101 
-      -0.116566 0.00516393 0.00265006 42.863 
-      0.00294202 0.00663217 0.116484 -27.4766 
-      0 0 0 1" />
+      0.00366469 0.0984197 -0.000540636 45.1799 
+      0.00692335 -0.000797456 -0.0982425 -19.74 
+      -0.0981774 0.0036175 -0.00694812 23.4017 
+      0 0 0 1 " 
+    />
     <Transform From="Image" To="TransdPixel" Matrix="
       1 0 0 -256
       0 1 0 0
       0 0 1 0
       0 0 0 1" />
     <Transform From="TransdPixel" To="Transd" Matrix="
-      0.116 0 0 0
-      0 0.116 0 0
-      0 0 0.116 0
+      0.098 0 0 0
+      0 0.098 0 0
+      0 0 0.098 0
       0 0 0 1" />
   </CoordinateDefinitions>
 
