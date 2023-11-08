@@ -197,8 +197,8 @@ class LumpNav2Widget(ScriptedLoadableModuleWidget, VTKObservationMixin):
     self.pivotCalibrationLogic = slicer.modules.pivotcalibration.logic()
     self.pivotCalibrationStopTime = 0
     self.pivotSamplingTimer = qt.QTimer()
-    self.pivotSamplingTimer.setInterval(500)
-    self.pivotSamplingTimer.setSingleShot(True)
+    self.pivotSamplingTimer.setInterval(1000)
+    self.pivotSamplingTimer.setSingleShot(False)
     self.pivotCalibrationMode = self.PIVOT_CALIBRATION  # Default value, but it is always set when starting pivot calibration
     self.pivotCalibrationResultNode = None
 
@@ -347,12 +347,6 @@ class LumpNav2Widget(ScriptedLoadableModuleWidget, VTKObservationMixin):
     configFilepath = slicer.util.settingsValue(self.logic.CONFIG_FILE_SETTING, self.logic.resourcePath(self.logic.CONFIG_FILE_DEFAULT))
     self.ui.plusConfigFileSelector.currentPath = configFilepath
     self.ui.plusConfigFileSelector.connect('currentPathChanged(const QString)', self.onPlusConfigFileChanged)
-    needleLengthOffset = slicer.util.settingsValue(
-      self.logic.NEEDLE_LENGTH_OFFSET_SETTING, self.logic.NEEDLE_LENGTH_OFFSET_DEFAULT, converter=lambda x: float(x)
-    )
-    if needleLengthOffset:
-      self.ui.needleLengthOffsetSpinBox.value = needleLengthOffset
-    self.ui.needleLengthOffsetSpinBox.connect('valueChanged(double)', self.onNeedleLengthOffsetChanged)
     self.ui.segmentationVisibility.connect('toggled(bool)', self.onSegmentationVisibilityToggled)
     self.ui.thresholdSlider.connect("valueChanged(double)", self.onThresholdSliderChanged)
 
@@ -392,6 +386,7 @@ class LumpNav2Widget(ScriptedLoadableModuleWidget, VTKObservationMixin):
     if time.time() < self.pivotCalibrationStopTime:
       self.pivotSamplingTimer.start()  # continue
     else:
+      self.pivotSamplingTimer.stop()
       self.onStopPivotCalibration()  # calibration completed
 
   def onStopPivotCalibration(self):
@@ -403,7 +398,6 @@ class LumpNav2Widget(ScriptedLoadableModuleWidget, VTKObservationMixin):
     else:
       calibrationSuccess = self.pivotCalibrationLogic.ComputeSpinCalibration()
 
-    # TODO: check if this is cautery or needle calibration and use different thresholds
     calibrationThresholdStr = slicer.util.settingsValue(
       self.CAUTERY_CALIBRATION_THRESHOLD_SETTING, self.CAUTERY_CALIBRATION_THRESHOLD_DEFAULT)
     calibrationThreshold = float(calibrationThresholdStr)
@@ -473,12 +467,8 @@ class LumpNav2Widget(ScriptedLoadableModuleWidget, VTKObservationMixin):
     currentOffset = slicer.util.settingsValue(
       self.logic.NEEDLE_LENGTH_OFFSET_SETTING, self.logic.NEEDLE_LENGTH_OFFSET_DEFAULT, converter=lambda x: float(x)
     )
-    self.ui.needleLengthOffsetSpinBox.setValue(currentOffset - diff)
-
-  def onNeedleLengthOffsetChanged(self, value):
-    logging.info(f"onNeedleLengthOffsetChanged({value})")
     settings = qt.QSettings()
-    settings.setValue(self.logic.NEEDLE_LENGTH_OFFSET_SETTING, value)
+    settings.setValue(self.logic.NEEDLE_LENGTH_OFFSET_SETTING, currentOffset - diff)
     self.logic.setNeedleModel()
     self.updateNeedleLengthLabel()
   
@@ -583,7 +573,6 @@ class LumpNav2Widget(ScriptedLoadableModuleWidget, VTKObservationMixin):
     """
     logging.info(f"onNavigationCollapsed({collapsed})")
     if collapsed:
-      self.logic.setBreachWarningOn(False)
       if self.ui.markPointsButton.checked:
         self.ui.markPointsButton.setChecked(False)
         self.logic.setMarkPoints(False)
@@ -604,7 +593,6 @@ class LumpNav2Widget(ScriptedLoadableModuleWidget, VTKObservationMixin):
         view.SetAxisLabelsVisible(False)
       interactionNode = slicer.app.applicationLogic().GetInteractionNode()
       interactionNode.SetCurrentInteractionMode(interactionNode.ViewTransform)
-      self.logic.setBreachWarningOn(True)
       self.updateGUIFromParameterNode()
 
   def onDual3DViewButton(self, toggled):
@@ -1247,6 +1235,7 @@ class LumpNav2Widget(ScriptedLoadableModuleWidget, VTKObservationMixin):
       self.ui.deleteAllFiducialsButton.setEnabled(True)
       self.ui.deleteLastFiducialNavigationButton.setEnabled(True)
       self.ui.selectPointsToEraseButton.setEnabled(True)
+      self.logic.setBreachWarning(True)
 
     if numberOfPoints < 1:
       self.ui.deleteLastFiducialButton.setEnabled(False)
@@ -1254,6 +1243,7 @@ class LumpNav2Widget(ScriptedLoadableModuleWidget, VTKObservationMixin):
       self.ui.deleteLastFiducialNavigationButton.setEnabled(False)
       self.ui.selectPointsToEraseButton.setChecked(False)
       self.ui.selectPointsToEraseButton.setEnabled(False)
+      self.logic.setBreachWarning(False)
 
     # Update event UI when event table is changed by tumor breach
     if not self.observedEventTableNode:
@@ -1804,7 +1794,7 @@ class LumpNav2Logic(ScriptedLoadableModuleLogic, VTKObservationMixin):
     sequenceNode = sequenceLogic.AddSynchronizedNode(None, cauteryTipToCautery, sequenceBrowserTracking)
     sequenceBrowserTracking.SetRecording(sequenceNode, True)
     sequenceBrowserTracking.SetPlayback(sequenceNode, True)
-    sequenceBrowserTracking.SetRecordingActive(True)  # Actually start recording
+    sequenceBrowserTracking.SetRecordingActive(False)
 
     sequenceBrowserUltrasound = parameterNode.GetNodeReference(self.ULTRASOUND_SEQUENCE_BROWSER)
 
@@ -1848,7 +1838,7 @@ class LumpNav2Logic(ScriptedLoadableModuleLogic, VTKObservationMixin):
       self.setRulerDistanceVisibility(displayDistanceEnabled)
 
       # Prevent warning that there is no surface model (before tumor contouring)
-      self.setBreachWarningOn(False)
+      self.setBreachWarning(False)
 
     breachMarkups_Needle = parameterNode.GetNodeReference(self.BREACH_MARKUPS_NEEDLE)
     if breachMarkups_Needle is None:
@@ -2118,15 +2108,12 @@ class LumpNav2Logic(ScriptedLoadableModuleLogic, VTKObservationMixin):
     parameterNode = self.getParameterNode()
     predictionVolume = parameterNode.GetNodeReference(self.PREDICTION_VOLUME)
     tumorModelAI = parameterNode.GetNodeReference(self.TUMOR_MODEL_AI)
-    if predictionVolume and tumorModelAI:
-      if toggled:
-        slicer.util.setSliceViewerLayers(foreground=predictionVolume, foregroundOpacity=0.5)
-        tumorModelAI.SetDisplayVisibility(True)
-      else:
-        slicer.util.setSliceViewerLayers(foreground=None)
-        tumorModelAI.SetDisplayVisibility(False)
+    if tumorModelAI:
+      tumorModelAI.SetDisplayVisibility(toggled)
+    if toggled:
+      slicer.util.setSliceViewerLayers(foreground=predictionVolume, foregroundOpacity=0.5)
     else:
-      logging.warning("setSegmentationVisibility() called but no reconstruction found")
+      slicer.util.setSliceViewerLayers(foreground=None)
 
   def setRegionOfInterestNode(self):
     parameterNode = self.getParameterNode()
@@ -2341,7 +2328,7 @@ class LumpNav2Logic(ScriptedLoadableModuleLogic, VTKObservationMixin):
           cauteryModel.SetDisplayVisibility(False)
           stickModel.SetDisplayVisibility(True)
 
-  def setBreachWarningOn(self, active):
+  def setBreachWarning(self, active):
     """
     Turns breach warning on or off
     """
