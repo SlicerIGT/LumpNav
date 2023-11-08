@@ -349,6 +349,7 @@ class LumpNav2Widget(ScriptedLoadableModuleWidget, VTKObservationMixin):
     self.ui.plusConfigFileSelector.connect('currentPathChanged(const QString)', self.onPlusConfigFileChanged)
     self.ui.segmentationVisibility.connect('toggled(bool)', self.onSegmentationVisibilityToggled)
     self.ui.thresholdSlider.connect("valueChanged(double)", self.onThresholdSliderChanged)
+    self.ui.watchedModelButtonGroup.buttonClicked.connect(self.onWatchedModelClicked)
 
     # Add custom layouts
     self.logic.addCustomLayouts()
@@ -549,6 +550,15 @@ class LumpNav2Widget(ScriptedLoadableModuleWidget, VTKObservationMixin):
     logging.info("onWarningSoundToggled({})".format(toggled))
     self.logic.setWarningSound(toggled)
 
+  def onWatchedModelClicked(self, button):
+    parameterNode = self._parameterNode
+    if button == self.ui.automaticWatchedModelButton:
+      modelNode = parameterNode.GetNodeReference(self.logic.TUMOR_MODEL_AI)
+      self.logic.setBreachWarning(True)
+    else:
+      modelNode = parameterNode.GetNodeReference(self.logic.TUMOR_MODEL)
+    self.logic.setBreachWarningModel(modelNode)
+  
   def onToolsCollapsed(self, collapsed):
     if not collapsed:
       self.ui.contouringCollapsibleButton.collapsed = True
@@ -1235,7 +1245,8 @@ class LumpNav2Widget(ScriptedLoadableModuleWidget, VTKObservationMixin):
       self.ui.deleteAllFiducialsButton.setEnabled(True)
       self.ui.deleteLastFiducialNavigationButton.setEnabled(True)
       self.ui.selectPointsToEraseButton.setEnabled(True)
-      self.logic.setBreachWarning(True)
+      if self.ui.manualWatchedModelButton.checked:
+        self.logic.setBreachWarning(True)
 
     if numberOfPoints < 1:
       self.ui.deleteLastFiducialButton.setEnabled(False)
@@ -1243,7 +1254,8 @@ class LumpNav2Widget(ScriptedLoadableModuleWidget, VTKObservationMixin):
       self.ui.deleteLastFiducialNavigationButton.setEnabled(False)
       self.ui.selectPointsToEraseButton.setChecked(False)
       self.ui.selectPointsToEraseButton.setEnabled(False)
-      self.logic.setBreachWarning(False)
+      if self.ui.manualWatchedModelButton.checked:
+        self.logic.setBreachWarning(False)
 
     # Update event UI when event table is changed by tumor breach
     if not self.observedEventTableNode:
@@ -1315,6 +1327,12 @@ class LumpNav2Widget(ScriptedLoadableModuleWidget, VTKObservationMixin):
     ultrasoundSqBr = self._parameterNode.GetNodeReference(self.logic.ULTRASOUND_SEQUENCE_BROWSER)
     if ultrasoundSqBr is not None:
       self.ui.startStopRecordingButton.checked = ultrasoundSqBr.GetRecordingActive()
+
+    tumorModelAI = self._parameterNode.GetNodeReference(self.logic.TUMOR_MODEL_AI)
+    if tumorModelAI and tumorModelAI.GetPolyData().GetPointData().GetNumberOfArrays() > 0:
+      self.ui.automaticWatchedModelButton.enabled = True
+    else:
+      self.ui.automaticWatchedModelButton.enabled = False
     
     eventTable = self._parameterNode.GetNodeReference(self.logic.EVENT_TABLE_NODE)
     if eventTable is not None:
@@ -1942,9 +1960,7 @@ class LumpNav2Logic(ScriptedLoadableModuleLogic, VTKObservationMixin):
       predictionImage = slicer.mrmlScene.AddNewNodeByClass("vtkMRMLScalarVolumeNode", self.PREDICTION_VOLUME)
       predictionImage.CreateDefaultDisplayNodes()
       predictionDisplayNode = predictionImage.GetDisplayNode()
-      predictionDisplayNode.SetWindow(205)
-      predictionDisplayNode.SetLevel(220)
-      predictionDisplayNode.SetAndObserveColorNodeID("vtkMRMLColorTableNodeGreen")
+      predictionDisplayNode.SetAndObserveColorNodeID("vtkMRMLColorTableNodeBlue")
       imageArray = np.zeros((1, 615, 525), dtype="uint8")
       slicer.util.updateVolumeFromArray(predictionImage, imageArray)
       parameterNode.SetNodeReferenceID(self.PREDICTION_VOLUME, predictionImage.GetID())
@@ -2601,6 +2617,14 @@ class LumpNav2Logic(ScriptedLoadableModuleLogic, VTKObservationMixin):
     breachMarkups_Needle = parameterNode.GetNodeReference(self.BREACH_MARKUPS_NEEDLE)
     if breachMarkups_Needle is not None:
       breachMarkups_Needle.GetDisplayNode().SetGlyphScale(value)
+
+  def setBreachWarningModel(self, modelNode):
+    if modelNode == None:
+      return
+    parameterNode = self.getParameterNode()
+    breachWarningNode = parameterNode.GetNodeReference(self.BREACH_WARNING)
+    breachWarningNode.SetAndObserveWatchedModelNodeID(modelNode.GetID())
+    logging.info(f"Set breach warning watched model to {modelNode.GetName()}")
 
   def onImageImageModified(self, observer, eventid):
     self.updatePredictionImageDimensions()
