@@ -814,8 +814,6 @@ class LumpNav2Widget(ScriptedLoadableModuleWidget, VTKObservationMixin):
 
   def onSegmentationVisibilityToggled(self, toggled):
     logging.info("onSegmentationVisibilityToggled")
-    settings = qt.QSettings()
-    settings.setValue(self.logic.AI_VISIBILITY_SETTING, "True" if toggled else "False")
     if toggled:
       self.ui.segmentationVisibility.text = "Hide AI Segmentation"
     else:
@@ -1257,6 +1255,12 @@ class LumpNav2Widget(ScriptedLoadableModuleWidget, VTKObservationMixin):
       if self.ui.manualWatchedModelButton.checked:
         self.logic.setBreachWarning(False)
 
+    tumorModelAI = self._parameterNode.GetNodeReference(self.logic.TUMOR_MODEL_AI)
+    if tumorModelAI and tumorModelAI.GetPolyData():
+      self.ui.automaticWatchedModelButton.enabled = True
+    else:
+      self.ui.automaticWatchedModelButton.enabled = False
+
     # Update event UI when event table is changed by tumor breach
     if not self.observedEventTableNode:
       currentEventTableNode = self._parameterNode.GetNodeReference(self.logic.EVENT_TABLE_NODE)
@@ -1327,12 +1331,6 @@ class LumpNav2Widget(ScriptedLoadableModuleWidget, VTKObservationMixin):
     ultrasoundSqBr = self._parameterNode.GetNodeReference(self.logic.ULTRASOUND_SEQUENCE_BROWSER)
     if ultrasoundSqBr is not None:
       self.ui.startStopRecordingButton.checked = ultrasoundSqBr.GetRecordingActive()
-
-    tumorModelAI = self._parameterNode.GetNodeReference(self.logic.TUMOR_MODEL_AI)
-    if tumorModelAI and tumorModelAI.GetPolyData().GetPointData().GetNumberOfArrays() > 0:
-      self.ui.automaticWatchedModelButton.enabled = True
-    else:
-      self.ui.automaticWatchedModelButton.enabled = False
     
     eventTable = self._parameterNode.GetNodeReference(self.logic.EVENT_TABLE_NODE)
     if eventTable is not None:
@@ -1443,7 +1441,7 @@ class LumpNav2Logic(ScriptedLoadableModuleLogic, VTKObservationMixin):
   DEFAULT_THRESHOLD = 127.0
   DEFAULT_SMOOTH = 15
   DEFAULT_DECIMATE = 0.25
-  AI_VISIBILITY_SETTING = "LumpNav2/AIVisible"
+  AI_VISIBLE = "AIVisible"
 
   # Layout codes
   LAYOUT_2D3D = 501
@@ -1502,6 +1500,8 @@ class LumpNav2Logic(ScriptedLoadableModuleLogic, VTKObservationMixin):
       parameterNode.SetParameter("Invert", "false")
     if not parameterNode.GetParameter(self.AI_THRESHOLD):
       parameterNode.SetParameter(self.AI_THRESHOLD, str(self.DEFAULT_THRESHOLD))
+    if not parameterNode.GetParameter(self.AI_VISIBLE):
+      parameterNode.SetParameter(self.AI_VISIBLE, "False")
 
     parameterNode = self.getParameterNode()
     parameterNode.SetAttribute("TipToSurfaceDistanceTextScale", "3")
@@ -1819,9 +1819,16 @@ class LumpNav2Logic(ScriptedLoadableModuleLogic, VTKObservationMixin):
     if sequenceBrowserUltrasound is None:
       sequenceBrowserUltrasound = slicer.mrmlScene.AddNewNodeByClass("vtkMRMLSequenceBrowserNode", self.ULTRASOUND_SEQUENCE_BROWSER)
       parameterNode.SetNodeReferenceID(self.ULTRASOUND_SEQUENCE_BROWSER, sequenceBrowserUltrasound.GetID())
-
     image_Image = parameterNode.GetNodeReference(self.IMAGE_IMAGE)
     sequenceNode = sequenceLogic.AddSynchronizedNode(None, image_Image, sequenceBrowserUltrasound)
+    sequenceBrowserUltrasound.SetRecording(sequenceNode, True)
+    sequenceBrowserUltrasound.SetPlayback(sequenceNode, True)
+    imageToTransd = parameterNode.GetNodeReference(self.IMAGE_TO_TRANSD)
+    sequenceNode = sequenceLogic.AddSynchronizedNode(None, imageToTransd, sequenceBrowserUltrasound)
+    sequenceBrowserUltrasound.SetRecording(sequenceNode, True)
+    sequenceBrowserUltrasound.SetPlayback(sequenceNode, True)
+    transdToReference = parameterNode.GetNodeReference(self.TRANSD_TO_REFERENCE)
+    sequenceNode = sequenceLogic.AddSynchronizedNode(None, transdToReference, sequenceBrowserUltrasound)
     sequenceBrowserUltrasound.SetRecording(sequenceNode, True)
     sequenceBrowserUltrasound.SetPlayback(sequenceNode, True)
     sequenceBrowserUltrasound.SetRecordingActive(False)
@@ -1948,7 +1955,7 @@ class LumpNav2Logic(ScriptedLoadableModuleLogic, VTKObservationMixin):
     if imageImage is None:
       imageImage = slicer.mrmlScene.AddNewNodeByClass("vtkMRMLScalarVolumeNode", self.IMAGE_IMAGE)
       imageImage.CreateDefaultDisplayNodes()
-      imageArray = np.zeros((1, 615, 525), dtype="uint8")  # TODO: temporary solution
+      imageArray = np.zeros((1, 615, 525), dtype="uint8")
       slicer.util.updateVolumeFromArray(imageImage, imageArray)
       parameterNode.SetNodeReferenceID(self.IMAGE_IMAGE, imageImage.GetID())
       # Update prediction volume dimensions when image dimensions change
@@ -1967,8 +1974,7 @@ class LumpNav2Logic(ScriptedLoadableModuleLogic, VTKObservationMixin):
     predictionImage.SetAndObserveTransformNodeID(imageToTransd.GetID())
 
     # TransdToNeedle to display tumour reconstruction in needle coordinate system
-    transdToNeedle = self.addLinearTransformToScene(self.TRANSD_TO_NEEDLE, parentTransform=needleToReference)
-    parameterNode.SetNodeReferenceID(self.TRANSD_TO_NEEDLE, transdToNeedle.GetID())
+    self.addLinearTransformToScene(self.TRANSD_TO_NEEDLE, parentTransform=needleToReference)
 
   def updateImageToTransdFromDepth(self, depthMm):
     """
@@ -2108,10 +2114,6 @@ class LumpNav2Logic(ScriptedLoadableModuleLogic, VTKObservationMixin):
       transdToNeedle.SetAndObserveTransformNodeID(needleToReference.GetID())
       imageToTransd.SetAndObserveTransformNodeID(transdToReference.GetID())
 
-      # Move reconstruction to needle coordinate system
-      reconstructionVolume = parameterNode.GetNodeReference(self.RECONSTRUCTION_VOLUME)
-      reconstructionVolume.SetAndObserveTransformNodeID(needleToReference.GetID())
-
       # Convert to convex hull
       self.createConvexHullFromVolume()
 
@@ -2122,6 +2124,7 @@ class LumpNav2Logic(ScriptedLoadableModuleLogic, VTKObservationMixin):
 
   def setSegmentationVisibility(self, toggled):
     parameterNode = self.getParameterNode()
+    parameterNode.SetParameter(self.AI_VISIBLE, str(toggled))
     predictionVolume = parameterNode.GetNodeReference(self.PREDICTION_VOLUME)
     tumorModelAI = parameterNode.GetNodeReference(self.TUMOR_MODEL_AI)
     if tumorModelAI:
@@ -2137,6 +2140,7 @@ class LumpNav2Logic(ScriptedLoadableModuleLogic, VTKObservationMixin):
     if roiNode is None:
       # Create new ROI node
       roiNode = slicer.mrmlScene.AddNewNodeByClass("vtkMRMLAnnotationROINode", self.ROI_NODE)
+      roiNode.SaveWithSceneOff()
       parameterNode.SetNodeReferenceID(self.ROI_NODE, roiNode.GetID())
       roiNode.SetDisplayVisibility(False)
 
@@ -2194,8 +2198,8 @@ class LumpNav2Logic(ScriptedLoadableModuleLogic, VTKObservationMixin):
       parameterNode.SetNodeReferenceID(self.TUMOR_MODEL_AI, tumorModelAI.GetID())
     
     # Set visibility of model from settings
-    visibleAI = slicer.util.settingsValue(self.AI_VISIBILITY_SETTING, False, converter=slicer.util.toBool)
-    tumorModelAI.SetDisplayVisibility(visibleAI)
+    visibleAI = parameterNode.GetParameter(self.AI_VISIBLE)
+    tumorModelAI.SetDisplayVisibility(True if visibleAI == "True" else False)
 
     # Set up grayscale model maker CLI node
     parameters = {
@@ -2621,9 +2625,11 @@ class LumpNav2Logic(ScriptedLoadableModuleLogic, VTKObservationMixin):
   def setBreachWarningModel(self, modelNode):
     if modelNode == None:
       return
+    modelColor = modelNode.GetDisplayNode().GetColor()
     parameterNode = self.getParameterNode()
     breachWarningNode = parameterNode.GetNodeReference(self.BREACH_WARNING)
     breachWarningNode.SetAndObserveWatchedModelNodeID(modelNode.GetID())
+    breachWarningNode.SetOriginalColor(modelColor)
     logging.info(f"Set breach warning watched model to {modelNode.GetName()}")
 
   def onImageImageModified(self, observer, eventid):
