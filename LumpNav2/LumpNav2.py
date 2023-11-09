@@ -1925,6 +1925,11 @@ class LumpNav2Logic(ScriptedLoadableModuleLogic, VTKObservationMixin):
     # Translation is not relevant for ReferenceToRas, and rotation is fine even with +/- 30 deg error.
 
     referenceToRas = self.addLinearTransformToScene(self.REFERENCE_TO_RAS)
+    m = self.createMatrixFromString('0 1 0 0 '
+                                    '0 0 -1 0 '
+                                    '-1 0 0 0 '
+                                    '0 0 0 1')
+    referenceToRas.SetMatrixTransformToParent(m)
 
     # Needle tracking
     needleToReference = self.addLinearTransformToScene(self.NEEDLE_TO_REFERENCE, parentTransform=referenceToRas)
