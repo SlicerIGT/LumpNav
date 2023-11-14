@@ -1383,6 +1383,7 @@ class LumpNav2Logic(ScriptedLoadableModuleLogic, VTKObservationMixin):
   IMAGE_TO_TRANSD = "ImageToTransd"
   CAUTERYCAMERA_TO_CAUTERY = "CauteryCameraToCautery"
   TRANSD_TO_NEEDLE = "TransdToNeedle"
+  PREDICTION_TO_TRANSD = "PredictionToTransd"
 
   CONTOUR_STATUS = "ContourStatus"
   CONTOUR_ADDING = "ContourAdding"
@@ -1408,9 +1409,9 @@ class LumpNav2Logic(ScriptedLoadableModuleLogic, VTKObservationMixin):
   PREDICTION_PORT = 18945
 
   # Model names and settings
+  REFERENCE_TO_RAS_SETTING = "LumpNav2/ReferenceToRas"
   NEEDLE_MODEL = "NeedleModel"
   NEEDLE_VISIBILITY_SETTING = "LumpNav2/NeedleVisible"
-  NEEDLETIP_TO_NEEDLE_SETTING = "NeedleTipToNeedleSetting"
   NEEDLE_LENGTH_OFFSET_SETTING = "LumpNav2/NeedleLengthOffset"
   NEEDLE_LENGTH_OFFSET_DEFAULT = 17
   CAUTERY_MODEL = "CauteryModel"
@@ -1475,6 +1476,8 @@ class LumpNav2Logic(ScriptedLoadableModuleLogic, VTKObservationMixin):
     # Telemed C5 probe geometry
     self.scaling_Intercept = 0.01663333
     self.scaling_Slope = 0.00192667
+
+    self.viewpointLogic = Viewpoint.ViewpointLogic()
 
     self.firstOutputReady = False
     self.reconstructionLogic = slicer.modules.volumereconstruction.logic()
@@ -1657,47 +1660,6 @@ class LumpNav2Logic(ScriptedLoadableModuleLogic, VTKObservationMixin):
 
     self.setupTransformHierarchy()
 
-    # Show ultrasound in 2D view
-    layoutManager = slicer.app.layoutManager()
-    # Show ultrasound in red view.
-    redSlice = layoutManager.sliceWidget('Red')
-    controller = redSlice.sliceController()
-    controller.setSliceVisible(True)
-    redSliceLogic = redSlice.sliceLogic()
-    image_Image = parameterNode.GetNodeReference(self.IMAGE_IMAGE)
-    redSliceLogic.GetSliceCompositeNode().SetBackgroundVolumeID(image_Image.GetID())
-    # Set up volume reslice driver.
-    resliceLogic = slicer.modules.volumereslicedriver.logic()
-    if resliceLogic:
-      redNode = slicer.mrmlScene.GetNodeByID('vtkMRMLSliceNodeRed')
-      # Typically the image is zoomed in, therefore it is faster if the original resolution is used
-      # on the 3D slice (and also we can show the full image and not the shape and size of the 2D view)
-      redNode.SetSliceResolutionMode(slicer.vtkMRMLSliceNode.SliceResolutionMatchVolumes)
-      resliceLogic.SetDriverForSlice(image_Image.GetID(), redNode)
-      resliceLogic.SetModeForSlice(6, redNode)  # Transverse mode, default for PLUS ultrasound.
-      resliceLogic.SetFlipForSlice(False, redNode)
-      resliceLogic.SetRotationForSlice(180, redNode)
-      redSliceLogic.FitSliceToAll()
-    else:
-      logging.warning('Logic not found for Volume Reslice Driver')
-
-    self.viewpointLogic = Viewpoint.ViewpointLogic()
-
-    settings = qt.QSettings()
-    needleTipToNeedle_settings = slicer.util.settingsValue(self.NEEDLETIP_TO_NEEDLE_SETTING, "")
-    needleTipToNeedle = parameterNode.GetNodeReference(self.NEEDLETIP_TO_NEEDLE)
-    if needleTipToNeedle_settings == "":
-      needleTipToNeedle_settings = slicer.util.arrayFromTransformMatrix(needleTipToNeedle)
-      needleTipToNeedle_settings = needleTipToNeedle_settings.tolist()
-      needleTipToNeedle_settings = json.dumps(needleTipToNeedle_settings)
-      settings.setValue(self.NEEDLETIP_TO_NEEDLE_SETTING, needleTipToNeedle_settings)
-    else:
-      needleTipToNeedle_settings = json.loads(needleTipToNeedle_settings)
-      needleTipToNeedle_settings = np.array(needleTipToNeedle_settings)
-      needleTipToNeedle_settings = slicer.util.vtkMatrixFromArray(needleTipToNeedle_settings)
-      needleTipToNeedle.SetMatrixTransformToParent(needleTipToNeedle_settings)
-    self.addObserver(needleTipToNeedle, slicer.vtkMRMLLinearTransformNode.TransformModifiedEvent, self.onNeedleTipToNeedleModified)
-
     # Create models
     createModelsLogic = slicer.modules.createmodels.logic()
 
@@ -1710,6 +1672,8 @@ class LumpNav2Logic(ScriptedLoadableModuleLogic, VTKObservationMixin):
       needleModel.SetName(self.NEEDLE_MODEL)
       needleModel.GetDisplayNode().Visibility2DOn()
       parameterNode.SetNodeReferenceID(self.NEEDLE_MODEL, needleModel.GetID())
+
+    needleTipToNeedle = parameterNode.GetNodeReference(self.NEEDLETIP_TO_NEEDLE)
     needleModel.SetAndObserveTransformNodeID(needleTipToNeedle.GetID())
 
     needleVisible = slicer.util.settingsValue(self.NEEDLE_VISIBILITY_SETTING, True, converter=slicer.util.toBool)
@@ -1814,6 +1778,20 @@ class LumpNav2Logic(ScriptedLoadableModuleLogic, VTKObservationMixin):
     sequenceBrowserTracking.SetPlayback(sequenceNode, True)
     sequenceBrowserTracking.SetRecordingActive(False)
 
+    # Ultrasound image
+    imageImage = parameterNode.GetNodeReference(self.IMAGE_IMAGE)
+    if imageImage is None:
+      imageImage = slicer.mrmlScene.AddNewNodeByClass("vtkMRMLScalarVolumeNode", self.IMAGE_IMAGE)
+      imageImage.CreateDefaultDisplayNodes()
+      imageArray = np.zeros((1, 615, 525), dtype="uint8")
+      slicer.util.updateVolumeFromArray(imageImage, imageArray)
+      parameterNode.SetNodeReferenceID(self.IMAGE_IMAGE, imageImage.GetID())
+      # Update prediction volume dimensions when image dimensions change
+      self.addObserver(imageImage, slicer.vtkMRMLScalarVolumeNode.ImageDataModifiedEvent, self.onImageImageModified)
+
+    imageToTransd = parameterNode.GetNodeReference(self.IMAGE_TO_TRANSD)
+    imageImage.SetAndObserveTransformNodeID(imageToTransd.GetID())
+
     sequenceBrowserUltrasound = parameterNode.GetNodeReference(self.ULTRASOUND_SEQUENCE_BROWSER)
 
     if sequenceBrowserUltrasound is None:
@@ -1832,6 +1810,30 @@ class LumpNav2Logic(ScriptedLoadableModuleLogic, VTKObservationMixin):
     sequenceBrowserUltrasound.SetRecording(sequenceNode, True)
     sequenceBrowserUltrasound.SetPlayback(sequenceNode, True)
     sequenceBrowserUltrasound.SetRecordingActive(False)
+
+    # Show ultrasound in 2D view
+    layoutManager = slicer.app.layoutManager()
+    # Show ultrasound in red view.
+    redSlice = layoutManager.sliceWidget('Red')
+    controller = redSlice.sliceController()
+    controller.setSliceVisible(True)
+    redSliceLogic = redSlice.sliceLogic()
+    image_Image = parameterNode.GetNodeReference(self.IMAGE_IMAGE)
+    redSliceLogic.GetSliceCompositeNode().SetBackgroundVolumeID(image_Image.GetID())
+    # Set up volume reslice driver.
+    resliceLogic = slicer.modules.volumereslicedriver.logic()
+    if resliceLogic:
+      redNode = slicer.mrmlScene.GetNodeByID('vtkMRMLSliceNodeRed')
+      # Typically the image is zoomed in, therefore it is faster if the original resolution is used
+      # on the 3D slice (and also we can show the full image and not the shape and size of the 2D view)
+      redNode.SetSliceResolutionMode(slicer.vtkMRMLSliceNode.SliceResolutionMatchVolumes)
+      resliceLogic.SetDriverForSlice(image_Image.GetID(), redNode)
+      resliceLogic.SetModeForSlice(6, redNode)  # Transverse mode, default for PLUS ultrasound.
+      resliceLogic.SetFlipForSlice(False, redNode)
+      resliceLogic.SetRotationForSlice(180, redNode)
+      redSliceLogic.FitSliceToAll()
+    else:
+      logging.warning('Logic not found for Volume Reslice Driver')
 
     # Set up breach warning node
     breachWarningNode = parameterNode.GetNodeReference(self.BREACH_WARNING)
@@ -1900,6 +1902,20 @@ class LumpNav2Logic(ScriptedLoadableModuleLogic, VTKObservationMixin):
       parameterNode.SetNodeReferenceID(self.CAUTERYCAMERA_TO_CAUTERY, cauteryCameraToCautery.GetID())
     cauteryCameraToCautery.SetAndObserveTransformNodeID(cauteryTipToCautery.GetID())
 
+    # AI Prediction
+    predictionImage = parameterNode.GetNodeReference(self.PREDICTION_VOLUME)
+    if predictionImage is None:
+      predictionImage = slicer.mrmlScene.AddNewNodeByClass("vtkMRMLScalarVolumeNode", self.PREDICTION_VOLUME)
+      predictionImage.CreateDefaultDisplayNodes()
+      predictionDisplayNode = predictionImage.GetDisplayNode()
+      predictionDisplayNode.SetAndObserveColorNodeID("vtkMRMLColorTableNodeBlue")
+      imageArray = np.zeros((1, 615, 525), dtype="uint8")
+      slicer.util.updateVolumeFromArray(predictionImage, imageArray)
+      parameterNode.SetNodeReferenceID(self.PREDICTION_VOLUME, predictionImage.GetID())
+
+    predToTransd = parameterNode.GetNodeReference(self.PREDICTION_TO_TRANSD)
+    predictionImage.SetAndObserveTransformNodeID(predToTransd.GetID())
+
     # Event recording
     eventTableNode = parameterNode.GetNodeReference(self.EVENT_TABLE_NODE)
     if eventTableNode is None:
@@ -1925,15 +1941,41 @@ class LumpNav2Logic(ScriptedLoadableModuleLogic, VTKObservationMixin):
     # Translation is not relevant for ReferenceToRas, and rotation is fine even with +/- 30 deg error.
 
     referenceToRas = self.addLinearTransformToScene(self.REFERENCE_TO_RAS)
-    m = self.createMatrixFromString('0 1 0 0 '
-                                    '0 0 -1 0 '
-                                    '-1 0 0 0 '
-                                    '0 0 0 1')
-    referenceToRas.SetMatrixTransformToParent(m)
+    settings = qt.QSettings()
+    referenceToRasSetting = slicer.util.settingsValue(self.REFERENCE_TO_RAS_SETTING, "")
+    if referenceToRasSetting:
+      referenceToRasMatrix = json.loads(referenceToRasSetting)
+      referenceToRasMatrix = np.array(referenceToRasMatrix)
+      referenceToRasMatrix = slicer.util.vtkMatrixFromArray(referenceToRasMatrix)
+      referenceToRas.SetMatrixTransformToParent(referenceToRasMatrix)
+    else:
+      # Create default referenceToRas transform
+      m = self.createMatrixFromString('0 1 0 0 '
+                                      '0 0 -1 0 '
+                                      '-1 0 0 0 '
+                                      '0 0 0 1')
+      referenceToRas.SetMatrixTransformToParent(m)
+      # Save default referenceToRas transform
+      referenceToRasMatrix = slicer.util.arrayFromTransformMatrix(referenceToRas)
+      referenceToRasMatrix = referenceToRasMatrix.tolist()
+      referenceToRasMatrix = json.dumps(referenceToRasMatrix)
+      settings.setValue(self.REFERENCE_TO_RAS_SETTING, referenceToRasMatrix)
 
     # Needle tracking
     needleToReference = self.addLinearTransformToScene(self.NEEDLE_TO_REFERENCE, parentTransform=referenceToRas)
-    self.addLinearTransformToScene(self.NEEDLETIP_TO_NEEDLE, parentTransform=needleToReference)
+    
+    needleTipToNeedle = parameterNode.GetNodeReference(self.NEEDLETIP_TO_NEEDLE)
+    if needleTipToNeedle is None:
+      needleTipToNeedleFileWithPath = self.resourcePath(self.NEEDLETIP_TO_NEEDLE + ".h5")
+      try:
+        logging.info("Loading needle calibration from file: {}".format(needleTipToNeedleFileWithPath))
+        needleTipToNeedle = slicer.util.loadTransform(needleTipToNeedleFileWithPath)
+      except Exception as e:
+        logging.info("Creating needle calibration file, because none was found as: {}".format(needleTipToNeedleFileWithPath))
+        needleTipToNeedle = slicer.mrmlScene.AddNewNodeByClass("vtkMRMLLinearTransformNode", self.NEEDLETIP_TO_NEEDLE)
+      parameterNode.SetNodeReferenceID(self.NEEDLETIP_TO_NEEDLE, needleTipToNeedle.GetID())
+    needleTipToNeedle.SetAndObserveTransformNodeID(needleToReference.GetID())
+    self.addObserver(needleTipToNeedle, slicer.vtkMRMLLinearTransformNode.TransformModifiedEvent, self.onNeedleTipToNeedleModified)
 
     # Cautery tracking
     cauteryToReference = self.addLinearTransformToScene(self.CAUTERY_TO_REFERENCE, parentTransform=referenceToRas)
@@ -1956,30 +1998,12 @@ class LumpNav2Logic(ScriptedLoadableModuleLogic, VTKObservationMixin):
     imageToTransd = self.addLinearTransformToScene(self.IMAGE_TO_TRANSD, parentTransform=transdToReference)
     self.updateImageToTransdFromDepth(self.DEFAULT_US_DEPTH)
 
-    imageImage = parameterNode.GetNodeReference(self.IMAGE_IMAGE)
-    if imageImage is None:
-      imageImage = slicer.mrmlScene.AddNewNodeByClass("vtkMRMLScalarVolumeNode", self.IMAGE_IMAGE)
-      imageImage.CreateDefaultDisplayNodes()
-      imageArray = np.zeros((1, 615, 525), dtype="uint8")
-      slicer.util.updateVolumeFromArray(imageImage, imageArray)
-      parameterNode.SetNodeReferenceID(self.IMAGE_IMAGE, imageImage.GetID())
-      # Update prediction volume dimensions when image dimensions change
-      self.addObserver(imageImage, slicer.vtkMRMLScalarVolumeNode.ImageDataModifiedEvent, self.onImageImageModified)
-    imageImage.SetAndObserveTransformNodeID(imageToTransd.GetID())
-
-    predictionImage = parameterNode.GetNodeReference(self.PREDICTION_VOLUME)
-    if predictionImage is None:
-      predictionImage = slicer.mrmlScene.AddNewNodeByClass("vtkMRMLScalarVolumeNode", self.PREDICTION_VOLUME)
-      predictionImage.CreateDefaultDisplayNodes()
-      predictionDisplayNode = predictionImage.GetDisplayNode()
-      predictionDisplayNode.SetAndObserveColorNodeID("vtkMRMLColorTableNodeBlue")
-      imageArray = np.zeros((1, 615, 525), dtype="uint8")
-      slicer.util.updateVolumeFromArray(predictionImage, imageArray)
-      parameterNode.SetNodeReferenceID(self.PREDICTION_VOLUME, predictionImage.GetID())
-    predictionImage.SetAndObserveTransformNodeID(imageToTransd.GetID())
-
-    # TransdToNeedle to display tumour reconstruction in needle coordinate system
-    self.addLinearTransformToScene(self.TRANSD_TO_NEEDLE, parentTransform=needleToReference)
+    # Transforms to display tumour reconstruction in needle coordinate system
+    transdToNeedle = self.addLinearTransformToScene(self.TRANSD_TO_NEEDLE)
+    predToTransd = self.addLinearTransformToScene(self.PREDICTION_TO_TRANSD, parentTransform=transdToNeedle)
+    imageToTransdMatrix = vtk.vtkMatrix4x4()
+    imageToTransd.GetMatrixTransformToParent(imageToTransdMatrix)
+    predToTransd.SetMatrixTransformToParent(imageToTransdMatrix)
 
   def updateImageToTransdFromDepth(self, depthMm):
     """
@@ -1988,7 +2012,7 @@ class LumpNav2Logic(ScriptedLoadableModuleLogic, VTKObservationMixin):
     """
 
     imageToTransdPixel = vtk.vtkTransform()
-    imageToTransdPixel.Translate(-255.5, -40, 0)
+    imageToTransdPixel.Translate(-255.5, 0, 0)
 
     pxToMm = self.scaling_Intercept + self.scaling_Slope * depthMm
 
@@ -2098,10 +2122,6 @@ class LumpNav2Logic(ScriptedLoadableModuleLogic, VTKObservationMixin):
     if toggled:
       logging.info("Starting volume reconstruction")
 
-      # Rearrange transform hierarchy so that Needle is effectively world
-      imageToTransd.SetAndObserveTransformNodeID(transdToNeedle.GetID())
-      transdToNeedle.SetAndObserveTransformNodeID(None)
-
       self.setRegionOfInterestNode()
       reconstructionNode = self.setVolumeReconstructionNode()
       self.reconstructionLogic.StartLiveVolumeReconstruction(reconstructionNode)
@@ -2112,12 +2132,6 @@ class LumpNav2Logic(ScriptedLoadableModuleLogic, VTKObservationMixin):
       # Stop reconstruction
       reconstructionNode = parameterNode.GetNodeReference(self.RECONSTRUCTION_NODE)
       self.reconstructionLogic.StopLiveVolumeReconstruction(reconstructionNode)
-
-      # Move transforms back
-      needleToReference = parameterNode.GetNodeReference(self.NEEDLE_TO_REFERENCE)
-      transdToReference = parameterNode.GetNodeReference(self.TRANSD_TO_REFERENCE)
-      transdToNeedle.SetAndObserveTransformNodeID(needleToReference.GetID())
-      imageToTransd.SetAndObserveTransformNodeID(transdToReference.GetID())
 
       # Convert to convex hull
       self.createConvexHullFromVolume()
@@ -2650,14 +2664,10 @@ class LumpNav2Logic(ScriptedLoadableModuleLogic, VTKObservationMixin):
       predictionData.SetDimensions(imageDimensions)
 
   def onNeedleTipToNeedleModified(self, observer, eventid):
-    import json
-    settings = qt.QSettings()
     parameterNode = self.getParameterNode()
     needleTipToNeedle = parameterNode.GetNodeReference(self.NEEDLETIP_TO_NEEDLE)
-    needleTipToNeedle_settings = slicer.util.arrayFromTransformMatrix(needleTipToNeedle)
-    needleTipToNeedle_settings = needleTipToNeedle_settings.tolist()
-    needleTipToNeedle_settings = json.dumps(needleTipToNeedle_settings)
-    settings.setValue(self.NEEDLETIP_TO_NEEDLE_SETTING, needleTipToNeedle_settings)
+    needleTipToNeedleFilePath = self.resourcePath(self.NEEDLETIP_TO_NEEDLE + ".h5")
+    slicer.util.saveNode(needleTipToNeedle, needleTipToNeedleFilePath)
 
   def setDisplayCauteryStateClicked(self, pressed):
     parameterNode = self.getParameterNode()
