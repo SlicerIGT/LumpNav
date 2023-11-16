@@ -491,9 +491,10 @@ class LumpNav2Widget(ScriptedLoadableModuleWidget, VTKObservationMixin):
       logging.info(f"onSavePathChanged({abspath})")
 
   def onSaveSceneClicked(self):  # common
-    #
+    # Update GUI status label
+    self.ui.statusLabel.text = "Saving scene..."
+
     # save the mrml scene to a temp directory, then zip it
-    #
     qt.QApplication.setOverrideCursor(qt.Qt.WaitCursor)
     sceneSaveDirectory = self.ui.saveFolderSelector.directory
     sceneSaveDirectory = sceneSaveDirectory + "/" + self.logic.moduleName + "-" + time.strftime("%Y%m%d-%H%M%S")
@@ -509,9 +510,11 @@ class LumpNav2Widget(ScriptedLoadableModuleWidget, VTKObservationMixin):
       self.saveTime.Modified()
       logging.info("Scene saved to: {0}".format(sceneSaveDirectory))
       slicer.util.showStatusMessage(f"Scene saved to {sceneSaveDirectory}.", 5000)
+      self.ui.statusLabel.text = "Scene saved"
     else:
       logging.error("Scene saving failed")
       slicer.util.showStatusMessage(f"Failed to save scene to {sceneSaveDirectory}.", 5000)
+      self.ui.statusLabel.text = "Scene saving failed"
 
   def confirmExit(self):
     msgBox = qt.QMessageBox()
@@ -562,6 +565,7 @@ class LumpNav2Widget(ScriptedLoadableModuleWidget, VTKObservationMixin):
   
   def onToolsCollapsed(self, collapsed):
     if not collapsed:
+      self.ui.statusLabel.text = "Tool calibration"
       self.ui.contouringCollapsibleButton.collapsed = True
       self.ui.navigationCollapsibleButton.collapsed = True
       slicer.app.layoutManager().setLayout(self.logic.LAYOUT_2D3D)
@@ -570,8 +574,13 @@ class LumpNav2Widget(ScriptedLoadableModuleWidget, VTKObservationMixin):
         self.enableAutoCenterInViewNode(viewNode)
       slicer.util.resetSliceViews()
 
+      # Start Plus server
+      if not self.ui.startPlusButton.checked:
+        self.ui.startPlusButton.checked = True
+
   def onContouringCollapsed(self, collapsed):
     if not collapsed:
+      self.ui.statusLabel.text = "Tumor contouring"
       self.ui.toolsCollapsibleButton.collapsed = True
       self.ui.navigationCollapsibleButton.collapsed = True
       slicer.app.layoutManager().setLayout(6)
@@ -591,6 +600,7 @@ class LumpNav2Widget(ScriptedLoadableModuleWidget, VTKObservationMixin):
         self.ui.selectPointsToEraseButton.setChecked(False)
         self.logic.setErasePoints(False)
     else:
+      self.ui.statusLabel.text = "Navigation"
       self.ui.toolsCollapsibleButton.collapsed = True
       self.ui.contouringCollapsibleButton.collapsed = True
       self.onDual3DViewButton(self.ui.threeDViewButton.checked)
@@ -1485,10 +1495,8 @@ class LumpNav2Logic(ScriptedLoadableModuleLogic, VTKObservationMixin):
 
     self.viewpointLogic = Viewpoint.ViewpointLogic()
 
-    self.firstOutputReady = False
+    self.predictionStarted = False
     self.reconstructionLogic = slicer.modules.volumereconstruction.logic()
-    self.transferFunctionPoints = None
-    self.lastSliderValue = 50
 
   def resourcePath(self, filename):
     """
@@ -2122,25 +2130,24 @@ class LumpNav2Logic(ScriptedLoadableModuleLogic, VTKObservationMixin):
   def setLivePrediction(self, toggled):
     logging.info(f"setLivePrediction({toggled})")
     parameterNode = self.getParameterNode()
-    imageToTransd = parameterNode.GetNodeReference(self.IMAGE_TO_TRANSD)
-    transdToNeedle = parameterNode.GetNodeReference(self.TRANSD_TO_NEEDLE)
 
     if toggled:
-      logging.info("Starting volume reconstruction")
-
-      self.setRegionOfInterestNode()
-      reconstructionNode = self.setVolumeReconstructionNode()
-      self.reconstructionLogic.StartLiveVolumeReconstruction(reconstructionNode)
+      predictionConnectorNode = parameterNode.GetNodeReference(self.PREDICTION_CONNECTOR_NODE)
+      if predictionConnectorNode and predictionConnectorNode.GetState() == predictionConnectorNode.StateConnected:
+        logging.info("Starting volume reconstruction")
+        self.predictionStarted = True
+        self.setRegionOfInterestNode()
+        reconstructionNode = self.setVolumeReconstructionNode()
+        self.reconstructionLogic.StartLiveVolumeReconstruction(reconstructionNode)
 
     else:
-      logging.info("Stopping volume reconstruction")
-
-      # Stop reconstruction
-      reconstructionNode = parameterNode.GetNodeReference(self.RECONSTRUCTION_NODE)
-      self.reconstructionLogic.StopLiveVolumeReconstruction(reconstructionNode)
-
-      # Convert to convex hull
-      self.createConvexHullFromVolume()
+      if self.predictionStarted == True:
+        logging.info("Stopping volume reconstruction")
+        reconstructionNode = parameterNode.GetNodeReference(self.RECONSTRUCTION_NODE)
+        self.reconstructionLogic.StopLiveVolumeReconstruction(reconstructionNode)
+        # Convert to convex hull
+        self.createConvexHullFromVolume()
+        self.predictionStarted = False
 
   def setUltrasoundSequenceBrowser(self, isRecording):
     parameterNode = self.getParameterNode()
