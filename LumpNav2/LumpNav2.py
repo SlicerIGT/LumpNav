@@ -253,6 +253,7 @@ class LumpNav2Widget(ScriptedLoadableModuleWidget, VTKObservationMixin):
     # These connections ensure that we update parameter node when scene is closed
     self.addObserver(slicer.mrmlScene, slicer.mrmlScene.StartCloseEvent, self.onSceneStartClose)
     self.addObserver(slicer.mrmlScene, slicer.mrmlScene.EndCloseEvent, self.onSceneEndClose)
+    self.addObserver(slicer.mrmlScene, slicer.mrmlScene.StartImportEvent, self.onSceneStartImport)
 
     # QT connections
     self.ui.toolsCollapsibleButton.connect('contentsCollapsed(bool)', self.onToolsCollapsed)
@@ -1155,6 +1156,10 @@ class LumpNav2Widget(ScriptedLoadableModuleWidget, VTKObservationMixin):
     # If this module is shown while the scene is closed then recreate a new parameter node immediately
     if self.parent.isEntered:
       self.initializeParameterNode()
+  
+  def onSceneStartImport(self, caller, event):
+    if self.parent.isEntered:
+      slicer.mrmlScene.Clear(0)
 
   def initializeParameterNode(self):
     """
@@ -1237,23 +1242,24 @@ class LumpNav2Widget(ScriptedLoadableModuleWidget, VTKObservationMixin):
         self.addObserver(self.observedUltrasoundSeqBrNode, vtk.vtkCommand.ModifiedEvent, self.updateGUIFromMRML)
 
     tumorMarkups_Needle = self._parameterNode.GetNodeReference(self.logic.TUMOR_MARKUPS_NEEDLE)
-    numberOfPoints = tumorMarkups_Needle.GetNumberOfControlPoints()
-    if numberOfPoints >= 1:
-      self.ui.deleteLastFiducialButton.setEnabled(True)
-      self.ui.deleteAllFiducialsButton.setEnabled(True)
-      self.ui.deleteLastFiducialNavigationButton.setEnabled(True)
-      self.ui.selectPointsToEraseButton.setEnabled(True)
-      if self.ui.manualWatchedModelButton.checked:
-        self.logic.setBreachWarning(True)
+    if tumorMarkups_Needle:
+      numberOfPoints = tumorMarkups_Needle.GetNumberOfControlPoints()
+      if numberOfPoints >= 1:
+        self.ui.deleteLastFiducialButton.setEnabled(True)
+        self.ui.deleteAllFiducialsButton.setEnabled(True)
+        self.ui.deleteLastFiducialNavigationButton.setEnabled(True)
+        self.ui.selectPointsToEraseButton.setEnabled(True)
+        if self.ui.manualWatchedModelButton.checked:
+          self.logic.setBreachWarning(True)
 
-    if numberOfPoints < 1:
-      self.ui.deleteLastFiducialButton.setEnabled(False)
-      self.ui.deleteAllFiducialsButton.setEnabled(False)
-      self.ui.deleteLastFiducialNavigationButton.setEnabled(False)
-      self.ui.selectPointsToEraseButton.setChecked(False)
-      self.ui.selectPointsToEraseButton.setEnabled(False)
-      if self.ui.manualWatchedModelButton.checked:
-        self.logic.setBreachWarning(False)
+      if numberOfPoints < 1:
+        self.ui.deleteLastFiducialButton.setEnabled(False)
+        self.ui.deleteAllFiducialsButton.setEnabled(False)
+        self.ui.deleteLastFiducialNavigationButton.setEnabled(False)
+        self.ui.selectPointsToEraseButton.setChecked(False)
+        self.ui.selectPointsToEraseButton.setEnabled(False)
+        if self.ui.manualWatchedModelButton.checked:
+          self.logic.setBreachWarning(False)
 
     tumorModelAI = self._parameterNode.GetNodeReference(self.logic.TUMOR_MODEL_AI)
     if tumorModelAI and tumorModelAI.GetPolyData():
