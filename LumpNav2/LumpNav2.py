@@ -191,7 +191,6 @@ class LumpNav2Widget(ScriptedLoadableModuleWidget, VTKObservationMixin):
     self.observedUltrasoundSeqBrNode = None
     self.observedEventTableNode = None
     self.observedPlusServerLauncherNode = None
-    self.observedNeedleTipToNeedleNode = None
 
     # Timer for pivot calibration controls
     self.pivotCalibrationLogic = slicer.modules.pivotcalibration.logic()
@@ -259,6 +258,7 @@ class LumpNav2Widget(ScriptedLoadableModuleWidget, VTKObservationMixin):
     self.ui.toolsCollapsibleButton.connect('contentsCollapsed(bool)', self.onToolsCollapsed)
     self.ui.contouringCollapsibleButton.connect('contentsCollapsed(bool)', self.onContouringCollapsed)
     self.ui.navigationCollapsibleButton.connect('contentsCollapsed(bool)', self.onNavigationCollapsed)
+    self.ui.eventRecordingCollapsibleButton.connect('contentsCollapsed(bool)', self.onEventRecordingCollapsed)
 
     # Tool calibration
     self.ui.cauteryCalibrationButton.connect('clicked()', self.onCauteryCalibrationButton)
@@ -467,16 +467,11 @@ class LumpNav2Widget(ScriptedLoadableModuleWidget, VTKObservationMixin):
 
   def onChangeNeedleLength(self, diff):
     currentOffset = slicer.util.settingsValue(
-      self.logic.NEEDLE_LENGTH_OFFSET_SETTING, self.logic.NEEDLE_LENGTH_OFFSET_DEFAULT, converter=lambda x: float(x)
+      self.logic.NEEDLE_LENGTH_OFFSET_SETTING, 0, converter=lambda x: float(x)
     )
     settings = qt.QSettings()
     settings.setValue(self.logic.NEEDLE_LENGTH_OFFSET_SETTING, currentOffset - diff)
     self.logic.setNeedleModel()
-    self.updateNeedleLengthLabel()
-  
-  def updateNeedleLengthLabel(self, caller=None, event=None):
-    needleLength = self.logic.getNeedleLength()
-    self.ui.needleLengthLabel.text = f"Needle length: {needleLength:.0f}mm"
 
   def onExitButtonClicked(self):
     mainwindow = slicer.util.mainWindow()
@@ -568,6 +563,7 @@ class LumpNav2Widget(ScriptedLoadableModuleWidget, VTKObservationMixin):
       self.ui.statusLabel.text = "Tool calibration"
       self.ui.contouringCollapsibleButton.collapsed = True
       self.ui.navigationCollapsibleButton.collapsed = True
+      self.ui.eventRecordingCollapsibleButton.collapsed = True
       slicer.app.layoutManager().setLayout(self.logic.LAYOUT_2D3D)
       viewNode = slicer.app.layoutManager().threeDWidget(0).mrmlViewNode()
       if not self.logic.viewpointLogic.getViewpointForViewNode(viewNode).isCurrentModeAutoCenter():
@@ -583,6 +579,7 @@ class LumpNav2Widget(ScriptedLoadableModuleWidget, VTKObservationMixin):
       self.ui.statusLabel.text = "Tumor contouring"
       self.ui.toolsCollapsibleButton.collapsed = True
       self.ui.navigationCollapsibleButton.collapsed = True
+      self.ui.eventRecordingCollapsibleButton.collapsed = True
       slicer.app.layoutManager().setLayout(6)
       slicer.util.resetSliceViews()
       slicer.app.layoutManager().sliceWidget('Red').sliceController().setCompositingToAdd()
@@ -603,6 +600,7 @@ class LumpNav2Widget(ScriptedLoadableModuleWidget, VTKObservationMixin):
       self.ui.statusLabel.text = "Navigation"
       self.ui.toolsCollapsibleButton.collapsed = True
       self.ui.contouringCollapsibleButton.collapsed = True
+      self.ui.eventRecordingCollapsibleButton.collapsed = True
       self.onDual3DViewButton(self.ui.threeDViewButton.checked)
       # Set 3D view settings
       layoutManager = slicer.app.layoutManager()
@@ -615,6 +613,12 @@ class LumpNav2Widget(ScriptedLoadableModuleWidget, VTKObservationMixin):
       interactionNode = slicer.app.applicationLogic().GetInteractionNode()
       interactionNode.SetCurrentInteractionMode(interactionNode.ViewTransform)
       self.updateGUIFromParameterNode()
+  
+  def onEventRecordingCollapsed(self, collapsed):
+    if not collapsed:
+      self.ui.toolsCollapsibleButton.collapsed = True
+      self.ui.contouringCollapsibleButton.collapsed = True
+      self.ui.navigationCollapsibleButton.collapsed = True
 
   def onDual3DViewButton(self, toggled):
     logging.info(f"onDual3DViewButton({toggled})")
@@ -1251,6 +1255,10 @@ class LumpNav2Widget(ScriptedLoadableModuleWidget, VTKObservationMixin):
       if self.observedUltrasoundSeqBrNode is not None:
         self.addObserver(self.observedUltrasoundSeqBrNode, vtk.vtkCommand.ModifiedEvent, self.updateGUIFromMRML)
 
+    needleLength = self.logic.getNeedleLength()
+    if needleLength:
+      self.ui.needleLengthLabel.text = f"Needle length: {needleLength:.0f}mm"
+
     tumorMarkups_Needle = self._parameterNode.GetNodeReference(self.logic.TUMOR_MARKUPS_NEEDLE)
     if tumorMarkups_Needle:
       numberOfPoints = tumorMarkups_Needle.GetNumberOfControlPoints()
@@ -1289,13 +1297,6 @@ class LumpNav2Widget(ScriptedLoadableModuleWidget, VTKObservationMixin):
       self.observedPlusServerLauncherNode = plusServerLauncherNode
       if self.observedPlusServerLauncherNode is not None:
         self.addObserver(self.observedPlusServerLauncherNode, vtk.vtkCommand.ModifiedEvent, self.updateGUIFromMRML)
-
-    # Needle length text
-    if not self.observedNeedleTipToNeedleNode:
-      needleTipToNeedle = self._parameterNode.GetNodeReference(self.logic.NEEDLETIP_TO_NEEDLE)
-      self.observedNeedleTipToNeedleNode = needleTipToNeedle
-      if self.observedNeedleTipToNeedleNode is not None:
-        self.addObserver(self.observedNeedleTipToNeedleNode, vtk.vtkCommand.ModifiedEvent, self.updateNeedleLengthLabel)
     
     self.ui.thresholdSlider.value = float(self._parameterNode.GetParameter(self.logic.AI_THRESHOLD))
 
@@ -1427,9 +1428,9 @@ class LumpNav2Logic(ScriptedLoadableModuleLogic, VTKObservationMixin):
   # Model names and settings
   REFERENCE_TO_RAS_SETTING = "LumpNav2/ReferenceToRas"
   NEEDLE_MODEL = "NeedleModel"
+  NEEDLE_LENGTH_DEFAULT = 57
   NEEDLE_VISIBILITY_SETTING = "LumpNav2/NeedleVisible"
   NEEDLE_LENGTH_OFFSET_SETTING = "LumpNav2/NeedleLengthOffset"
-  NEEDLE_LENGTH_OFFSET_DEFAULT = 17
   CAUTERY_MODEL = "CauteryModel"
   CAUTERY_VISIBILITY_SETTING = "LumpNav2/CauteryVisible"
   CAUTERY_MODEL_FILENAME = "CauteryModel.stl"
@@ -1600,7 +1601,7 @@ class LumpNav2Logic(ScriptedLoadableModuleLogic, VTKObservationMixin):
     needleTipToNeedle = parameterNode.GetNodeReference(self.NEEDLETIP_TO_NEEDLE)
     if needleTipToNeedle:
       needleLengthOffset = slicer.util.settingsValue(
-        self.NEEDLE_LENGTH_OFFSET_SETTING, self.NEEDLE_LENGTH_OFFSET_DEFAULT, converter=lambda x: float(x)
+        self.NEEDLE_LENGTH_OFFSET_SETTING, 0, converter=lambda x: float(x)
       )
       needleTipToNeedleMatrix = vtk.vtkMatrix4x4()
       needleTipToNeedle.GetMatrixTransformToParent(needleTipToNeedleMatrix)
@@ -1989,7 +1990,7 @@ class LumpNav2Logic(ScriptedLoadableModuleLogic, VTKObservationMixin):
         needleTipToNeedle = slicer.mrmlScene.AddNewNodeByClass("vtkMRMLLinearTransformNode", self.NEEDLETIP_TO_NEEDLE)
       parameterNode.SetNodeReferenceID(self.NEEDLETIP_TO_NEEDLE, needleTipToNeedle.GetID())
     needleTipToNeedle.SetAndObserveTransformNodeID(needleToReference.GetID())
-    self.addObserver(needleTipToNeedle, slicer.vtkMRMLLinearTransformNode.TransformModifiedEvent, self.onNeedleTipToNeedleModified)
+    self.addObserver(needleTipToNeedle, vtk.vtkCommand.ModifiedEvent, self.onNeedleTipToNeedleModified)
 
     # Cautery tracking
     cauteryToReference = self.addLinearTransformToScene(self.CAUTERY_TO_REFERENCE, parentTransform=referenceToRas)
@@ -2079,13 +2080,11 @@ class LumpNav2Logic(ScriptedLoadableModuleLogic, VTKObservationMixin):
     configTextNode = parameterNode.GetNodeReference(self.CONFIG_TEXT_NODE)
     if configTextNode is None:
       configTextNode = slicer.mrmlScene.AddNewNodeByClass("vtkMRMLTextNode", self.CONFIG_TEXT_NODE)
-      configTextNode.SaveWithSceneOff()
       configTextNode.SetForceCreateStorageNode(slicer.vtkMRMLTextNode.CreateStorageNodeAlways)
       parameterNode.SetNodeReferenceID(self.CONFIG_TEXT_NODE, configTextNode.GetID())
     if not configTextNode.GetStorageNode():
       configTextNode.AddDefaultStorageNode()
     configTextStorageNode = configTextNode.GetStorageNode()
-    configTextStorageNode.SaveWithSceneOff()
     configTextStorageNode.SetFileName(configFullpath)
     configTextStorageNode.ReadData(configTextNode)
 
@@ -2093,14 +2092,12 @@ class LumpNav2Logic(ScriptedLoadableModuleLogic, VTKObservationMixin):
     plusServerNode = parameterNode.GetNodeReference(self.PLUS_SERVER_NODE)
     if not plusServerNode:
       plusServerNode = slicer.mrmlScene.AddNewNodeByClass("vtkMRMLPlusServerNode", self.PLUS_SERVER_NODE)
-      plusServerNode.SaveWithSceneOff()
       parameterNode.SetNodeReferenceID(self.PLUS_SERVER_NODE, plusServerNode.GetID())
     plusServerNode.SetAndObserveConfigNode(configTextNode)
 
     plusServerLauncherNode = parameterNode.GetNodeReference(self.PLUS_SERVER_LAUNCHER_NODE)
     if not plusServerLauncherNode:
       plusServerLauncherNode = slicer.mrmlScene.AddNewNodeByClass("vtkMRMLPlusServerLauncherNode", self.PLUS_SERVER_LAUNCHER_NODE)
-      plusServerLauncherNode.SaveWithSceneOff()
       parameterNode.SetNodeReferenceID(self.PLUS_SERVER_LAUNCHER_NODE, plusServerLauncherNode.GetID())
 
     if plusServerLauncherNode.GetNodeReferenceID('plusServerRef') != plusServerNode.GetID():
@@ -2352,7 +2349,6 @@ class LumpNav2Logic(ScriptedLoadableModuleLogic, VTKObservationMixin):
     plusServerNode = parameterNode.GetNodeReference(self.PLUS_SERVER_NODE)
     configTextNode = parameterNode.GetNodeReference(self.CONFIG_TEXT_NODE)
     configTextStorageNode = configTextNode.GetStorageNode()
-    configTextStorageNode.SaveWithSceneOff()
     configTextStorageNode.SetFileName(configFilepath)
     configTextStorageNode.ReadData(configTextNode)
     plusServerNode.SetAndObserveConfigNode(configTextNode)
@@ -2682,8 +2678,15 @@ class LumpNav2Logic(ScriptedLoadableModuleLogic, VTKObservationMixin):
     needleTipToNeedleFilePath = self.resourcePath(self.NEEDLETIP_TO_NEEDLE + ".h5")
     slicer.util.saveNode(needleTipToNeedle, needleTipToNeedleFilePath)
 
+    # Update offset to get needle length to default
+    needleTipToNeedleMatrix = vtk.vtkMatrix4x4()
+    needleTipToNeedle.GetMatrixTransformToParent(needleTipToNeedleMatrix)
+    needleTipToNeedleLength = needleTipToNeedleMatrix.GetElement(2, 3)
+    settings = qt.QSettings()
+    settings.setValue(self.NEEDLE_LENGTH_OFFSET_SETTING, needleTipToNeedleLength - self.NEEDLE_LENGTH_DEFAULT)
+    self.setNeedleModel()
+
   def setDisplayCauteryStateClicked(self, pressed):
-    parameterNode = self.getParameterNode()
     import CauteryClassification
     cauteryClassificationLogic = CauteryClassification.CauteryClassificationLogic()
     #cauteryClassificationLogic.init()
@@ -2694,12 +2697,13 @@ class LumpNav2Logic(ScriptedLoadableModuleLogic, VTKObservationMixin):
     parameterNode = self.getParameterNode()
     eventTableNode = parameterNode.GetNodeReference(self.EVENT_TABLE_NODE)
     lastRowIndex = eventTableNode.AddEmptyRow()
-    sequenceBrowserNode = parameterNode.GetNodeReference(self.TRACKING_SEQUENCE_BROWSER)
-    lastItem = sequenceBrowserNode.SelectLastItem()
-    if lastItem == -1:
-      sequenceIndex = ""
-    else:
-      sequenceIndex = sequenceBrowserNode.GetMasterSequenceNode().GetNthIndexValue(sequenceBrowserNode.SelectLastItem())
+    # sequenceBrowserNode = parameterNode.GetNodeReference(self.TRACKING_SEQUENCE_BROWSER)
+    # lastItem = sequenceBrowserNode.SelectLastItem()
+    # if lastItem == -1:
+    #   sequenceIndex = ""
+    # else:
+    #   sequenceIndex = sequenceBrowserNode.GetMasterSequenceNode().GetNthIndexValue(sequenceBrowserNode.SelectLastItem())
+    
     eventTableNode.SetCellText(lastRowIndex, self.TIME_COLUMN, datetime.datetime.now().strftime("%m/%d/%Y, %H:%M:%S"))
     eventTableNode.SetCellText(lastRowIndex, self.SEQUENCE_TIME_COLUMN, sequenceIndex)
     eventTableNode.SetCellText(lastRowIndex, self.EVENT_DESCRIPTION_COLUMN, description)
