@@ -274,6 +274,14 @@ class LumpNav2Widget(ScriptedLoadableModuleWidget, VTKObservationMixin):
     self.ui.normalBrightnessButton.connect('toggled(bool)', self.onNormalBrightnessClicked)
     self.ui.brightBrightnessButton.connect('toggled(bool)', self.onBrightBrightnessClicked)
     self.ui.brightestBrightnessButton.connect('toggled(bool)', self.onBrightestBrightnessClicked)
+    self.ui.anteriorDistToMarginSpinBox.connect('valueChanged(double)', self.onAnteriorDistToMarginChanged)
+    self.ui.posteriorDistToMarginSpinBox.connect('valueChanged(double)', self.onPosteriorDistToMarginChanged)
+    self.ui.leftDistToMarginSpinBox.connect('valueChanged(double)', self.onLeftDistToMarginChanged)
+    self.ui.rightDistToMarginSpinBox.connect('valueChanged(double)', self.onRightDistToMarginChanged)
+    self.ui.superiorDistToMarginSpinBox.connect('valueChanged(double)', self.onSuperiorDistToMarginChanged)
+    self.ui.inferiorDistToMarginSpinBox.connect("valueChanged(double)", self.onInferiorDistToMarginChanged)
+    self.ui.placeHydromarkButton.connect('toggled(bool)', self.onPlaceHydromarkToggled)
+    self.ui.deleteHydromarkButton.connect('clicked()', self.onDeleteHydromarkClicked)
     self.ui.markPointsButton.connect('toggled(bool)', self.onMarkPointsToggled)
     self.ui.deleteLastFiducialButton.connect('clicked()', self.onDeleteLastFiducialClicked)
     self.ui.deleteAllFiducialsButton.connect('clicked()', self.onDeleteAllFiducialsClicked)
@@ -612,6 +620,8 @@ class LumpNav2Widget(ScriptedLoadableModuleWidget, VTKObservationMixin):
         view.SetAxisLabelsVisible(False)
       interactionNode = slicer.app.applicationLogic().GetInteractionNode()
       interactionNode.SetCurrentInteractionMode(interactionNode.ViewTransform)
+      hydromarkMarkupNode = self._parameterNode.GetNodeReference(self.logic.HYDROMARK_MARKUP_NEEDLE)
+      hydromarkMarkupNode.GetDisplayNode().VisibilityOff()
       self.updateGUIFromParameterNode()
   
   def onEventRecordingCollapsed(self, collapsed):
@@ -791,6 +801,44 @@ class LumpNav2Widget(ScriptedLoadableModuleWidget, VTKObservationMixin):
   def onBrightestBrightnessClicked(self):
     logging.info("onBrightestBrightnessClicked")
     self.logic.setBrightness(self.BRIGHTEST_BRIGHTNESS)
+
+  def onAnteriorDistToMarginChanged(self, value):
+    self._parameterNode.SetParameter(self.logic.ANTERIOR_DIST_TO_MARGIN, str(value))
+    self.logic.createTumorFromHydromark()
+
+  def onPosteriorDistToMarginChanged(self, value):
+    self._parameterNode.SetParameter(self.logic.POSTERIOR_DIST_TO_MARGIN, str(value))
+    self.logic.createTumorFromHydromark()
+
+  def onLeftDistToMarginChanged(self, value):
+    self._parameterNode.SetParameter(self.logic.LEFT_DIST_TO_MARGIN, str(value))
+    self.logic.createTumorFromHydromark()
+
+  def onRightDistToMarginChanged(self, value):
+    self._parameterNode.SetParameter(self.logic.RIGHT_DIST_TO_MARGIN, str(value))
+    self.logic.createTumorFromHydromark()
+
+  def onSuperiorDistToMarginChanged(self, value):
+    self._parameterNode.SetParameter(self.logic.SUPERIOR_DIST_TO_MARGIN, str(value))
+    self.logic.createTumorFromHydromark()
+
+  def onInferiorDistToMarginChanged(self, value):
+    self._parameterNode.SetParameter(self.logic.INFERIOR_DIST_TO_MARGIN, str(value))
+    self.logic.createTumorFromHydromark()
+
+  def onPlaceHydromarkToggled(self, toggled):
+    logging.info(f"onPlaceHydromarkToggled({toggled})")
+    if self._updatingGui:
+      return
+    self._updatingGui = True
+    if toggled:
+      self.ui.markPointsButton.setChecked(False)
+      self.ui.selectPointsToEraseButton.setChecked(False)
+    self.logic.setPlaceHydromark(toggled)
+    self._updatingGui = False
+  
+  def onDeleteHydromarkClicked(self):
+    self.logic.deleteHydromarkMarkup()
 
   def onMarkPointsToggled(self, toggled):
     logging.info(f"onMarkPointsToggled({toggled})")
@@ -1270,7 +1318,7 @@ class LumpNav2Widget(ScriptedLoadableModuleWidget, VTKObservationMixin):
         if self.ui.manualWatchedModelButton.checked:
           self.logic.setBreachWarning(True)
 
-      if numberOfPoints < 1:
+      else:
         self.ui.deleteLastFiducialButton.setEnabled(False)
         self.ui.deleteAllFiducialsButton.setEnabled(False)
         self.ui.deleteLastFiducialNavigationButton.setEnabled(False)
@@ -1278,6 +1326,17 @@ class LumpNav2Widget(ScriptedLoadableModuleWidget, VTKObservationMixin):
         self.ui.selectPointsToEraseButton.setEnabled(False)
         if self.ui.manualWatchedModelButton.checked:
           self.logic.setBreachWarning(False)
+    
+    hydromarkMarkup_Needle = self._parameterNode.GetNodeReference(self.logic.HYDROMARK_MARKUP_NEEDLE)
+    if hydromarkMarkup_Needle:
+      numberOfPoints = hydromarkMarkup_Needle.GetNumberOfControlPoints()
+      if numberOfPoints >= 1:
+        self.ui.placeHydromarkButton.checked = False
+        self.ui.placeHydromarkButton.setEnabled(False)
+        self.ui.deleteHydromarkButton.setEnabled(True)
+      else:
+        self.ui.deleteHydromarkButton.setEnabled(False)
+        self.ui.placeHydromarkButton.setEnabled(True)
 
     tumorModelAI = self._parameterNode.GetNodeReference(self.logic.TUMOR_MODEL_AI)
     if tumorModelAI and tumorModelAI.GetPolyData():
@@ -1402,12 +1461,9 @@ class LumpNav2Logic(ScriptedLoadableModuleLogic, VTKObservationMixin):
   TRANSD_TO_NEEDLE = "TransdToNeedle"
   PREDICTION_TO_TRANSD = "PredictionToTransd"
 
-  CONTOUR_STATUS = "ContourStatus"
-  CONTOUR_ADDING = "ContourAdding"
   POINTS_STATUS = "PointsStatus"
   POINTS_ADDING = "PointsAdding"
   POINTS_ERASING = "PointsErasing"
-  CONTOUR_UNSELECTED = "ContourUnselected"
   POINTS_UNSELECTED = "PointsUnselected"
 
   # Ultrasound image
@@ -1424,6 +1480,17 @@ class LumpNav2Logic(ScriptedLoadableModuleLogic, VTKObservationMixin):
   PREDICTION_CONNECTOR_NODE = "PredictionConnectorNode"
   PREDICTION_HOSTNAME = "localhost"
   PREDICTION_PORT = 18945
+
+  # Preoperative hydromark parameters
+  ANTERIOR_DIST_TO_MARGIN = "AnteriorDistToMargin"
+  POSTERIOR_DIST_TO_MARGIN = "PosteriorDistToMargin"
+  LEFT_DIST_TO_MARGIN = "LeftDistToMargin"
+  RIGHT_DIST_TO_MARGIN = "RightDistToMargin"
+  SUPERIOR_DIST_TO_MARGIN = "SuperiorDistToMargin"
+  INFERIOR_DIST_TO_MARGIN = "InferiorDistToMargin"
+  HYDROMARK_MARKUP_NEEDLE = "HydromarkMarkup_Needle"
+  HYDROMARK_TO_NEEDLE = "HydromarkToNeedle"
+  TUMOR_MODEL_HYDROMARK = "TumorModelHydromark"
 
   # Model names and settings
   REFERENCE_TO_RAS_SETTING = "LumpNav2/ReferenceToRas"
@@ -1756,6 +1823,39 @@ class LumpNav2Logic(ScriptedLoadableModuleLogic, VTKObservationMixin):
     self.addObserver(tumorMarkups_Needle, slicer.vtkMRMLMarkupsNode.PointPositionDefinedEvent, self.onTumorMarkupsNodeModified)
 
     parameterNode.SetNodeReferenceID(self.TUMOR_MARKUPS_NEEDLE, tumorMarkups_Needle.GetID())
+
+    hydromarkMarkup_Needle = parameterNode.GetNodeReference(self.HYDROMARK_MARKUP_NEEDLE)
+    if hydromarkMarkup_Needle is None:
+      hydromarkMarkup_Needle = slicer.mrmlScene.AddNewNodeByClass("vtkMRMLMarkupsFiducialNode", self.HYDROMARK_MARKUP_NEEDLE)
+      hydromarkMarkup_Needle.CreateDefaultDisplayNodes()
+      hydromarkMarkup_Needle.GetDisplayNode().SetTextScale(0)
+      hydromarkMarkup_Needle.LockedOn()
+      hydromarkMarkup_Needle.GetDisplayNode().VisibilityOff()
+      parameterNode.SetNodeReferenceID(self.HYDROMARK_MARKUP_NEEDLE, hydromarkMarkup_Needle.GetID())
+    hydromarkMarkup_Needle.SetAndObserveTransformNodeID(needleToReference.GetID())
+    self.addObserver(hydromarkMarkup_Needle, slicer.vtkMRMLMarkupsNode.PointPositionDefinedEvent, self.onHydromarkMarkupNodeModified)
+    self.addObserver(hydromarkMarkup_Needle, slicer.vtkMRMLMarkupsNode.PointRemovedEvent, self.onHydromarkMarkupNodeModified)
+
+    # Tumor model from hydromark measurements
+    tumorModelHydromark = parameterNode.GetNodeReference(self.TUMOR_MODEL_HYDROMARK)
+    if tumorModelHydromark is None:
+      tumorModelHydromark = slicer.mrmlScene.AddNewNodeByClass("vtkMRMLModelNode", self.TUMOR_MODEL_HYDROMARK)
+      tumorModelHydromark.CreateDefaultDisplayNodes()
+      tumorModelHydromarkDisplay = tumorModelHydromark.GetDisplayNode()
+      tumorModelHydromarkDisplay.SetColor(1, 1, 0)  # yellow
+      tumorModelHydromarkDisplay.SetOpacity(0.3)
+      tumorModelHydromarkDisplay.BackfaceCullingOff()
+      tumorModelHydromarkDisplay.Visibility2DOn()
+      tumorModelHydromarkDisplay.SetSliceIntersectionThickness(4)
+      parameterNode.SetNodeReferenceID(self.TUMOR_MODEL_HYDROMARK, tumorModelHydromark.GetID())
+
+    # Transform to position model using fiducial
+    hydromarkToNeedle = parameterNode.GetNodeReference(self.HYDROMARK_TO_NEEDLE)
+    if hydromarkToNeedle is None:
+      hydromarkToNeedle = slicer.mrmlScene.AddNewNodeByClass("vtkMRMLLinearTransformNode", self.HYDROMARK_TO_NEEDLE)
+      hydromarkToNeedle.SetAndObserveTransformNodeID(needleToReference.GetID())
+      parameterNode.SetNodeReferenceID(self.HYDROMARK_TO_NEEDLE, hydromarkToNeedle.GetID())
+    tumorModelHydromark.SetAndObserveTransformNodeID(hydromarkToNeedle.GetID())
 
     RASMarkups = parameterNode.GetNodeReference(self.RAS_MARKUPS)
     if RASMarkups is None:
@@ -2157,7 +2257,9 @@ class LumpNav2Logic(ScriptedLoadableModuleLogic, VTKObservationMixin):
     predictionVolume = parameterNode.GetNodeReference(self.PREDICTION_VOLUME)
     tumorModelAI = parameterNode.GetNodeReference(self.TUMOR_MODEL_AI)
     if tumorModelAI:
-      tumorModelAI.SetDisplayVisibility(toggled)
+      displayNode = tumorModelAI.GetDisplayNode()
+      displayNode.SetVisibility2D(toggled)
+      displayNode.SetVisibility3D(toggled)
     if toggled:
       slicer.util.setSliceViewerLayers(foreground=predictionVolume, foregroundOpacity=0.5)
     else:
@@ -2226,9 +2328,15 @@ class LumpNav2Logic(ScriptedLoadableModuleLogic, VTKObservationMixin):
       tumorModelAI.SetAndObserveTransformNodeID(parameterNode.GetNodeReference(self.NEEDLE_TO_REFERENCE).GetID())
       parameterNode.SetNodeReferenceID(self.TUMOR_MODEL_AI, tumorModelAI.GetID())
     
-    # Set visibility of model from settings
+    # Display properties
     visibleAI = parameterNode.GetParameter(self.AI_VISIBLE)
-    tumorModelAI.SetDisplayVisibility(True if visibleAI == "True" else False)
+    displayNode = tumorModelAI.GetDisplayNode()
+    displayNode.SetVisibility2D(True if visibleAI == "True" else False)
+    displayNode.SetVisibility3D(True if visibleAI == "True" else False)
+    displayNode.SetColor(0, 0, 1)  # blue
+    displayNode.SetOpacity(0.3)
+    displayNode.BackfaceCullingOff()
+    displayNode.SetSliceIntersectionThickness(4)
 
     # Set up grayscale model maker CLI node
     parameters = {
@@ -2253,11 +2361,6 @@ class LumpNav2Logic(ScriptedLoadableModuleLogic, VTKObservationMixin):
         raise ValueError("CLI execution failed: " + errorText)
     # success
     slicer.mrmlScene.RemoveNode(cliNode)
-    
-    # Change color to green
-    displayNode = tumorModelAI.GetDisplayNode()
-    displayNode.SetColor(0, 0, 1)
-    displayNode.SetOpacity(0.3)
 
     # Extract largest portion
     connectivityFilter = vtk.vtkPolyDataConnectivityFilter()
@@ -2505,7 +2608,6 @@ class LumpNav2Logic(ScriptedLoadableModuleLogic, VTKObservationMixin):
     parameterNode = self.getParameterNode()
     interactionNode = slicer.app.applicationLogic().GetInteractionNode()
     if toggled:  # activate placement mode
-      parameterNode.SetParameter(self.CONTOUR_STATUS, self.CONTOUR_ADDING)
       parameterNode.SetParameter(self.POINTS_STATUS, self.POINTS_ADDING)
       selectionNode = slicer.app.applicationLogic().GetSelectionNode()
       selectionNode.SetReferenceActivePlaceNodeClassName("vtkMRMLMarkupsFiducialNode")
@@ -2514,7 +2616,6 @@ class LumpNav2Logic(ScriptedLoadableModuleLogic, VTKObservationMixin):
       interactionNode.SetPlaceModePersistence(1)
       interactionNode.SetCurrentInteractionMode(interactionNode.Place)
     else:  # deactivate placement mode
-      parameterNode.SetParameter(self.CONTOUR_STATUS, self.CONTOUR_UNSELECTED)
       parameterNode.SetParameter(self.POINTS_STATUS, self.POINTS_UNSELECTED)
       interactionNode.SetCurrentInteractionMode(interactionNode.ViewTransform)
 
@@ -2522,7 +2623,6 @@ class LumpNav2Logic(ScriptedLoadableModuleLogic, VTKObservationMixin):
     parameterNode = self.getParameterNode()
     interactionNode = slicer.app.applicationLogic().GetInteractionNode()
     if toggled:  # activate placement mode
-      parameterNode.SetParameter(self.CONTOUR_STATUS, self.CONTOUR_ADDING)
       parameterNode.SetParameter(self.POINTS_STATUS, self.POINTS_ERASING)
       selectionNode = slicer.app.applicationLogic().GetSelectionNode()
       selectionNode.SetReferenceActivePlaceNodeClassName("vtkMRMLMarkupsFiducialNode")
@@ -2531,7 +2631,6 @@ class LumpNav2Logic(ScriptedLoadableModuleLogic, VTKObservationMixin):
       interactionNode.SetPlaceModePersistence(1)
       interactionNode.SetCurrentInteractionMode(interactionNode.Place)
     else:  # deactivate placement mode
-      parameterNode.SetParameter(self.CONTOUR_STATUS, self.CONTOUR_UNSELECTED)
       parameterNode.SetParameter(self.POINTS_STATUS, self.POINTS_UNSELECTED)
       interactionNode.SetCurrentInteractionMode(interactionNode.ViewTransform)
 
@@ -2562,6 +2661,68 @@ class LumpNav2Logic(ScriptedLoadableModuleLogic, VTKObservationMixin):
         distanceToClosest = distanceToPoint
     fiducialNode.GetNthControlPointPosition(closestIndex, fiducialPosition)
     return closestIndex, fiducialPosition
+
+  def setPlaceHydromark(self, toggled):
+    parameterNode = self.getParameterNode()
+    interactionNode = slicer.app.applicationLogic().GetInteractionNode()
+    if toggled:  # activate placement mode
+      selectionNode = slicer.app.applicationLogic().GetSelectionNode()
+      selectionNode.SetReferenceActivePlaceNodeClassName("vtkMRMLMarkupsFiducialNode")
+      hydromarkMarkup_Needle = parameterNode.GetNodeReference(self.HYDROMARK_MARKUP_NEEDLE)
+      hydromarkMarkup_Needle.GetDisplayNode().VisibilityOn()
+      selectionNode.SetActivePlaceNodeID(hydromarkMarkup_Needle.GetID())
+      interactionNode.SetPlaceModePersistence(1)
+      interactionNode.SetCurrentInteractionMode(interactionNode.Place)
+    else:  # deactivate placement mode
+      interactionNode.SetCurrentInteractionMode(interactionNode.ViewTransform)
+    
+  def deleteHydromarkMarkup(self):
+    parameterNode = self.getParameterNode()
+    hydromarkMarkup_Needle = parameterNode.GetNodeReference(self.HYDROMARK_MARKUP_NEEDLE)
+    hydromarkMarkup_Needle.RemoveAllControlPoints()
+
+  def onHydromarkMarkupNodeModified(self, observer, eventid):
+    self.createTumorFromHydromark()
+    self.getParameterNode().Modified()
+  
+  def createTumorFromHydromark(self):
+    parameterNode = self.getParameterNode()
+    anteriorDistToMargin = parameterNode.GetParameter(self.ANTERIOR_DIST_TO_MARGIN)
+    posteriorDistToMargin = parameterNode.GetParameter(self.POSTERIOR_DIST_TO_MARGIN)
+    leftDistToMargin = parameterNode.GetParameter(self.LEFT_DIST_TO_MARGIN)
+    rightDistToMargin = parameterNode.GetParameter(self.RIGHT_DIST_TO_MARGIN)
+    superiorDistToMargin = parameterNode.GetParameter(self.SUPERIOR_DIST_TO_MARGIN)
+    inferiorDistToMargin = parameterNode.GetParameter(self.INFERIOR_DIST_TO_MARGIN)
+    hydromarkMarkup_Needle = parameterNode.GetNodeReference(self.HYDROMARK_MARKUP_NEEDLE)
+
+    if (anteriorDistToMargin and posteriorDistToMargin and leftDistToMargin 
+        and rightDistToMargin and superiorDistToMargin and inferiorDistToMargin
+        and hydromarkMarkup_Needle.GetNumberOfControlPoints() == 1):
+      aToP = float(anteriorDistToMargin) + float(posteriorDistToMargin)
+      lToR = float(leftDistToMargin) + float(rightDistToMargin)
+      sToI = float(superiorDistToMargin) + float(inferiorDistToMargin)
+
+      ellipsoid = vtk.vtkParametricEllipsoid()
+      ellipsoid.SetXRadius(sToI / 2)
+      ellipsoid.SetYRadius(lToR / 2)
+      ellipsoid.SetZRadius(aToP / 2)
+
+      funcSource = vtk.vtkParametricFunctionSource()
+      funcSource.SetParametricFunction(ellipsoid)
+      funcSource.SetUResolution(24)
+      funcSource.SetVResolution(24)
+      funcSource.SetWResolution(24)
+      funcSource.Update()
+
+      tumorModelHydromark = parameterNode.GetNodeReference(self.TUMOR_MODEL_HYDROMARK)
+      tumorModelHydromark.SetAndObservePolyData(funcSource.GetOutput())
+
+      # Set position
+      hydromarkToNeedle = parameterNode.GetNodeReference(self.HYDROMARK_TO_NEEDLE)
+      hydromarkPosition = hydromarkMarkup_Needle.GetNthControlPointPosition(0)
+      transform = vtk.vtkTransform()
+      transform.Translate(hydromarkPosition)
+      hydromarkToNeedle.SetMatrixTransformToParent(transform.GetMatrix())
 
   def setRASMarkups(self, observer, eventid):
     parameterNode = self.getParameterNode()
