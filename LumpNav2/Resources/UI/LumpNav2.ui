@@ -450,6 +450,19 @@
        </layout>
       </item>
       <item>
+       <widget class="QPushButton" name="hydromarkVisibility2DButton">
+        <property name="text">
+         <string>HydroMARK Contour Visibility</string>
+        </property>
+        <property name="checkable">
+         <bool>true</bool>
+        </property>
+        <property name="checked">
+         <bool>true</bool>
+        </property>
+       </widget>
+      </item>
+      <item>
        <spacer name="verticalSpacer_4">
         <property name="orientation">
          <enum>Qt::Vertical</enum>
@@ -1183,16 +1196,6 @@
        </widget>
       </item>
       <item>
-       <widget class="QPushButton" name="segmentationVisibility">
-        <property name="text">
-         <string>Show AI Segmentation</string>
-        </property>
-        <property name="checkable">
-         <bool>true</bool>
-        </property>
-       </widget>
-      </item>
-      <item>
        <widget class="QPushButton" name="warningSoundButton">
         <property name="text">
          <string>Breach Warning Sound</string>
@@ -1204,6 +1207,53 @@
          <bool>false</bool>
         </property>
        </widget>
+      </item>
+      <item>
+       <layout class="QHBoxLayout" name="horizontalLayout_26">
+        <item>
+         <widget class="QLabel" name="label_13">
+          <property name="text">
+           <string>Contour visibility:</string>
+          </property>
+         </widget>
+        </item>
+        <item>
+         <widget class="QPushButton" name="manualVisibilityButton">
+          <property name="text">
+           <string>Manual</string>
+          </property>
+          <property name="checkable">
+           <bool>true</bool>
+          </property>
+          <property name="checked">
+           <bool>true</bool>
+          </property>
+         </widget>
+        </item>
+        <item>
+         <widget class="QPushButton" name="hydromarkVisibilityButton">
+          <property name="text">
+           <string>HydroMARK</string>
+          </property>
+          <property name="checkable">
+           <bool>true</bool>
+          </property>
+          <property name="checked">
+           <bool>true</bool>
+          </property>
+         </widget>
+        </item>
+        <item>
+         <widget class="QPushButton" name="automaticVisibilityButton">
+          <property name="text">
+           <string>Automatic</string>
+          </property>
+          <property name="checkable">
+           <bool>true</bool>
+          </property>
+         </widget>
+        </item>
+       </layout>
       </item>
       <item>
        <layout class="QHBoxLayout" name="horizontalLayout_19">
@@ -1223,6 +1273,19 @@
            <bool>true</bool>
           </property>
           <property name="checked">
+           <bool>true</bool>
+          </property>
+          <attribute name="buttonGroup">
+           <string notr="true">watchedModelButtonGroup</string>
+          </attribute>
+         </widget>
+        </item>
+        <item>
+         <widget class="QPushButton" name="hydromarkWatchedModelButton">
+          <property name="text">
+           <string>HydroMARK</string>
+          </property>
+          <property name="checkable">
            <bool>true</bool>
           </property>
           <attribute name="buttonGroup">
