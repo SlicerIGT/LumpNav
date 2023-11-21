@@ -253,6 +253,7 @@ class LumpNav2Widget(ScriptedLoadableModuleWidget, VTKObservationMixin):
     self.addObserver(slicer.mrmlScene, slicer.mrmlScene.StartCloseEvent, self.onSceneStartClose)
     self.addObserver(slicer.mrmlScene, slicer.mrmlScene.EndCloseEvent, self.onSceneEndClose)
     self.addObserver(slicer.mrmlScene, slicer.mrmlScene.StartImportEvent, self.onSceneStartImport)
+    self.addObserver(slicer.mrmlScene, slicer.mrmlScene.EndImportEvent, self.onSceneEndImport)
 
     # QT connections
     self.ui.toolsCollapsibleButton.connect('contentsCollapsed(bool)', self.onToolsCollapsed)
@@ -595,8 +596,11 @@ class LumpNav2Widget(ScriptedLoadableModuleWidget, VTKObservationMixin):
       self.ui.navigationCollapsibleButton.collapsed = True
       self.ui.eventRecordingCollapsibleButton.collapsed = True
       slicer.app.layoutManager().setLayout(6)
-      slicer.util.resetSliceViews()
       slicer.app.layoutManager().sliceWidget('Red').sliceController().setCompositingToAdd()
+      slicer.util.resetSliceViews()
+
+      hydromarkMarkupNode = self._parameterNode.GetNodeReference(self.logic.HYDROMARK_MARKUP_NEEDLE)
+      hydromarkMarkupNode.GetDisplayNode().SetVisibility(self.ui.hydromarkVisibilityButton.checked)
 
   def onNavigationCollapsed(self, collapsed):
     """
@@ -893,7 +897,8 @@ class LumpNav2Widget(ScriptedLoadableModuleWidget, VTKObservationMixin):
     else:
       self.ui.hydromarkVisibilityButton.checked = False
       self.ui.hydromarkVisibility2DButton.checked = False
-    self.logic.setHydromarkVisibility(toggled)
+    inContouringTab = not self.ui.contouringCollapsibleButton.collapsed
+    self.logic.setHydromarkVisibility(toggled, inContouringTab)
 
   def onSegmentationVisibilityToggled(self, toggled):
     logging.info("onSegmentationVisibilityToggled")
@@ -1238,6 +1243,10 @@ class LumpNav2Widget(ScriptedLoadableModuleWidget, VTKObservationMixin):
   def onSceneStartImport(self, caller, event):
     if self.parent.isEntered:
       slicer.mrmlScene.Clear(0)
+  
+  def onSceneEndImport(self, caller, event):
+    if self.parent.isEntered:
+      self.logic.setupPlusServer()
 
   def initializeParameterNode(self):
     """
@@ -2214,9 +2223,11 @@ class LumpNav2Logic(ScriptedLoadableModuleLogic, VTKObservationMixin):
       configTextNode = slicer.mrmlScene.AddNewNodeByClass("vtkMRMLTextNode", self.CONFIG_TEXT_NODE)
       configTextNode.SetForceCreateStorageNode(slicer.vtkMRMLTextNode.CreateStorageNodeAlways)
       parameterNode.SetNodeReferenceID(self.CONFIG_TEXT_NODE, configTextNode.GetID())
+      configTextNode.SaveWithSceneOff()
     if not configTextNode.GetStorageNode():
       configTextNode.AddDefaultStorageNode()
     configTextStorageNode = configTextNode.GetStorageNode()
+    configTextStorageNode.SaveWithSceneOff()
     configTextStorageNode.SetFileName(configFullpath)
     configTextStorageNode.ReadData(configTextNode)
 
@@ -2224,6 +2235,7 @@ class LumpNav2Logic(ScriptedLoadableModuleLogic, VTKObservationMixin):
     plusServerNode = parameterNode.GetNodeReference(self.PLUS_SERVER_NODE)
     if not plusServerNode:
       plusServerNode = slicer.mrmlScene.AddNewNodeByClass("vtkMRMLPlusServerNode", self.PLUS_SERVER_NODE)
+      plusServerNode.SaveWithSceneOff()
       parameterNode.SetNodeReferenceID(self.PLUS_SERVER_NODE, plusServerNode.GetID())
     plusServerNode.SetAndObserveConfigNode(configTextNode)
 
@@ -2231,6 +2243,7 @@ class LumpNav2Logic(ScriptedLoadableModuleLogic, VTKObservationMixin):
     if not plusServerLauncherNode:
       plusServerLauncherNode = slicer.mrmlScene.AddNewNodeByClass("vtkMRMLPlusServerLauncherNode", self.PLUS_SERVER_LAUNCHER_NODE)
       parameterNode.SetNodeReferenceID(self.PLUS_SERVER_LAUNCHER_NODE, plusServerLauncherNode.GetID())
+      plusServerLauncherNode.SaveWithSceneOff()
 
     if plusServerLauncherNode.GetNodeReferenceID('plusServerRef') != plusServerNode.GetID():
       plusServerLauncherNode.AddAndObserveServerNode(plusServerNode)
@@ -2246,6 +2259,7 @@ class LumpNav2Logic(ScriptedLoadableModuleLogic, VTKObservationMixin):
       predictionConnectorNode = slicer.mrmlScene.AddNewNodeByClass("vtkMRMLIGTLConnectorNode", self.PREDICTION_CONNECTOR_NODE)
       predictionConnectorNode.SetTypeClient(self.PREDICTION_HOSTNAME, self.PREDICTION_PORT)
       parameterNode.SetNodeReferenceID(self.PREDICTION_CONNECTOR_NODE, predictionConnectorNode.GetID())
+      predictionConnectorNode.SaveWithSceneOff()
 
   def setTrackingSequenceBrowser(self, recording):
     parameterNode = self.getParameterNode()
@@ -2289,12 +2303,13 @@ class LumpNav2Logic(ScriptedLoadableModuleLogic, VTKObservationMixin):
     tumorModel_Needle.GetDisplayNode().SetVisibility2D(toggled)
     tumorModel_Needle.GetDisplayNode().SetVisibility3D(toggled)
   
-  def setHydromarkVisibility(self, toggled):
+  def setHydromarkVisibility(self, toggled, inContouringTab):
     parameterNode = self.getParameterNode()
     parameterNode.SetParameter(self.HYDROMARK_VISIBLE, str(toggled))
     hydromarkMarkup_Needle = parameterNode.GetNodeReference(self.HYDROMARK_MARKUP_NEEDLE)
     tumorModelHydromark = parameterNode.GetNodeReference(self.TUMOR_MODEL_HYDROMARK)
-    hydromarkMarkup_Needle.GetDisplayNode().SetVisibility(toggled)
+    if inContouringTab:
+      hydromarkMarkup_Needle.GetDisplayNode().SetVisibility(toggled)
     tumorModelHydromark.GetDisplayNode().SetVisibility2D(toggled)
     tumorModelHydromark.GetDisplayNode().SetVisibility3D(toggled)
 
