@@ -1520,7 +1520,6 @@ class LumpNav2Logic(ScriptedLoadableModuleLogic, VTKObservationMixin):
   SUPERIOR_DIST_TO_MARGIN = "SuperiorDistToMargin"
   INFERIOR_DIST_TO_MARGIN = "InferiorDistToMargin"
   HYDROMARK_MARKUP_NEEDLE = "HydromarkMarkup_Needle"
-  HYDROMARK_TO_NEEDLE = "HydromarkToNeedle"
   TUMOR_MODEL_HYDROMARK = "TumorModelHydromark"
   HYDROMARK_VISIBLE = "HydromarkVisible"
 
@@ -1882,14 +1881,6 @@ class LumpNav2Logic(ScriptedLoadableModuleLogic, VTKObservationMixin):
       tumorModelHydromarkDisplay.Visibility2DOn()
       tumorModelHydromarkDisplay.SetSliceIntersectionThickness(4)
       parameterNode.SetNodeReferenceID(self.TUMOR_MODEL_HYDROMARK, tumorModelHydromark.GetID())
-
-    # Transform to position model using fiducial
-    hydromarkToNeedle = parameterNode.GetNodeReference(self.HYDROMARK_TO_NEEDLE)
-    if hydromarkToNeedle is None:
-      hydromarkToNeedle = slicer.mrmlScene.AddNewNodeByClass("vtkMRMLLinearTransformNode", self.HYDROMARK_TO_NEEDLE)
-      hydromarkToNeedle.SetAndObserveTransformNodeID(needleToReference.GetID())
-      parameterNode.SetNodeReferenceID(self.HYDROMARK_TO_NEEDLE, hydromarkToNeedle.GetID())
-    tumorModelHydromark.SetAndObserveTransformNodeID(hydromarkToNeedle.GetID())
 
     RASMarkups = parameterNode.GetNodeReference(self.RAS_MARKUPS)
     if RASMarkups is None:
@@ -2773,7 +2764,6 @@ class LumpNav2Logic(ScriptedLoadableModuleLogic, VTKObservationMixin):
       tumorModelHydromark.SetAndObservePolyData(funcSource.GetOutput())
 
       # Set position
-      hydromarkToNeedle = parameterNode.GetNodeReference(self.HYDROMARK_TO_NEEDLE)
       hydromarkPosition = hydromarkMarkup_Needle.GetNthControlPointPosition(0)
       transform = vtk.vtkTransform()
       transform.Translate(hydromarkPosition)
@@ -2904,12 +2894,12 @@ class LumpNav2Logic(ScriptedLoadableModuleLogic, VTKObservationMixin):
     parameterNode = self.getParameterNode()
     eventTableNode = parameterNode.GetNodeReference(self.EVENT_TABLE_NODE)
     lastRowIndex = eventTableNode.AddEmptyRow()
-    # sequenceBrowserNode = parameterNode.GetNodeReference(self.TRACKING_SEQUENCE_BROWSER)
-    # lastItem = sequenceBrowserNode.SelectLastItem()
-    # if lastItem == -1:
-    #   sequenceIndex = ""
-    # else:
-    #   sequenceIndex = sequenceBrowserNode.GetMasterSequenceNode().GetNthIndexValue(sequenceBrowserNode.SelectLastItem())
+    sequenceBrowserNode = parameterNode.GetNodeReference(self.TRACKING_SEQUENCE_BROWSER)
+    lastItem = sequenceBrowserNode.SelectLastItem()
+    if lastItem == -1:
+      sequenceIndex = ""
+    else:
+      sequenceIndex = sequenceBrowserNode.GetMasterSequenceNode().GetNthIndexValue(sequenceBrowserNode.SelectLastItem())
     
     eventTableNode.SetCellText(lastRowIndex, self.TIME_COLUMN, datetime.datetime.now().strftime("%m/%d/%Y, %H:%M:%S"))
     eventTableNode.SetCellText(lastRowIndex, self.SEQUENCE_TIME_COLUMN, sequenceIndex)
