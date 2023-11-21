@@ -2123,7 +2123,6 @@ class LumpNav2Logic(ScriptedLoadableModuleLogic, VTKObservationMixin):
         needleTipToNeedle = slicer.mrmlScene.AddNewNodeByClass("vtkMRMLLinearTransformNode", self.NEEDLETIP_TO_NEEDLE)
       parameterNode.SetNodeReferenceID(self.NEEDLETIP_TO_NEEDLE, needleTipToNeedle.GetID())
     needleTipToNeedle.SetAndObserveTransformNodeID(needleToReference.GetID())
-    self.addObserver(needleTipToNeedle, vtk.vtkCommand.ModifiedEvent, self.onNeedleTipToNeedleModified)
 
     # Cautery tracking
     cauteryToReference = self.addLinearTransformToScene(self.CAUTERY_TO_REFERENCE, parentTransform=referenceToRas)
@@ -2878,20 +2877,6 @@ class LumpNav2Logic(ScriptedLoadableModuleLogic, VTKObservationMixin):
     predictionData = predictionImage.GetImageData()
     if predictionData.GetDimensions() != imageDimensions:
       predictionData.SetDimensions(imageDimensions)
-
-  def onNeedleTipToNeedleModified(self, observer, eventid):
-    parameterNode = self.getParameterNode()
-    needleTipToNeedle = parameterNode.GetNodeReference(self.NEEDLETIP_TO_NEEDLE)
-    needleTipToNeedleFilePath = self.resourcePath(self.NEEDLETIP_TO_NEEDLE + ".h5")
-    slicer.util.saveNode(needleTipToNeedle, needleTipToNeedleFilePath)
-
-    # Update offset to get needle length to default
-    needleTipToNeedleMatrix = vtk.vtkMatrix4x4()
-    needleTipToNeedle.GetMatrixTransformToParent(needleTipToNeedleMatrix)
-    needleTipToNeedleLength = needleTipToNeedleMatrix.GetElement(2, 3)
-    settings = qt.QSettings()
-    settings.setValue(self.NEEDLE_LENGTH_OFFSET_SETTING, needleTipToNeedleLength - self.NEEDLE_LENGTH_DEFAULT)
-    self.setNeedleModel()
 
   def setDisplayCauteryStateClicked(self, pressed):
     import CauteryClassification
