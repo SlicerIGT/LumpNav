@@ -572,6 +572,7 @@ class LumpNav2Widget(ScriptedLoadableModuleWidget, VTKObservationMixin):
     else:
       modelNode = parameterNode.GetNodeReference(self.logic.TUMOR_MODEL)
     self.logic.setBreachWarningModel(modelNode)
+    parameterNode.Modified()
   
   def onToolsCollapsed(self, collapsed):
     if not collapsed:
@@ -1519,6 +1520,7 @@ class LumpNav2Logic(ScriptedLoadableModuleLogic, VTKObservationMixin):
   RIGHT_DIST_TO_MARGIN = "RightDistToMargin"
   SUPERIOR_DIST_TO_MARGIN = "SuperiorDistToMargin"
   INFERIOR_DIST_TO_MARGIN = "InferiorDistToMargin"
+  HYDROMARK_TO_NEEDLE = "HydromarkToNeedle"
   HYDROMARK_MARKUP_NEEDLE = "HydromarkMarkup_Needle"
   TUMOR_MODEL_HYDROMARK = "TumorModelHydromark"
   HYDROMARK_VISIBLE = "HydromarkVisible"
@@ -1882,6 +1884,9 @@ class LumpNav2Logic(ScriptedLoadableModuleLogic, VTKObservationMixin):
       tumorModelHydromarkDisplay.SetSliceIntersectionThickness(4)
       parameterNode.SetNodeReferenceID(self.TUMOR_MODEL_HYDROMARK, tumorModelHydromark.GetID())
 
+    hydromarkToNeedle = parameterNode.GetNodeReference(self.HYDROMARK_TO_NEEDLE)
+    tumorModelHydromark.SetAndObserveTransformNodeID(hydromarkToNeedle.GetID())
+
     RASMarkups = parameterNode.GetNodeReference(self.RAS_MARKUPS)
     if RASMarkups is None:
       RASMarkups = slicer.mrmlScene.AddNewNodeByClass("vtkMRMLMarkupsFiducialNode", self.RAS_MARKUPS)
@@ -2098,9 +2103,9 @@ class LumpNav2Logic(ScriptedLoadableModuleLogic, VTKObservationMixin):
       referenceToRas.SetMatrixTransformToParent(referenceToRasMatrix)
     else:
       # Create default referenceToRas transform
-      m = self.createMatrixFromString('0 1 0 0 '
-                                      '0 0 -1 0 '
-                                      '-1 0 0 0 '
+      m = self.createMatrixFromString(' 0 -1 0 0.258819 ' 
+                                      '-0.965926 0 0 -0.965926 ' 
+                                      '-0.258819 0 0 ' 
                                       '0 0 0 1')
       referenceToRas.SetMatrixTransformToParent(m)
       # Save default referenceToRas transform
@@ -2151,6 +2156,9 @@ class LumpNav2Logic(ScriptedLoadableModuleLogic, VTKObservationMixin):
     imageToTransdMatrix = vtk.vtkMatrix4x4()
     imageToTransd.GetMatrixTransformToParent(imageToTransdMatrix)
     predToTransd.SetMatrixTransformToParent(imageToTransdMatrix)
+
+    # Hydromark to needle to position ellipsoid
+    self.addLinearTransformToScene(self.HYDROMARK_TO_NEEDLE, parentTransform=needleToReference)
 
   def updateImageToTransdFromDepth(self, depthMm):
     """
@@ -2727,6 +2735,12 @@ class LumpNav2Logic(ScriptedLoadableModuleLogic, VTKObservationMixin):
     hydromarkMarkup_Needle = parameterNode.GetNodeReference(self.HYDROMARK_MARKUP_NEEDLE)
     hydromarkMarkup_Needle.RemoveAllControlPoints()
 
+    # Reset model
+    tumorModelHydromark = parameterNode.GetNodeReference(self.TUMOR_MODEL_HYDROMARK)
+    if tumorModelHydromark:
+      tumorPolyData = tumorModelHydromark.GetPolyData()
+      tumorPolyData.Reset()
+
   def onHydromarkMarkupNodeModified(self, observer, eventid):
     self.createTumorFromHydromark()
     self.getParameterNode().Modified()
@@ -2741,38 +2755,55 @@ class LumpNav2Logic(ScriptedLoadableModuleLogic, VTKObservationMixin):
     inferiorDistToMargin = parameterNode.GetParameter(self.INFERIOR_DIST_TO_MARGIN)
     hydromarkMarkup_Needle = parameterNode.GetNodeReference(self.HYDROMARK_MARKUP_NEEDLE)
 
-    if (anteriorDistToMargin and posteriorDistToMargin and leftDistToMargin 
-        and rightDistToMargin and superiorDistToMargin and inferiorDistToMargin
-        and hydromarkMarkup_Needle.GetNumberOfControlPoints() == 1):
-      aToP = float(anteriorDistToMargin) + float(posteriorDistToMargin)
-      lToR = float(leftDistToMargin) + float(rightDistToMargin)
-      sToI = float(superiorDistToMargin) + float(inferiorDistToMargin)
-
-      ellipsoid = vtk.vtkParametricEllipsoid()
-      ellipsoid.SetXRadius(sToI / 2)
-      ellipsoid.SetYRadius(lToR / 2)
-      ellipsoid.SetZRadius(aToP / 2)
-
-      funcSource = vtk.vtkParametricFunctionSource()
-      funcSource.SetParametricFunction(ellipsoid)
-      funcSource.SetUResolution(24)
-      funcSource.SetVResolution(24)
-      funcSource.SetWResolution(24)
-      funcSource.Update()
-
-      tumorModelHydromark = parameterNode.GetNodeReference(self.TUMOR_MODEL_HYDROMARK)
-      tumorModelHydromark.SetAndObservePolyData(funcSource.GetOutput())
-
-      # Set position
+    # Update HydromarkToNeedle using translation defined by control point
+    if hydromarkMarkup_Needle.GetNumberOfControlPoints() == 1:
+      hydromarkToNeedle = parameterNode.GetNodeReference(self.HYDROMARK_TO_NEEDLE)
       hydromarkPosition = hydromarkMarkup_Needle.GetNthControlPointPosition(0)
-      transform = vtk.vtkTransform()
-      transform.Translate(hydromarkPosition)
-      hydromarkToNeedle.SetMatrixTransformToParent(transform.GetMatrix())
+      hydromarkToNeedleTransform = vtk.vtkTransform()
+      hydromarkToNeedleTransform.Translate(hydromarkPosition)
+      hydromarkToNeedleMatrix = hydromarkToNeedleTransform.GetMatrix()
+      hydromarkToNeedle.SetMatrixTransformToParent(hydromarkToNeedleMatrix)
 
-      # Set visibility
-      hydromarkVisible = parameterNode.GetParameter(self.HYDROMARK_VISIBLE)
-      tumorModelHydromark.GetDisplayNode().SetVisibility2D(True if hydromarkVisible == "True" else False)
-      tumorModelHydromark.GetDisplayNode().SetVisibility3D(True if hydromarkVisible == "True" else False)
+      if (anteriorDistToMargin and posteriorDistToMargin and leftDistToMargin 
+          and rightDistToMargin and superiorDistToMargin and inferiorDistToMargin):
+        aToP = float(anteriorDistToMargin) + float(posteriorDistToMargin)
+        lToR = float(leftDistToMargin) + float(rightDistToMargin)
+        sToI = float(superiorDistToMargin) + float(inferiorDistToMargin)
+
+        ellipsoid = vtk.vtkParametricEllipsoid()
+        ellipsoid.SetXRadius(lToR / 2)
+        ellipsoid.SetYRadius(aToP / 2)
+        ellipsoid.SetZRadius(sToI / 2)
+
+        funcSource = vtk.vtkParametricFunctionSource()
+        funcSource.SetParametricFunction(ellipsoid)
+        funcSource.SetUResolution(24)
+        funcSource.SetVResolution(24)
+        funcSource.SetWResolution(24)
+        funcSource.Update()
+
+        # First move tumor model to RAS to create ellipsoid
+        tumorModelHydromark = parameterNode.GetNodeReference(self.TUMOR_MODEL_HYDROMARK)
+        tumorModelHydromark.SetAndObserveTransformNodeID(None)
+        tumorModelHydromark.SetAndObservePolyData(funcSource.GetOutput())
+
+        # Compute rotation of needle coordinate system
+        needleToReference = parameterNode.GetNodeReference(self.NEEDLE_TO_REFERENCE)
+        needleToRasMatrix = vtk.vtkMatrix4x4()
+        needleToReference.GetMatrixTransformToWorld(needleToRasMatrix)
+        needleToRasArr = slicer.util.arrayFromVTKMatrix(needleToRasMatrix)
+        # Create 4x4 matrix from rotation 3x3 matrix
+        needleToRasRotArr = np.vstack((np.hstack((needleToRasArr[:3, :3], np.array([0, 0, 0])[:, None])), [0, 0, 0, 1]))
+        needleToRasRotMatrix = slicer.util.vtkMatrixFromArray(needleToRasRotArr)
+        tumorModelHydromark.ApplyTransformMatrix(needleToRasRotMatrix)
+
+        # Move tumor model to HydromarkToNeedle
+        tumorModelHydromark.SetAndObserveTransformNodeID(hydromarkToNeedle.GetID())
+
+        # Set visibility
+        hydromarkVisible = parameterNode.GetParameter(self.HYDROMARK_VISIBLE)
+        tumorModelHydromark.GetDisplayNode().SetVisibility2D(True if hydromarkVisible == "True" else False)
+        tumorModelHydromark.GetDisplayNode().SetVisibility3D(True if hydromarkVisible == "True" else False)
 
   def setRASMarkups(self, observer, eventid):
     parameterNode = self.getParameterNode()
