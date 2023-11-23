@@ -814,26 +814,38 @@ class LumpNav2Widget(ScriptedLoadableModuleWidget, VTKObservationMixin):
     self.logic.setBrightness(self.BRIGHTEST_BRIGHTNESS)
 
   def onAnteriorDistToMarginChanged(self, value):
+    if self._updatingGUIFromParameterNode:
+      return
     self._parameterNode.SetParameter(self.logic.ANTERIOR_DIST_TO_MARGIN, str(value))
     self.logic.createTumorFromHydromark()
 
   def onPosteriorDistToMarginChanged(self, value):
+    if self._updatingGUIFromParameterNode:
+      return
     self._parameterNode.SetParameter(self.logic.POSTERIOR_DIST_TO_MARGIN, str(value))
     self.logic.createTumorFromHydromark()
 
   def onLeftDistToMarginChanged(self, value):
+    if self._updatingGUIFromParameterNode:
+      return
     self._parameterNode.SetParameter(self.logic.LEFT_DIST_TO_MARGIN, str(value))
     self.logic.createTumorFromHydromark()
 
   def onRightDistToMarginChanged(self, value):
+    if self._updatingGUIFromParameterNode:
+      return
     self._parameterNode.SetParameter(self.logic.RIGHT_DIST_TO_MARGIN, str(value))
     self.logic.createTumorFromHydromark()
 
   def onSuperiorDistToMarginChanged(self, value):
+    if self._updatingGUIFromParameterNode:
+      return
     self._parameterNode.SetParameter(self.logic.SUPERIOR_DIST_TO_MARGIN, str(value))
     self.logic.createTumorFromHydromark()
 
   def onInferiorDistToMarginChanged(self, value):
+    if self._updatingGUIFromParameterNode:
+      return
     self._parameterNode.SetParameter(self.logic.INFERIOR_DIST_TO_MARGIN, str(value))
     self.logic.createTumorFromHydromark()
 
@@ -1030,13 +1042,14 @@ class LumpNav2Widget(ScriptedLoadableModuleWidget, VTKObservationMixin):
 
   def enableAutoCenterInViewNode(self, viewNode):
     self.disableViewpointInViewNode(viewNode)
-    tumorModel = self._parameterNode.GetNodeReference(self.logic.TUMOR_MODEL)
+    breachWarningNode = self._parameterNode.GetNodeReference(self.logic.BREACH_WARNING)
+    watchedModel = breachWarningNode.GetWatchedModelNode()
     self.logic.viewpointLogic.getViewpointForViewNode(viewNode).setViewNode(viewNode)
     self.logic.viewpointLogic.getViewpointForViewNode(viewNode).autoCenterSetSafeXMinimum(-self.VIEW_COORD_WIDTH_LIMIT)
     self.logic.viewpointLogic.getViewpointForViewNode(viewNode).autoCenterSetSafeXMaximum(self.VIEW_COORD_WIDTH_LIMIT)
     self.logic.viewpointLogic.getViewpointForViewNode(viewNode).autoCenterSetSafeYMinimum(-self.VIEW_COORD_HEIGHT_LIMIT)
     self.logic.viewpointLogic.getViewpointForViewNode(viewNode).autoCenterSetSafeYMaximum(self.VIEW_COORD_HEIGHT_LIMIT)
-    self.logic.viewpointLogic.getViewpointForViewNode(viewNode).autoCenterSetModelNode(tumorModel)
+    self.logic.viewpointLogic.getViewpointForViewNode(viewNode).autoCenterSetModelNode(watchedModel)
     self.logic.viewpointLogic.getViewpointForViewNode(viewNode).autoCenterStart()
 
   def disableViewpointInViewNode(self, viewNode):
@@ -1247,7 +1260,10 @@ class LumpNav2Widget(ScriptedLoadableModuleWidget, VTKObservationMixin):
   
   def onSceneEndImport(self, caller, event):
     if self.parent.isEntered:
-      self.logic.setupPlusServer()
+      self.logic.setup()
+      self.initializeParameterNode()
+      self.updateGUIFromParameterNode()
+      self.updateGUIFromMRML()
 
   def initializeParameterNode(self):
     """
@@ -1363,6 +1379,24 @@ class LumpNav2Widget(ScriptedLoadableModuleWidget, VTKObservationMixin):
       else:
         self.ui.deleteHydromarkButton.setEnabled(False)
         self.ui.placeHydromarkButton.setEnabled(True)
+
+    if anteriorDist := self._parameterNode.GetParameter(self.logic.ANTERIOR_DIST_TO_MARGIN):
+      self.ui.anteriorDistToMarginSpinBox.value = float(anteriorDist)
+
+    if posteriorDist := self._parameterNode.GetParameter(self.logic.POSTERIOR_DIST_TO_MARGIN):
+      self.ui.posteriorDistToMarginSpinBox.value = float(posteriorDist)
+
+    if leftDist := self._parameterNode.GetParameter(self.logic.LEFT_DIST_TO_MARGIN):
+      self.ui.leftDistToMarginSpinBox.value = float(leftDist)
+
+    if rightDist := self._parameterNode.GetParameter(self.logic.RIGHT_DIST_TO_MARGIN):
+      self.ui.rightDistToMarginSpinBox.value = float(rightDist)
+
+    if superiorDist := self._parameterNode.GetParameter(self.logic.SUPERIOR_DIST_TO_MARGIN):
+      self.ui.superiorDistToMarginSpinBox.value = float(superiorDist)
+
+    if inferiorDist := self._parameterNode.GetParameter(self.logic.INFERIOR_DIST_TO_MARGIN):
+      self.ui.inferiorDistToMarginSpinBox.value = float(inferiorDist)
 
     tumorModelHydromark = self._parameterNode.GetNodeReference(self.logic.TUMOR_MODEL_HYDROMARK)
     if tumorModelHydromark and tumorModelHydromark.GetPolyData():
@@ -1931,8 +1965,8 @@ class LumpNav2Logic(ScriptedLoadableModuleLogic, VTKObservationMixin):
       imageArray = np.zeros((1, 615, 525), dtype="uint8")
       slicer.util.updateVolumeFromArray(imageImage, imageArray)
       parameterNode.SetNodeReferenceID(self.IMAGE_IMAGE, imageImage.GetID())
-      # Update prediction volume dimensions when image dimensions change
-      self.addObserver(imageImage, slicer.vtkMRMLScalarVolumeNode.ImageDataModifiedEvent, self.onImageImageModified)
+    # Update prediction volume dimensions when image dimensions change
+    self.addObserver(imageImage, slicer.vtkMRMLScalarVolumeNode.ImageDataModifiedEvent, self.onImageImageModified)
 
     imageToTransd = parameterNode.GetNodeReference(self.IMAGE_TO_TRANSD)
     imageImage.SetAndObserveTransformNodeID(imageToTransd.GetID())
@@ -1991,26 +2025,27 @@ class LumpNav2Logic(ScriptedLoadableModuleLogic, VTKObservationMixin):
       cauteryTipToCautery = parameterNode.GetNodeReference(self.CAUTERYTIP_TO_CAUTERY)
       breachWarningNode.SetAndObserveToolTransformNodeId(cauteryTipToCautery.GetID())
       breachWarningNode.SetAndObserveWatchedModelNodeID(tumorModel_Needle.GetID())
-      self.addObserver(breachWarningNode, vtk.vtkCommand.ModifiedEvent, self.onBreachWarningNodeChanged)
       parameterNode.SetNodeReferenceID(self.BREACH_WARNING, breachWarningNode.GetID())
-      warningSoundEnabled = slicer.util.settingsValue(self.WARNING_SOUND_SETTING, True, converter=slicer.util.toBool)
-      self.setWarningSound(warningSoundEnabled)
-
-      # Line properties can only be set after the line is created (made visible at least once)
-      breachWarningLogic = slicer.modules.breachwarning.logic()
-      breachWarningLogic.SetLineToClosestPointVisibility(True, breachWarningNode)
-      distanceRulerFontSize = slicer.util.settingsValue(self.RULER_FONT_SIZE, self.RULER_DISTANCE_DEFAULT_FONT_SIZE, converter=lambda x: float(x))
-      breachWarningLogic.SetLineToClosestPointTextScale(distanceRulerFontSize, breachWarningNode)
-      breachWarningLogic.SetLineToClosestPointColor(0, 0, 0.5, breachWarningNode)
-
-      # Ruler display and distance text setting
-      displayRulerEnabled = slicer.util.settingsValue(self.DISPLAY_RULER_SETTING, True, converter=slicer.util.toBool)
-      breachWarningLogic.SetLineToClosestPointVisibility(displayRulerEnabled, breachWarningNode)
-      displayDistanceEnabled = slicer.util.settingsValue(self.DISPLAY_DISTANCE_SETTING, True, converter=slicer.util.toBool)
-      self.setRulerDistanceVisibility(displayDistanceEnabled)
 
       # Prevent warning that there is no surface model (before tumor contouring)
       self.setBreachWarning(False)
+      
+    warningSoundEnabled = slicer.util.settingsValue(self.WARNING_SOUND_SETTING, True, converter=slicer.util.toBool)
+    self.setWarningSound(warningSoundEnabled)
+
+    # Line properties can only be set after the line is created (made visible at least once)
+    breachWarningLogic = slicer.modules.breachwarning.logic()
+    breachWarningLogic.SetLineToClosestPointVisibility(True, breachWarningNode)
+    distanceRulerFontSize = slicer.util.settingsValue(self.RULER_FONT_SIZE, self.RULER_DISTANCE_DEFAULT_FONT_SIZE, converter=lambda x: float(x))
+    breachWarningLogic.SetLineToClosestPointTextScale(distanceRulerFontSize, breachWarningNode)
+    breachWarningLogic.SetLineToClosestPointColor(0, 0, 0.5, breachWarningNode)
+
+    # Ruler display and distance text setting
+    displayRulerEnabled = slicer.util.settingsValue(self.DISPLAY_RULER_SETTING, True, converter=slicer.util.toBool)
+    breachWarningLogic.SetLineToClosestPointVisibility(displayRulerEnabled, breachWarningNode)
+    displayDistanceEnabled = slicer.util.settingsValue(self.DISPLAY_DISTANCE_SETTING, True, converter=slicer.util.toBool)
+    self.setRulerDistanceVisibility(displayDistanceEnabled)
+    self.addObserver(breachWarningNode, vtk.vtkCommand.ModifiedEvent, self.onBreachWarningNodeChanged)
 
     breachMarkups_Needle = parameterNode.GetNodeReference(self.BREACH_MARKUPS_NEEDLE)
     if breachMarkups_Needle is None:
@@ -2901,6 +2936,12 @@ class LumpNav2Logic(ScriptedLoadableModuleLogic, VTKObservationMixin):
     breachWarningNode.SetAndObserveWatchedModelNodeID(modelNode.GetID())
     breachWarningNode.SetOriginalColor(modelColor)
     logging.info(f"Set breach warning watched model to {modelNode.GetName()}")
+
+    # Update autocenter
+    for i in range(slicer.app.layoutManager().threeDViewCount):
+      viewNode = slicer.app.layoutManager().threeDWidget(i).mrmlViewNode()
+      if not self.viewpointLogic.getViewpointForViewNode(viewNode).isCurrentModeAutoCenter():
+        self.viewpointLogic.getViewpointForViewNode(viewNode).autoCenterSetModelNode(modelNode)
 
   def onImageImageModified(self, observer, eventid):
     self.updatePredictionImageDimensions()
