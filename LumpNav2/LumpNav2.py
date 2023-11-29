@@ -360,6 +360,8 @@ class LumpNav2Widget(ScriptedLoadableModuleWidget, VTKObservationMixin):
     self.ui.plusConfigFileSelector.connect('currentPathChanged(const QString)', self.onPlusConfigFileChanged)
     self.ui.thresholdSlider.connect("valueChanged(double)", self.onThresholdSliderChanged)
     self.ui.manualVisibilityButton.connect('toggled(bool)', self.onContourVisibilityToggled)
+    hydromarkVisibility = slicer.util.settingsValue(self.logic.HYDROMARK_VISIBILITY_SETTING, True, converter=slicer.util.toBool)
+    self.ui.hydromarkVisibilityButton.checked = hydromarkVisibility
     self.ui.hydromarkVisibilityButton.connect('toggled(bool)', self.onHydromarkVisibilityToggled)
     self.ui.automaticVisibilityButton.connect('toggled(bool)', self.onSegmentationVisibilityToggled)
     self.ui.watchedModelButtonGroup.buttonClicked.connect(self.onWatchedModelClicked)
@@ -599,6 +601,7 @@ class LumpNav2Widget(ScriptedLoadableModuleWidget, VTKObservationMixin):
       slicer.app.layoutManager().setLayout(6)
       slicer.app.layoutManager().sliceWidget('Red').sliceController().setCompositingToAdd()
       slicer.util.resetSliceViews()
+      self.logic.setBrightness(self.NORMAL_BRIGHTNESS)
 
       hydromarkMarkupNode = self._parameterNode.GetNodeReference(self.logic.HYDROMARK_MARKUP_NEEDLE)
       hydromarkMarkupNode.GetDisplayNode().SetVisibility(self.ui.hydromarkVisibilityButton.checked)
@@ -904,6 +907,8 @@ class LumpNav2Widget(ScriptedLoadableModuleWidget, VTKObservationMixin):
 
   def onHydromarkVisibilityToggled(self, toggled):
     logging.info("onHydromarkVisibilityToggled")
+    settings = qt.QSettings()
+    settings.setValue(self.logic.HYDROMARK_VISIBILITY_SETTING, toggled)
     if toggled:
       self.ui.hydromarkVisibilityButton.checked = True
       self.ui.hydromarkVisibility2DButton.checked = True
@@ -1557,7 +1562,7 @@ class LumpNav2Logic(ScriptedLoadableModuleLogic, VTKObservationMixin):
   HYDROMARK_TO_NEEDLE = "HydromarkToNeedle"
   HYDROMARK_MARKUP_NEEDLE = "HydromarkMarkup_Needle"
   TUMOR_MODEL_HYDROMARK = "TumorModelHydromark"
-  HYDROMARK_VISIBLE = "HydromarkVisible"
+  HYDROMARK_VISIBILITY_SETTING = "LumpNav2/HydromarkVisible"
 
   # Model names and settings
   REFERENCE_TO_RAS_SETTING = "LumpNav2/ReferenceToRas"
@@ -1654,8 +1659,6 @@ class LumpNav2Logic(ScriptedLoadableModuleLogic, VTKObservationMixin):
       parameterNode.SetParameter(self.AI_THRESHOLD, str(self.DEFAULT_THRESHOLD))
     if not parameterNode.GetParameter(self.AI_VISIBLE):
       parameterNode.SetParameter(self.AI_VISIBLE, "False")
-    if not parameterNode.GetParameter(self.HYDROMARK_VISIBLE):
-      parameterNode.SetParameter(self.HYDROMARK_VISIBLE, "True")
 
     parameterNode = self.getParameterNode()
     parameterNode.SetAttribute("TipToSurfaceDistanceTextScale", "3")
@@ -2138,9 +2141,9 @@ class LumpNav2Logic(ScriptedLoadableModuleLogic, VTKObservationMixin):
       referenceToRas.SetMatrixTransformToParent(referenceToRasMatrix)
     else:
       # Create default referenceToRas transform
-      m = self.createMatrixFromString(' 0 -1 0 0.258819 ' 
-                                      '-0.965926 0 0 -0.965926 ' 
-                                      '-0.258819 0 0 ' 
+      m = self.createMatrixFromString('0 0 -1 0 ' 
+                                      '0.258819 -0.965926 0 0 ' 
+                                      '-0.965926 -0.258819 0 0 ' 
                                       '0 0 0 1')
       referenceToRas.SetMatrixTransformToParent(m)
       # Save default referenceToRas transform
@@ -2339,7 +2342,6 @@ class LumpNav2Logic(ScriptedLoadableModuleLogic, VTKObservationMixin):
   
   def setHydromarkVisibility(self, toggled, inContouringTab):
     parameterNode = self.getParameterNode()
-    parameterNode.SetParameter(self.HYDROMARK_VISIBLE, str(toggled))
     hydromarkMarkup_Needle = parameterNode.GetNodeReference(self.HYDROMARK_MARKUP_NEEDLE)
     tumorModelHydromark = parameterNode.GetNodeReference(self.TUMOR_MODEL_HYDROMARK)
     if inContouringTab:
@@ -2772,8 +2774,7 @@ class LumpNav2Logic(ScriptedLoadableModuleLogic, VTKObservationMixin):
 
     # Reset model
     tumorModelHydromark = parameterNode.GetNodeReference(self.TUMOR_MODEL_HYDROMARK)
-    if tumorModelHydromark:
-      tumorPolyData = tumorModelHydromark.GetPolyData()
+    if tumorModelHydromark and (tumorPolyData := tumorModelHydromark.GetPolyData):
       tumorPolyData.Reset()
 
   def onHydromarkMarkupNodeModified(self, observer, eventid):
@@ -2836,9 +2837,9 @@ class LumpNav2Logic(ScriptedLoadableModuleLogic, VTKObservationMixin):
         tumorModelHydromark.SetAndObserveTransformNodeID(hydromarkToNeedle.GetID())
 
         # Set visibility
-        hydromarkVisible = parameterNode.GetParameter(self.HYDROMARK_VISIBLE)
-        tumorModelHydromark.GetDisplayNode().SetVisibility2D(True if hydromarkVisible == "True" else False)
-        tumorModelHydromark.GetDisplayNode().SetVisibility3D(True if hydromarkVisible == "True" else False)
+        hydromarkVisible = slicer.util.settingsValue(self.HYDROMARK_VISIBILITY_SETTING, True, converter=slicer.util.toBool)
+        tumorModelHydromark.GetDisplayNode().SetVisibility2D(hydromarkVisible)
+        tumorModelHydromark.GetDisplayNode().SetVisibility3D(hydromarkVisible)
 
   def setRASMarkups(self, observer, eventid):
     parameterNode = self.getParameterNode()
