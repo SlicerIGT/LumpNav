@@ -283,6 +283,8 @@ class LumpNav2Widget(ScriptedLoadableModuleWidget, VTKObservationMixin):
     self.ui.inferiorDistToMarginSpinBox.connect("valueChanged(double)", self.onInferiorDistToMarginChanged)
     self.ui.placeHydromarkButton.connect('toggled(bool)', self.onPlaceHydromarkToggled)
     self.ui.deleteHydromarkButton.connect('clicked()', self.onDeleteHydromarkClicked)
+    hydromarkVisibility = slicer.util.settingsValue(self.logic.HYDROMARK_VISIBILITY_SETTING, True, converter=slicer.util.toBool)
+    self.ui.hydromarkVisibility2DButton.checked = hydromarkVisibility
     self.ui.hydromarkVisibility2DButton.connect('toggled(bool)', self.onHydromarkVisibilityToggled)
     self.ui.markPointsButton.connect('toggled(bool)', self.onMarkPointsToggled)
     self.ui.deleteLastFiducialButton.connect('clicked()', self.onDeleteLastFiducialClicked)
@@ -360,7 +362,6 @@ class LumpNav2Widget(ScriptedLoadableModuleWidget, VTKObservationMixin):
     self.ui.plusConfigFileSelector.connect('currentPathChanged(const QString)', self.onPlusConfigFileChanged)
     self.ui.thresholdSlider.connect("valueChanged(double)", self.onThresholdSliderChanged)
     self.ui.manualVisibilityButton.connect('toggled(bool)', self.onContourVisibilityToggled)
-    hydromarkVisibility = slicer.util.settingsValue(self.logic.HYDROMARK_VISIBILITY_SETTING, True, converter=slicer.util.toBool)
     self.ui.hydromarkVisibilityButton.checked = hydromarkVisibility
     self.ui.hydromarkVisibilityButton.connect('toggled(bool)', self.onHydromarkVisibilityToggled)
     self.ui.automaticVisibilityButton.connect('toggled(bool)', self.onSegmentationVisibilityToggled)
@@ -2631,11 +2632,11 @@ class LumpNav2Logic(ScriptedLoadableModuleLogic, VTKObservationMixin):
     # Surface generation algorithms behave unpredictably when there are not enough points
     # return if there are very few points
     if numberOfPoints < 1:
-      sphereSource = vtk.vtkSphereSource()
-      # sphereSource.SetRadius(0.001)
-      tumorModel_Needle = parameterNode.GetNodeReference(self.TUMOR_MODEL)
-      tumorModel_Needle.SetPolyDataConnection(sphereSource.GetOutputPort())
-      tumorModel_Needle.Modified()
+      # sphereSource = vtk.vtkSphereSource()
+      # # sphereSource.SetRadius(0.001)
+      # tumorModel_Needle = parameterNode.GetNodeReference(self.TUMOR_MODEL)
+      # tumorModel_Needle.SetPolyDataConnection(sphereSource.GetOutputPort())
+      # tumorModel_Needle.Modified()
       return
 
     points.SetNumberOfPoints(numberOfPoints)
@@ -2661,12 +2662,8 @@ class LumpNav2Logic(ScriptedLoadableModuleLogic, VTKObservationMixin):
     glyph = vtk.vtkGlyph3D()
     glyph.SetInputData(pointPolyData)
     glyph.SetSourceConnection(sphere.GetOutputPort())
-    # glyph.SetVectorModeToUseNormal()
-    # glyph.SetScaleModeToScaleByVector()
-    # glyph.SetScaleFactor(0.25)
     delaunay.SetInputConnection(glyph.GetOutputPort())
-    # print("delaunay")
-    # print(delaunay)
+
     delaunay.Update()
     surfaceFilter = vtk.vtkDataSetSurfaceFilter()
     surfaceFilter.SetInputConnection(delaunay.GetOutputPort())
@@ -2679,17 +2676,14 @@ class LumpNav2Logic(ScriptedLoadableModuleLogic, VTKObservationMixin):
     delaunaySmooth = vtk.vtkDelaunay3D()
     delaunaySmooth.SetInputData(smoother.GetOutput())
     delaunaySmooth.Update()
-    #print("delaySmooth")
-    #print(delaunaySmooth)
+
     smoothSurfaceFilter = vtk.vtkDataSetSurfaceFilter()
     smoothSurfaceFilter.SetInputConnection(delaunaySmooth.GetOutputPort())
-    #print("smoothSurface")
-    #print(smoothSurfaceFilter)
+
     normals = vtk.vtkPolyDataNormals()
     normals.SetInputConnection(smoothSurfaceFilter.GetOutputPort())
     normals.SetFeatureAngle(100.0)
-    #print("normals")
-    #print(normals)
+
     normals.Update()
     parameterNode = self.getParameterNode()
     tumorModel_Needle = parameterNode.GetNodeReference(self.TUMOR_MODEL)
