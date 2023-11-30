@@ -2369,15 +2369,15 @@ class LumpNav2Logic(ScriptedLoadableModuleLogic, VTKObservationMixin):
     roiNode = parameterNode.GetNodeReference(self.ROI_NODE)
     if roiNode is None:
       # Create new ROI node
-      roiNode = slicer.mrmlScene.AddNewNodeByClass("vtkMRMLAnnotationROINode", self.ROI_NODE)
+      roiNode = slicer.mrmlScene.AddNewNodeByClass("vtkMRMLMarkupsROINode", self.ROI_NODE)
       roiNode.SaveWithSceneOff()
       parameterNode.SetNodeReferenceID(self.ROI_NODE, roiNode.GetID())
       roiNode.SetDisplayVisibility(False)
 
       # Set center of ROI to be center of current image
-      imageImage = parameterNode.GetNodeReference(self.IMAGE_IMAGE)
+      prediction = parameterNode.GetNodeReference(self.PREDICTION_VOLUME)
       bounds = [0, 0, 0, 0, 0, 0]
-      imageImage.GetSliceBounds(bounds, vtk.vtkMatrix4x4())
+      prediction.GetSliceBounds(bounds, vtk.vtkMatrix4x4())
       sliceCenter = [(bounds[0] + bounds[1]) / 2, (bounds[2] + bounds[3]) / 2, (bounds[4] + bounds[5]) / 2]
       roiNode.SetXYZ(sliceCenter)
       roiNode.SetRadiusXYZ(100, 100, 100)
