@@ -49,36 +49,39 @@ def run_client(args):
     model = None
 
     while True:
-        message = input_client.wait_for_message(args.input_device_name, timeout=-1)
+        messages = input_client.get_latest_messages()
+        for message in messages:
+            if message.device_name == args.input_device_name:  # Image message
+                if model is None:
+                    device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
+                    # Load model
+                    model_path = args.model if Path(args.model).is_absolute() else f'{str(ROOT)}/{args.model}'
+                    extra_files = {"config.json": ""}
+                    model = torch.jit.load(model_path, _extra_files=extra_files).to(device)
+                    config = json.loads(extra_files["config.json"])
+                    input_size = config["shape"][-1]
 
-        if isinstance(message, pyigtl.ImageMessage):
-            if model is None:
-                device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
-                # Load model
-                model_path = args.model if Path(args.model).is_absolute() else f'{str(ROOT)}/{args.model}'
-                extra_files = {"config.json": ""}
-                model = torch.jit.load(model_path, _extra_files=extra_files).to(device)
-                config = json.loads(extra_files["config.json"])
-                input_size = config["shape"][-1]
+                # Resize image to model input size
+                orig_img_size = message.image.shape
+                image = preprocess_input(message.image, input_size).to(device)
+            
+                # Run inference
+                with torch.inference_mode():
+                    prediction = model(image)
 
-            # Resize image to model input size
-            orig_img_size = message.image.shape
-            image = preprocess_input(message.image, input_size).to(device)
-        
-            # Run inference
-            with torch.inference_mode():
-                prediction = model(image)
+                if isinstance(prediction, list):
+                    prediction = prediction[0]
+                    
+                prediction = torch.nn.functional.softmax(prediction, dim=1)
+                prediction = postprocess_prediction(prediction, orig_img_size)
 
-            if isinstance(prediction, list):
-                prediction = prediction[0]
-                
-            prediction = torch.nn.functional.softmax(prediction, dim=1)
-            prediction = postprocess_prediction(prediction, orig_img_size)
+                image_message = pyigtl.ImageMessage(prediction, device_name=args.output_device_name)
+                output_server.send_message(image_message, wait=True)
 
-            image_message = pyigtl.ImageMessage(prediction, device_name=args.output_device_name)
-            output_server.send_message(image_message, wait=True)
-        else:
-            print(f'Unexpected message format. Message:\n{message}')
+            if message.message_type == "TRANSFORM" and "Image" in message.device_name:  # Image transform message
+                output_tfm_name = message.device_name.replace("Image", "Prediction")
+                tfm_message = pyigtl.TransformMessage(message.matrix, device_name=output_tfm_name)
+                output_server.send_message(tfm_message, wait=True)
 
 
 def preprocess_input(image, input_size):
