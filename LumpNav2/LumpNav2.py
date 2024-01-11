@@ -2819,13 +2819,14 @@ class LumpNav2Logic(ScriptedLoadableModuleLogic, VTKObservationMixin):
 
         # Compute rotation of needle coordinate system
         needleToReference = parameterNode.GetNodeReference(self.NEEDLE_TO_REFERENCE)
-        needleToRasMatrix = vtk.vtkMatrix4x4()
-        needleToReference.GetMatrixTransformToWorld(needleToRasMatrix)
-        needleToRasArr = slicer.util.arrayFromVTKMatrix(needleToRasMatrix)
+        rasToNeedleMatrix = vtk.vtkMatrix4x4()
+        needleToReference.GetMatrixTransformToWorld(rasToNeedleMatrix)
+        rasToNeedleMatrix.Invert()
+        rasToNeedleArr = slicer.util.arrayFromVTKMatrix(rasToNeedleMatrix)
         # Create 4x4 matrix from rotation 3x3 matrix
-        needleToRasRotArr = np.vstack((np.hstack((needleToRasArr[:3, :3], np.array([0, 0, 0])[:, None])), [0, 0, 0, 1]))
-        needleToRasRotMatrix = slicer.util.vtkMatrixFromArray(needleToRasRotArr)
-        tumorModelHydromark.ApplyTransformMatrix(needleToRasRotMatrix)
+        rasToNeedleRotArr = np.vstack((np.hstack((rasToNeedleArr[:3, :3], np.array([0, 0, 0])[:, None])), [0, 0, 0, 1]))
+        rasToNeedleRotMatrix = slicer.util.vtkMatrixFromArray(rasToNeedleRotArr)
+        tumorModelHydromark.ApplyTransformMatrix(rasToNeedleRotMatrix)
 
         # Move tumor model to HydromarkToNeedle
         tumorModelHydromark.SetAndObserveTransformNodeID(hydromarkToNeedle.GetID())
