@@ -35,10 +35,6 @@ except:
 # LumpNav2
 #
 
-# Finding where guidelet.py and ultrasound.py are stored:
-# C:\Users\(_NAME_)\AppData\Roaming\NA-MIC\Extensions-28257\SlicerIGT\lib\Slicer-4.10\qt-scripted-modules\Guidelet\GuideletLib\Guidelet.py
-# C:\Users\(_NAME_)\AppData\Roaming\NA-MIC\Extensions-28257\SlicerIGT\lib\Slicer-4.10\qt-scripted-modules\Guidelet\GuideletLib\UltraSound.py
-
 
 class LumpNav2(ScriptedLoadableModule):
   """Uses ScriptedLoadableModule base class, available at:
@@ -272,9 +268,9 @@ class LumpNav2Widget(ScriptedLoadableModuleWidget, VTKObservationMixin):
     self.ui.needleLengthLabel.text = f"Needle length: {needleLength:.0f}mm"
 
     # contouring
-    self.ui.normalBrightnessButton.connect('toggled(bool)', self.onNormalBrightnessClicked)
-    self.ui.brightBrightnessButton.connect('toggled(bool)', self.onBrightBrightnessClicked)
-    self.ui.brightestBrightnessButton.connect('toggled(bool)', self.onBrightestBrightnessClicked)
+    self.ui.brightnessButtonGroup.buttonClicked.connect(self.onBrightnessButtonClicked)
+    self.ui.depthButtonGroup.buttonClicked.connect(self.onDepthButtonClicked)
+    self.ui.normalDepthButton.checked = True
     self.ui.anteriorDistToMarginSpinBox.connect('valueChanged(double)', self.onAnteriorDistToMarginChanged)
     self.ui.posteriorDistToMarginSpinBox.connect('valueChanged(double)', self.onPosteriorDistToMarginChanged)
     self.ui.leftDistToMarginSpinBox.connect('valueChanged(double)', self.onLeftDistToMarginChanged)
@@ -805,17 +801,20 @@ class LumpNav2Widget(ScriptedLoadableModuleWidget, VTKObservationMixin):
     logging.info("onUltrasoundSequenceBrowserToggled({})".format(toggled))
     self.logic.onUltrasoundSequenceBrowserClicked(toggled)
 
-  def onNormalBrightnessClicked(self):
-    logging.info("onNormalBrightnessClicked")
-    self.logic.setBrightness(self.NORMAL_BRIGHTNESS)
-
-  def onBrightBrightnessClicked(self):
-    logging.info("onBrightBrightnessClicked")
-    self.logic.setBrightness(self.BRIGHT_BRIGHTNESS)
-
-  def onBrightestBrightnessClicked(self):
-    logging.info("onBrightestBrightnessClicked")
-    self.logic.setBrightness(self.BRIGHTEST_BRIGHTNESS)
+  def onBrightnessButtonClicked(self, button):
+    if button == self.ui.normalBrightnessButton:
+      self.logic.setBrightness(self.NORMAL_BRIGHTNESS)
+    elif button == self.ui.brightBrightnessButton:
+      self.logic.setBrightness(self.BRIGHT_BRIGHTNESS)
+    else:
+      self.logic.setBrightness(self.BRIGHTEST_BRIGHTNESS)
+  
+  def onDepthButtonClicked(self, button):
+    if button == self.ui.normalDepthButton:
+      self.logic.setDepth(self.logic.NORMAL_DEPTH_MM)
+    else:
+      self.logic.setDepth(self.logic.DEEP_DEPTH_MM)
+    slicer.util.resetSliceViews()
 
   def onAnteriorDistToMarginChanged(self, value):
     if self._updatingGUIFromParameterNode:
@@ -1527,11 +1526,11 @@ class LumpNav2Logic(ScriptedLoadableModuleLogic, VTKObservationMixin):
   CAUTERY_TO_REFERENCE = "CauteryToReference"
   CAUTERY_TO_NEEDLE = "CauteryToNeedle"
   CAUTERYTIP_TO_CAUTERY = "CauteryTipToCautery"
-  TRANSD_TO_REFERENCE = "TransdToReference"
-  IMAGE_TO_TRANSD = "ImageToTransd"
+  PROBE_TO_REFERENCE = "ProbeToReference"
+  IMAGE_TO_PROBE = "ImageToProbe"
   CAUTERYCAMERA_TO_CAUTERY = "CauteryCameraToCautery"
-  TRANSD_TO_NEEDLE = "TransdToNeedle"
-  PREDICTION_TO_TRANSD = "PredictionToTransd"
+  PROBE_TO_NEEDLE = "ProbeToNeedle"
+  PREDICTION_TO_PROBE = "PredictionToProbe"
 
   POINTS_STATUS = "PointsStatus"
   POINTS_ADDING = "PointsAdding"
@@ -1539,8 +1538,16 @@ class LumpNav2Logic(ScriptedLoadableModuleLogic, VTKObservationMixin):
   POINTS_UNSELECTED = "PointsUnselected"
 
   # Ultrasound image
+  US_DEVICE_ID = "VideoDevice"
   IMAGE_IMAGE = "Image_Image"
-  DEFAULT_US_DEPTH = 50
+  IMAGE_TO_PROBE_NORMAL_PATH = "ImageToProbe50.h5"
+  NORMAL_DEPTH_MM = 50.0
+  NORMAL_FOCUS_DEPTH_PERCENT = 60
+  NORMAL_FREQUENCY = 7.5
+  IMAGE_TO_PROBE_DEEP_PATH = "ImageToProbe70.h5"
+  DEEP_DEPTH_MM = 70.0
+  DEEP_FOCUS_DEPTH_PERCENT = 70
+  DEEP_FREQUENCY = 5.0
 
   # OpenIGTLink PLUS connection
   CONFIG_FILE_SETTING = "LumpNav2/PlusConfigFile"
@@ -1630,14 +1637,15 @@ class LumpNav2Logic(ScriptedLoadableModuleLogic, VTKObservationMixin):
     slicer.mymodL = self
     VTKObservationMixin.__init__(self)
 
-    # Telemed C5 probe geometry
-    self.scaling_Intercept = 0.01663333
-    self.scaling_Slope = 0.00192667
-
     self.viewpointLogic = Viewpoint.ViewpointLogic()
 
     self.predictionStarted = False
     self.reconstructionLogic = slicer.modules.volumereconstruction.logic()
+
+    self._connectorNode = None
+    self._setDepthCommand = None
+    self._setFocusDepthCommand = None
+    self._setFrequencyCommand = None
 
   def resourcePath(self, filename):
     """
@@ -1972,8 +1980,9 @@ class LumpNav2Logic(ScriptedLoadableModuleLogic, VTKObservationMixin):
     # Update prediction volume dimensions when image dimensions change
     self.addObserver(imageImage, slicer.vtkMRMLScalarVolumeNode.ImageDataModifiedEvent, self.onImageImageModified)
 
-    imageToTransd = parameterNode.GetNodeReference(self.IMAGE_TO_TRANSD)
-    imageImage.SetAndObserveTransformNodeID(imageToTransd.GetID())
+    imageToProbe = parameterNode.GetNodeReference(self.IMAGE_TO_PROBE)
+    imageImage.SetAndObserveTransformNodeID(imageToProbe.GetID())
+    self.setDepth(self.NORMAL_DEPTH_MM)
 
     sequenceBrowserUltrasound = parameterNode.GetNodeReference(self.ULTRASOUND_SEQUENCE_BROWSER)
 
@@ -1984,12 +1993,12 @@ class LumpNav2Logic(ScriptedLoadableModuleLogic, VTKObservationMixin):
     sequenceNode = sequenceLogic.AddSynchronizedNode(None, image_Image, sequenceBrowserUltrasound)
     sequenceBrowserUltrasound.SetRecording(sequenceNode, True)
     sequenceBrowserUltrasound.SetPlayback(sequenceNode, True)
-    imageToTransd = parameterNode.GetNodeReference(self.IMAGE_TO_TRANSD)
-    sequenceNode = sequenceLogic.AddSynchronizedNode(None, imageToTransd, sequenceBrowserUltrasound)
+    imageToProbe = parameterNode.GetNodeReference(self.IMAGE_TO_PROBE)
+    sequenceNode = sequenceLogic.AddSynchronizedNode(None, imageToProbe, sequenceBrowserUltrasound)
     sequenceBrowserUltrasound.SetRecording(sequenceNode, True)
     sequenceBrowserUltrasound.SetPlayback(sequenceNode, True)
-    transdToReference = parameterNode.GetNodeReference(self.TRANSD_TO_REFERENCE)
-    sequenceNode = sequenceLogic.AddSynchronizedNode(None, transdToReference, sequenceBrowserUltrasound)
+    probeToReference = parameterNode.GetNodeReference(self.PROBE_TO_REFERENCE)
+    sequenceNode = sequenceLogic.AddSynchronizedNode(None, probeToReference, sequenceBrowserUltrasound)
     sequenceBrowserUltrasound.SetRecording(sequenceNode, True)
     sequenceBrowserUltrasound.SetPlayback(sequenceNode, True)
     sequenceBrowserUltrasound.SetRecordingActive(False)
@@ -2097,8 +2106,8 @@ class LumpNav2Logic(ScriptedLoadableModuleLogic, VTKObservationMixin):
       slicer.util.updateVolumeFromArray(predictionImage, imageArray)
       parameterNode.SetNodeReferenceID(self.PREDICTION_VOLUME, predictionImage.GetID())
 
-    predToTransd = parameterNode.GetNodeReference(self.PREDICTION_TO_TRANSD)
-    predictionImage.SetAndObserveTransformNodeID(predToTransd.GetID())
+    predToProbe = parameterNode.GetNodeReference(self.PREDICTION_TO_PROBE)
+    predictionImage.SetAndObserveTransformNodeID(predToProbe.GetID())
 
     # Create model for AI tumor
     tumorModelAI = parameterNode.GetNodeReference(self.TUMOR_MODEL_AI)
@@ -2117,7 +2126,7 @@ class LumpNav2Logic(ScriptedLoadableModuleLogic, VTKObservationMixin):
       eventTableNode.RenameColumn(self.TIME_COLUMN, "Time")
       eventTableNode.RenameColumn(self.SEQUENCE_TIME_COLUMN, "Sequence Index")
       eventTableNode.RenameColumn(self.EVENT_DESCRIPTION_COLUMN, "Description")
-      eventTableNode.SetUseColumnNameAsColumnHeader(True)
+      eventTableNode.SetUseColumnTitleAsColumnHeader(True)
       parameterNode.SetNodeReferenceID(self.EVENT_TABLE_NODE, eventTableNode.GetID())
 
     # OpenIGTLink connection
@@ -2185,42 +2194,18 @@ class LumpNav2Logic(ScriptedLoadableModuleLogic, VTKObservationMixin):
     cauteryTipToCautery.SetAndObserveTransformNodeID(cauteryToReference.GetID())
 
     # Ultrasound image tracking
-    transdToReference = self.addLinearTransformToScene(self.TRANSD_TO_REFERENCE, parentTransform=referenceToRas)
-    imageToTransd = self.addLinearTransformToScene(self.IMAGE_TO_TRANSD, parentTransform=transdToReference)
-    self.updateImageToTransdFromDepth(self.DEFAULT_US_DEPTH)
+    probeToReference = self.addLinearTransformToScene(self.PROBE_TO_REFERENCE, parentTransform=referenceToRas)
+    imageToProbe = self.addLinearTransformToScene(self.IMAGE_TO_PROBE, parentTransform=probeToReference)
 
     # Transforms to display tumour reconstruction in needle coordinate system
-    transdToNeedle = self.addLinearTransformToScene(self.TRANSD_TO_NEEDLE)
-    predToTransd = self.addLinearTransformToScene(self.PREDICTION_TO_TRANSD, parentTransform=transdToNeedle)
-    imageToTransdMatrix = vtk.vtkMatrix4x4()
-    imageToTransd.GetMatrixTransformToParent(imageToTransdMatrix)
-    predToTransd.SetMatrixTransformToParent(imageToTransdMatrix)
+    probeToNeedle = self.addLinearTransformToScene(self.PROBE_TO_NEEDLE)
+    predToProbe = self.addLinearTransformToScene(self.PREDICTION_TO_PROBE, parentTransform=probeToNeedle)
+    imageToProbeMatrix = vtk.vtkMatrix4x4()
+    imageToProbe.GetMatrixTransformToParent(imageToProbeMatrix)
+    predToProbe.SetMatrixTransformToParent(imageToProbeMatrix)
 
     # Hydromark to needle to position ellipsoid
     self.addLinearTransformToScene(self.HYDROMARK_TO_NEEDLE, parentTransform=needleToReference)
-
-  def updateImageToTransdFromDepth(self, depthMm):
-    """
-    Computes ImageToTransd for a specified ultrasound depth setting (millimeters), and updates the ImageToTransd
-    transform node in the current MRML scene.
-    """
-
-    imageToTransdPixel = vtk.vtkTransform()
-    imageToTransdPixel.Translate(-255.5, 0, 0)
-
-    pxToMm = self.scaling_Intercept + self.scaling_Slope * depthMm
-
-    transdPixelToTransd = vtk.vtkTransform()
-    transdPixelToTransd.Scale(pxToMm, pxToMm, pxToMm)
-
-    imageToTransd = vtk.vtkTransform()
-    imageToTransd.Concatenate(transdPixelToTransd)
-    imageToTransd.Concatenate(imageToTransdPixel)
-    imageToTransd.Update()
-
-    parameterNode = self.getParameterNode()
-    imageToTransdNode = parameterNode.GetNodeReference(self.IMAGE_TO_TRANSD)
-    imageToTransdNode.SetAndObserveTransformToParent(imageToTransd)
 
   def addLinearTransformToScene(self, transformName, parentTransform=None):
     """
@@ -2535,6 +2520,8 @@ class LumpNav2Logic(ScriptedLoadableModuleLogic, VTKObservationMixin):
       if toggled:
         plusServerNode.StartServer()
         predictionConnectorNode.Start()
+        self.removeObservers(self.onNodeAdded)
+        self.addObserver(slicer.mrmlScene, slicer.vtkMRMLScene.NodeAddedEvent, self.onNodeAdded)
       else:
         plusServerNode.StopServer()
         predictionConnectorNode.Stop()
@@ -2553,6 +2540,23 @@ class LumpNav2Logic(ScriptedLoadableModuleLogic, VTKObservationMixin):
     plusServerLauncherNode = parameterNode.GetNodeReference(self.PLUS_SERVER_LAUNCHER_NODE)
     if plusServerLauncherNode:
       plusServerLauncherNode.SetHostname(hostname)
+
+  def onNodeAdded(self, caller=None, event=None):
+    parameterNode = self.getParameterNode()
+    plusServerNode = parameterNode.GetNodeReference(self.PLUS_SERVER_NODE)
+    plusServerConnectorNode = plusServerNode.GetNodeReference("plusServerConnectorNodeRef")
+    if plusServerConnectorNode and plusServerConnectorNode != self._connectorNode:
+      self.removeObservers(self.onConnectionChanged)
+      self.addObserver(plusServerConnectorNode, slicer.vtkMRMLIGTLConnectorNode.ConnectedEvent, self.onConnectionChanged)
+      self.addObserver(plusServerConnectorNode, slicer.vtkMRMLIGTLConnectorNode.DisconnectedEvent, self.onConnectionChanged)
+      self._connectorNode = plusServerConnectorNode
+      self.onConnectionChanged()
+
+  def onConnectionChanged(self, caller=None, event=None):
+    if self._connectorNode and self._connectorNode.GetState() == slicer.vtkMRMLIGTLConnectorNode.StateConnected:
+      self._connectorNode.SendCommand(self._setDepthCommand)
+      self._connectorNode.SendCommand(self._setFocusDepthCommand)
+      self._connectorNode.SendCommand(self._setFrequencyCommand)
 
   def setToolModelClicked(self, toggled):
     logging.info("setToolModelClicked")
@@ -2613,6 +2617,45 @@ class LumpNav2Logic(ScriptedLoadableModuleLogic, VTKObservationMixin):
     liveUSNode = parameterNode.GetNodeReference(self.IMAGE_IMAGE).GetDisplayNode()
     liveUSNode.SetAutoWindowLevel(0)
     liveUSNode.SetWindowLevelMinMax(minLevel, maxLevel)
+
+  def setDepth(self, depth):
+    if depth == self.NORMAL_DEPTH_MM:
+      imageToProbePath = self.resourcePath(self.IMAGE_TO_PROBE_NORMAL_PATH)
+      focusDepthPercent = self.NORMAL_FOCUS_DEPTH_PERCENT
+      frequency = self.NORMAL_FREQUENCY
+    else:
+      imageToProbePath = self.resourcePath(self.IMAGE_TO_PROBE_DEEP_PATH)
+      focusDepthPercent = self.DEEP_FOCUS_DEPTH_PERCENT
+      frequency = self.DEEP_FREQUENCY
+
+    # Update ultrasound settings using PLUS
+    self._setDepthCommand = self.getSetUSParameterCommand("DepthMm", depth)
+    self._setFocusDepthCommand = self.getSetUSParameterCommand("FocusDepthPercent", focusDepthPercent)
+    self._setFrequencyCommand = self.getSetUSParameterCommand("FrequencyMhz", frequency)
+    self.onConnectionChanged()
+
+    # Set ImageToProbe from file
+    parameterNode = self.getParameterNode()
+    tempNode = slicer.util.loadTransform(imageToProbePath)
+    imageToProbe = parameterNode.GetNodeReference(self.IMAGE_TO_PROBE)
+    imageToProbeMatrix = vtk.vtkMatrix4x4()
+    tempNode.GetMatrixTransformToParent(imageToProbeMatrix)
+    imageToProbe.SetMatrixTransformToParent(imageToProbeMatrix)
+    slicer.mrmlScene.RemoveNode(tempNode)
+
+  def getSetUSParameterCommand(self, parameterName, value):
+    setUSParameterXML = f"""
+      <Command Name=\"SetUsParameter\" UsDeviceId=\"{self.US_DEVICE_ID}\">
+        <Parameter Name=\"{parameterName}\" Value=\"{value}\" />
+      </Command>
+    """
+    cmdSetParameter = slicer.vtkSlicerOpenIGTLinkCommand()
+    cmdSetParameter.SetName("SetUsParameter")
+    cmdSetParameter.SetTimeoutSec(5.0)
+    cmdSetParameter.SetBlocking(False)
+    cmdSetParameter.SetCommandContent(setUSParameterXML)
+    cmdSetParameter.ClearResponseMetaData()
+    return cmdSetParameter
 
   def onTumorMarkupsNodeModified(self, observer, eventid):
     logging.debug("onTumorMarkupsNodeModified")
