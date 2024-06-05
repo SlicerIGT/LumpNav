@@ -709,7 +709,8 @@ class LumpNav2Widget(ScriptedLoadableModuleWidget, VTKObservationMixin):
     logging.info("onDisplayDistanceClicked({})".format(toggled))
     settings = qt.QSettings()
     settings.setValue(self.logic.DISPLAY_DISTANCE_SETTING, toggled)
-    self.logic.setRulerDistanceVisibility(toggled)
+    fontSize = slicer.util.settingsValue(self.logic.RULER_FONT_SIZE, self.logic.RULER_DISTANCE_DEFAULT_FONT_SIZE, converter=lambda x: float(x))
+    self.logic.setRulerDistanceFontSize(fontSize)
 
   def onIncreaseDistanceFontSizeClicked(self):
     logging.info("onIncreaseDistanceFontSizeClicked")
@@ -2056,8 +2057,7 @@ class LumpNav2Logic(ScriptedLoadableModuleLogic, VTKObservationMixin):
     # Ruler display and distance text setting
     displayRulerEnabled = slicer.util.settingsValue(self.DISPLAY_RULER_SETTING, True, converter=slicer.util.toBool)
     breachWarningLogic.SetLineToClosestPointVisibility(displayRulerEnabled, breachWarningNode)
-    displayDistanceEnabled = slicer.util.settingsValue(self.DISPLAY_DISTANCE_SETTING, True, converter=slicer.util.toBool)
-    self.setRulerDistanceVisibility(displayDistanceEnabled)
+    self.setRulerDistanceFontSize(distanceRulerFontSize)
     self.addObserver(breachWarningNode, vtk.vtkCommand.ModifiedEvent, self.onBreachWarningNodeChanged)
 
     breachMarkups_Needle = parameterNode.GetNodeReference(self.BREACH_MARKUPS_NEEDLE)
@@ -2596,18 +2596,22 @@ class LumpNav2Logic(ScriptedLoadableModuleLogic, VTKObservationMixin):
     else:
       breachWarningLogic.SetLineToClosestPointVisibility(False, breachWarningNode)
 
-  def setRulerDistanceVisibility(self, toggled):
-    if toggled:
-      fontSize = slicer.util.settingsValue(self.RULER_FONT_SIZE, self.RULER_DISTANCE_DEFAULT_FONT_SIZE, converter=lambda x: float(x))
-    else:
-      fontSize = 0
-    self.setRulerDistanceFontSize(fontSize)
-
   def setRulerDistanceFontSize(self, fontSize):
     parameterNode = self.getParameterNode()
+
+    # ruler
     breachWarningNode = parameterNode.GetNodeReference(self.BREACH_WARNING)
     breachWarningLogic = slicer.modules.breachwarning.logic()
-    breachWarningLogic.SetLineToClosestPointTextScale(fontSize, breachWarningNode)
+    if slicer.util.settingsValue(self.DISPLAY_DISTANCE_SETTING, True, converter=slicer.util.toBool):
+      breachWarningLogic.SetLineToClosestPointTextScale(fontSize, breachWarningNode)
+    else:
+      breachWarningLogic.SetLineToClosestPointTextScale(0, breachWarningNode)
+
+    # corner annotation
+    for i in range(slicer.app.layoutManager().threeDViewCount):
+      view = slicer.app.layoutManager().threeDWidget(i).threeDView()
+      view.cornerAnnotation().SetLinearFontScaleFactor(fontSize)
+      view.forceRender()
 
   def setBrightness(self, maxLevel):
     self.setImageMinMaxLevel(0, maxLevel)
@@ -2912,13 +2916,22 @@ class LumpNav2Logic(ScriptedLoadableModuleLogic, VTKObservationMixin):
   def onBreachWarningNodeChanged(self, observer, eventid):
     parameterNode = self.getParameterNode()
     breachWarningNode = parameterNode.GetNodeReference(self.BREACH_WARNING)
+    distance = breachWarningNode.GetClosestDistanceToModelFromToolTip()
+
+    # Display breach warning text in corner of view
+    for i in range(slicer.app.layoutManager().threeDViewCount):
+      view = slicer.app.layoutManager().threeDWidget(i).threeDView()
+      view.cornerAnnotation().SetText(vtk.vtkCornerAnnotation.UpperLeft, f"{distance:.0f}mm")
+      textProperty = view.cornerAnnotation().GetTextProperty()
+      textProperty.SetColor(0, 0, 0.5)  # blue
+      view.forceRender()
+    
     if breachWarningNode.GetClosestDistanceToModelFromToolTip() < 0:
-      # Display breach warning text in corner of view
       for i in range(slicer.app.layoutManager().threeDViewCount):
         view = slicer.app.layoutManager().threeDWidget(i).threeDView()
         view.cornerAnnotation().SetText(vtk.vtkCornerAnnotation.LowerLeft, "BREACH!")
         textProperty = view.cornerAnnotation().GetTextProperty()
-        textProperty.SetColor(1, 0, 0)
+        textProperty.SetColor(1, 0, 0)  # red
         view.forceRender()
 
       # Add breach event to event table
@@ -2945,8 +2958,6 @@ class LumpNav2Logic(ScriptedLoadableModuleLogic, VTKObservationMixin):
       for i in range(slicer.app.layoutManager().threeDViewCount):
         view = slicer.app.layoutManager().threeDWidget(i).threeDView()
         view.cornerAnnotation().SetText(vtk.vtkCornerAnnotation.LowerLeft, "")
-        textProperty = view.cornerAnnotation().GetTextProperty()
-        textProperty.SetColor(1, 1, 1)
         view.forceRender()
       parameterNode.SetParameter(self.BREACH_STATUS, "False")
 
