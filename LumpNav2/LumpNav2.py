@@ -289,6 +289,7 @@ class LumpNav2Widget(ScriptedLoadableModuleWidget, VTKObservationMixin):
     self.ui.markPointCauteryTipButton.connect('clicked()', self.onMarkPointCauteryTipClicked)
     self.ui.startStopRecordingButton.connect('toggled(bool)', self.onStartStopRecordingClicked)
     self.ui.freezeUltrasoundButton.connect('toggled(bool)', self.onFreezeUltrasoundClicked)
+    self.ui.applyDilationButton.connect('clicked()', self.onApplyDilationClicked)
     self.pivotSamplingTimer.connect('timeout()', self.onPivotSamplingTimeout)
 
     # navigation
@@ -752,6 +753,21 @@ class LumpNav2Widget(ScriptedLoadableModuleWidget, VTKObservationMixin):
     else:
       self.ui.freezeUltrasoundButton.text = "Freeze"
     self.logic.setFreezeUltrasoundClicked(toggled)
+
+  def onApplyDilationClicked(self):
+    logging.info("onApplyDilationClicked")
+    dilationValue = float(self.ui.dilationSpinBox.value)
+    checkedButton = self.ui.contourModifyGroup.checkedButton()
+    if checkedButton == self.ui.modifyAutomaticButton:
+      model = self.logic.TUMOR_MODEL_AI
+    elif checkedButton == self.ui.modifyHydromarkButton:
+      model = self.logic.TUMOR_MODEL_HYDROMARK
+    elif checkedButton == self.ui.modifyManualButton:
+      model = self.logic.TUMOR_MODEL
+    else:
+      logging.info("No model selected to apply dilation")
+      return
+    self.logic.applyDilation(model, dilationValue)
 
   def onPlusConfigFileChanged(self, configFilepath):
     logging.info(f"onPlusConfigFileChanged({configFilepath})")
@@ -2511,6 +2527,55 @@ class LumpNav2Logic(ScriptedLoadableModuleLogic, VTKObservationMixin):
         plusServerConnectorNode.Stop()
       else:
         plusServerConnectorNode.Start()
+
+  def applyDilation(self, model, dilationValue):
+    parameterNode = self.getParameterNode()
+    segmentationLogic = slicer.modules.segmentations.logic()
+    modelNode = parameterNode.GetNodeReference(model)
+    modelNode.SetAndObserveTransformNodeID(None)  # move out of transform
+
+    # convert model to labelmap
+    modelSegmentation = slicer.mrmlScene.AddNewNodeByClass("vtkMRMLSegmentationNode")
+    segmentationLogic.ImportModelToSegmentationNode(modelNode, modelSegmentation)
+    modelLabelmap = slicer.mrmlScene.AddNewNodeByClass("vtkMRMLLabelMapVolumeNode")
+    segmentationLogic.ExportAllSegmentsToLabelmapNode(modelSegmentation, modelLabelmap, slicer.vtkSegmentation.EXTENT_REFERENCE_GEOMETRY)
+
+    import vtkITK
+
+    modelImageData = modelLabelmap.GetImageData()
+    margin = vtkITK.vtkITKImageMargin()
+    margin.SetInputData(modelImageData)
+    margin.CalculateMarginInMMOn()
+    margin.SetOuterMarginMM(abs(dilationValue))
+    margin.Update()
+    modelImageData.ShallowCopy(margin.GetOutput())
+
+    # convert to segmentation node
+    segmentationLogic.ImportLabelmapToSegmentationNode(modelLabelmap, modelSegmentation)
+    modelSegment = modelSegmentation.GetSegmentation().GetNthSegment(1)
+    modelName = f"TumorModelDilate{dilationValue}mm"
+    modelSegment.SetName(modelName)
+    segmentationLogic.ExportVisibleSegmentsToModels(modelSegmentation, 3)
+    dilatedModelNode = slicer.mrmlScene.GetFirstNodeByName(modelName)
+
+    # move both tumor models back to NeedleToReference
+    needleToReference = parameterNode.GetNodeReference(self.NEEDLE_TO_REFERENCE)
+    modelNode.SetAndObserveTransformNodeID(needleToReference.GetID())
+    dilatedModelNode.SetAndObserveTransformNodeID(needleToReference.GetID())
+
+    # fix opacity and color models
+    modelNode.GetDisplayNode().SetOpacity(0.3)
+    dilatedModelDisplayNode = dilatedModelNode.GetDisplayNode()
+    dilatedModelDisplayNode.SetOpacity(0.3)
+    dilatedModelDisplayNode.SetColor(0, 1, 0)  # green
+    dilatedModelDisplayNode.SetSliceDisplayModeToIntersection()
+    dilatedModelDisplayNode.SetSliceIntersectionThickness(4)
+
+    # cleanup temporary nodes
+    slicer.mrmlScene.RemoveNode(modelLabelmap.GetDisplayNode().GetColorNode())
+    slicer.mrmlScene.RemoveNode(modelLabelmap)
+    slicer.mrmlScene.RemoveNode(modelSegmentation.GetDisplayNode().GetColorNode())
+    slicer.mrmlScene.RemoveNode(modelSegmentation)
 
   def setPlusServerClicked(self, toggled):
     parameterNode = self.getParameterNode()

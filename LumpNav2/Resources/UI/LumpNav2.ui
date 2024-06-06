@@ -212,9 +212,12 @@
        </spacer>
       </item>
       <item>
-       <widget class="ctkCollapsibleButton" name="CollapsibleButton">
+       <widget class="ctkCollapsibleButton" name="manualCollapsibleButton">
         <property name="text">
          <string>Manual Contouring</string>
+        </property>
+        <property name="collapsed">
+         <bool>true</bool>
         </property>
         <layout class="QVBoxLayout" name="verticalLayout_9">
          <item>
@@ -618,6 +621,121 @@
             <bool>true</bool>
            </property>
           </widget>
+         </item>
+        </layout>
+       </widget>
+      </item>
+      <item>
+       <spacer name="verticalSpacer_5">
+        <property name="orientation">
+         <enum>Qt::Vertical</enum>
+        </property>
+        <property name="sizeType">
+         <enum>QSizePolicy::Fixed</enum>
+        </property>
+        <property name="sizeHint" stdset="0">
+         <size>
+          <width>20</width>
+          <height>10</height>
+         </size>
+        </property>
+       </spacer>
+      </item>
+      <item>
+       <widget class="ctkCollapsibleButton" name="contourModificationCollapsibleButton">
+        <property name="text">
+         <string>Contour Modification</string>
+        </property>
+        <property name="collapsed">
+         <bool>true</bool>
+        </property>
+        <layout class="QVBoxLayout" name="verticalLayout_10">
+         <item>
+          <layout class="QHBoxLayout" name="horizontalLayout_28">
+           <item>
+            <widget class="QPushButton" name="modifyManualButton">
+             <property name="text">
+              <string>Manual</string>
+             </property>
+             <property name="checkable">
+              <bool>true</bool>
+             </property>
+             <attribute name="buttonGroup">
+              <string notr="true">contourModifyGroup</string>
+             </attribute>
+            </widget>
+           </item>
+           <item>
+            <widget class="QPushButton" name="modifyHydromarkButton">
+             <property name="text">
+              <string>HydroMARK</string>
+             </property>
+             <property name="checkable">
+              <bool>true</bool>
+             </property>
+             <attribute name="buttonGroup">
+              <string notr="true">contourModifyGroup</string>
+             </attribute>
+            </widget>
+           </item>
+           <item>
+            <widget class="QPushButton" name="modifyAutomaticButton">
+             <property name="text">
+              <string>Automatic</string>
+             </property>
+             <property name="checkable">
+              <bool>true</bool>
+             </property>
+             <attribute name="buttonGroup">
+              <string notr="true">contourModifyGroup</string>
+             </attribute>
+            </widget>
+           </item>
+          </layout>
+         </item>
+         <item>
+          <spacer name="verticalSpacer_6">
+           <property name="orientation">
+            <enum>Qt::Vertical</enum>
+           </property>
+           <property name="sizeType">
+            <enum>QSizePolicy::Fixed</enum>
+           </property>
+           <property name="sizeHint" stdset="0">
+            <size>
+             <width>20</width>
+             <height>5</height>
+            </size>
+           </property>
+          </spacer>
+         </item>
+         <item>
+          <layout class="QHBoxLayout" name="horizontalLayout_29">
+           <item>
+            <widget class="QLabel" name="label_12">
+             <property name="text">
+              <string>Dilate:</string>
+             </property>
+            </widget>
+           </item>
+           <item>
+            <widget class="QDoubleSpinBox" name="dilationSpinBox">
+             <property name="decimals">
+              <number>1</number>
+             </property>
+             <property name="value">
+              <double>1.000000000000000</double>
+             </property>
+            </widget>
+           </item>
+           <item>
+            <widget class="QPushButton" name="applyDilationButton">
+             <property name="text">
+              <string>Apply</string>
+             </property>
+            </widget>
+           </item>
+          </layout>
          </item>
         </layout>
        </widget>
@@ -1470,8 +1588,9 @@
  <resources/>
  <connections/>
  <buttongroups>
-  <buttongroup name="depthButtonGroup"/>
   <buttongroup name="watchedModelButtonGroup"/>
+  <buttongroup name="contourModifyGroup"/>
   <buttongroup name="brightnessButtonGroup"/>
+  <buttongroup name="depthButtonGroup"/>
  </buttongroups>
 </ui>
