@@ -630,6 +630,8 @@ class LumpNav2Widget(ScriptedLoadableModuleWidget, VTKObservationMixin):
         view.SetOrientationMarkerSize(view.OrientationMarkerSizeLarge)
         view.SetBoxVisible(False)
         view.SetAxisLabelsVisible(False)
+      distanceRulerFontSize = slicer.util.settingsValue(self.logic.RULER_FONT_SIZE, self.logic.RULER_DISTANCE_DEFAULT_FONT_SIZE, converter=lambda x: float(x))
+      self.logic.setRulerDistanceFontSize(distanceRulerFontSize)
       interactionNode = slicer.app.applicationLogic().GetInteractionNode()
       interactionNode.SetCurrentInteractionMode(interactionNode.ViewTransform)
       hydromarkMarkupNode = self._parameterNode.GetNodeReference(self.logic.HYDROMARK_MARKUP_NEEDLE)
@@ -2567,9 +2569,9 @@ class LumpNav2Logic(ScriptedLoadableModuleLogic, VTKObservationMixin):
     # fix opacity and color models
     modelNode.GetDisplayNode().SetOpacity(0.3)
     dilatedModelDisplayNode = dilatedModelNode.GetDisplayNode()
-    dilatedModelDisplayNode.SetOpacity(0.3)
+    dilatedModelDisplayNode.SetOpacity(0.15)
     dilatedModelDisplayNode.SetColor(0, 1, 0)  # green
-    dilatedModelDisplayNode.SetSliceDisplayModeToIntersection()
+    dilatedModelDisplayNode.SliceIntersectionVisibilityOn()
     dilatedModelDisplayNode.SetSliceIntersectionThickness(4)
 
     # cleanup temporary nodes
@@ -2984,7 +2986,8 @@ class LumpNav2Logic(ScriptedLoadableModuleLogic, VTKObservationMixin):
     # Display breach warning text in corner of view
     for i in range(slicer.app.layoutManager().threeDViewCount):
       view = slicer.app.layoutManager().threeDWidget(i).threeDView()
-      view.cornerAnnotation().SetText(vtk.vtkCornerAnnotation.UpperLeft, f"{distance:.0f}mm")
+      distanceText = distance if distance >= 0 else 0
+      view.cornerAnnotation().SetText(vtk.vtkCornerAnnotation.UpperLeft, f"{distanceText:.0f}mm")
       textProperty = view.cornerAnnotation().GetTextProperty()
       textProperty.SetColor(0, 0, 0.5)  # blue
       view.forceRender()
