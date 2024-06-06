@@ -2282,6 +2282,7 @@ class LumpNav2Logic(ScriptedLoadableModuleLogic, VTKObservationMixin):
     if not plusServerLauncherNode:
       plusServerLauncherNode = slicer.mrmlScene.AddNewNodeByClass("vtkMRMLPlusServerLauncherNode", self.PLUS_SERVER_LAUNCHER_NODE)
       parameterNode.SetNodeReferenceID(self.PLUS_SERVER_LAUNCHER_NODE, plusServerLauncherNode.GetID())
+      plusServerLauncherNode.SetLogLevel(4)  # DEBUG
       plusServerLauncherNode.SaveWithSceneOff()
 
     if plusServerLauncherNode.GetNodeReferenceID('plusServerRef') != plusServerNode.GetID():
@@ -2611,13 +2612,10 @@ class LumpNav2Logic(ScriptedLoadableModuleLogic, VTKObservationMixin):
     plusServerNode = parameterNode.GetNodeReference(self.PLUS_SERVER_NODE)
     plusServerConnectorNode = plusServerNode.GetNodeReference("plusServerConnectorNodeRef")
     if plusServerConnectorNode and plusServerConnectorNode != self._connectorNode:
-      self.removeObservers(self.onConnectionChanged)
-      self.addObserver(plusServerConnectorNode, slicer.vtkMRMLIGTLConnectorNode.ConnectedEvent, self.onConnectionChanged)
-      self.addObserver(plusServerConnectorNode, slicer.vtkMRMLIGTLConnectorNode.DisconnectedEvent, self.onConnectionChanged)
       self._connectorNode = plusServerConnectorNode
-      self.onConnectionChanged()
+      self.updateUltrasoundParameters()
 
-  def onConnectionChanged(self, caller=None, event=None):
+  def updateUltrasoundParameters(self, caller=None, event=None):
     if self._connectorNode and self._connectorNode.GetState() == slicer.vtkMRMLIGTLConnectorNode.StateConnected:
       self._connectorNode.SendCommand(self._setDepthCommand)
       self._connectorNode.SendCommand(self._setFocusDepthCommand)
@@ -2701,7 +2699,7 @@ class LumpNav2Logic(ScriptedLoadableModuleLogic, VTKObservationMixin):
     self._setDepthCommand = self.getSetUSParameterCommand("DepthMm", depth)
     self._setFocusDepthCommand = self.getSetUSParameterCommand("FocusDepthPercent", focusDepthPercent)
     self._setFrequencyCommand = self.getSetUSParameterCommand("FrequencyMhz", frequency)
-    self.onConnectionChanged()
+    self.updateUltrasoundParameters()
 
     # Set ImageToProbe from file
     parameterNode = self.getParameterNode()
