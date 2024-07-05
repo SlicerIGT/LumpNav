@@ -241,6 +241,7 @@ class LumpNav2Widget(ScriptedLoadableModuleWidget, VTKObservationMixin):
     self.logic = LumpNav2Logic()
     self._updatingGUIFromParameterNode = True
     self.logic.setup()
+    self.logic.updateRecordingTimeCallback = self.updateRecordingTimeLabel
     self._updatingGUIFromParameterNode = False
 
     # Install event filter for main window.
@@ -818,6 +819,9 @@ class LumpNav2Widget(ScriptedLoadableModuleWidget, VTKObservationMixin):
 
   def onCustomUiClicked(self, checked):
     self.setCustomStyle(checked)
+
+  def updateRecordingTimeLabel(self, time):
+    self.ui.recordingTimeLabel.text = f"{time} s"
 
   def onExportCsvButtonClicked(self):
     csvFilename = f"iKnifeSyncData_{time.strftime('%Y%m%d-%H%M%S')}.csv"
@@ -1679,6 +1683,7 @@ class LumpNav2Logic(ScriptedLoadableModuleLogic, VTKObservationMixin):
     self.lastTime = 0
     self.lastCauteryTipRAS = np.array([0, 0, 0, 1])
     self.positionMatrix = [[], [], [], [], [], []]
+    self.updateRecordingTimeCallback = None
 
     self.predictionStarted = False
     self.reconstructionLogic = slicer.modules.volumereconstruction.logic()
@@ -2354,8 +2359,12 @@ class LumpNav2Logic(ScriptedLoadableModuleLogic, VTKObservationMixin):
     sequenceBrowserTracking = parameterNode.GetNodeReference(self.TRACKING_SEQUENCE_BROWSER)
     if sequenceBrowserTracking.GetRecordingActive():
       numItems = sequenceBrowserTracking.GetNumberOfItems()
-      currentTime = float(sequenceBrowserTracking.GetMasterSequenceNode().GetNthIndexValue(numItems - 1))
-      if currentTime > self.lastTime:
+      currentTime = sequenceBrowserTracking.GetMasterSequenceNode().GetNthIndexValue(numItems - 1)
+      if currentTime and (currentTime := float(currentTime)) > self.lastTime:
+        # update gui with sequence browser time
+        if self.updateRecordingTimeCallback:
+          self.updateRecordingTimeCallback(str(currentTime))
+
         # get cautery tip position in RAS
         cauteryTipToCautery = parameterNode.GetNodeReference(self.CAUTERYTIP_TO_CAUTERY)
         cauteryTipToRASMatrix = vtk.vtkMatrix4x4()
