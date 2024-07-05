@@ -31,6 +31,12 @@ except:
   slicer.util.pip_install('mlxtend')
   from mlxtend.plotting import plot_decision_regions
 
+try:
+  import pandas as pd
+except:
+  slicer.util.pip_install('pandas')
+  import pandas as pd
+
 #
 # LumpNav2
 #
@@ -363,6 +369,7 @@ class LumpNav2Widget(ScriptedLoadableModuleWidget, VTKObservationMixin):
     self.ui.hydromarkVisibilityButton.connect('toggled(bool)', self.onHydromarkVisibilityToggled)
     self.ui.automaticVisibilityButton.connect('toggled(bool)', self.onSegmentationVisibilityToggled)
     self.ui.watchedModelButtonGroup.buttonClicked.connect(self.onWatchedModelClicked)
+    self.ui.exportCsvButton.connect('clicked()', self.onExportCsvButtonClicked)
 
     # Add custom layouts
     self.logic.addCustomLayouts()
@@ -811,6 +818,11 @@ class LumpNav2Widget(ScriptedLoadableModuleWidget, VTKObservationMixin):
 
   def onCustomUiClicked(self, checked):
     self.setCustomStyle(checked)
+
+  def onExportCsvButtonClicked(self):
+    csvFilename = f"iKnifeSyncData_{time.strftime('%Y%m%d-%H%M%S')}.csv"
+    csvFilePath = os.path.join(self.ui.saveFolderSelector.directory, csvFilename)
+    self.logic.exportTrackingDataToCsv(csvFilePath)
 
   def onTrackingSequenceBrowser(self, toggled):
     logging.info("onTrackingSequenceBrowserToggled({})".format(toggled))
@@ -1578,6 +1590,9 @@ class LumpNav2Logic(ScriptedLoadableModuleLogic, VTKObservationMixin):
   PREDICTION_CONNECTOR_NODE = "PredictionConnectorNode"
   PREDICTION_HOSTNAME = "localhost"
   PREDICTION_PORT = 18945
+  IKNIFE_CONNECTOR_NODE = "iKnifeConnectorNode"
+  IKNIFE_HOSTNAME = "localhost"
+  IKNIFE_PORT = 18946
 
   # Preoperative hydromark parameters
   ANTERIOR_DIST_TO_MARGIN = "AnteriorDistToMargin"
@@ -1627,6 +1642,9 @@ class LumpNav2Logic(ScriptedLoadableModuleLogic, VTKObservationMixin):
   DEFAULT_DECIMATE = 0.25
   AI_VISIBLE = "AIVisible"
 
+  # iKnife connection
+  IKNIFE_TIC = "iKnifeTIC"
+
   # Layout codes
   LAYOUT_2D3D = 501
   LAYOUT_TRIPLE3D = 502
@@ -1657,6 +1675,10 @@ class LumpNav2Logic(ScriptedLoadableModuleLogic, VTKObservationMixin):
     VTKObservationMixin.__init__(self)
 
     self.viewpointLogic = Viewpoint.ViewpointLogic()
+    
+    self.lastTime = 0
+    self.lastCauteryTipRAS = np.array([0, 0, 0, 1])
+    self.positionMatrix = [[], [], [], [], [], []]
 
     self.predictionStarted = False
     self.reconstructionLogic = slicer.modules.volumereconstruction.logic()
@@ -2147,6 +2169,14 @@ class LumpNav2Logic(ScriptedLoadableModuleLogic, VTKObservationMixin):
       eventTableNode.SetUseColumnTitleAsColumnHeader(True)
       parameterNode.SetNodeReferenceID(self.EVENT_TABLE_NODE, eventTableNode.GetID())
 
+    # iKnife TIC data
+    iKnifeTICNode = parameterNode.GetNodeReference(self.IKNIFE_TIC)
+    if iKnifeTICNode is None:
+      iKnifeTICNode = slicer.mrmlScene.AddNewNodeByClass("vtkMRMLScalarVolumeNode", self.IKNIFE_TIC)
+      ticArray = np.zeros(2)
+      slicer.util.updateVolumeFromArray(iKnifeTICNode, ticArray)
+      parameterNode.SetNodeReferenceID(self.IKNIFE_TIC, iKnifeTICNode.GetID())
+
     # OpenIGTLink connection
     self.setupPlusServer()
 
@@ -2210,6 +2240,9 @@ class LumpNav2Logic(ScriptedLoadableModuleLogic, VTKObservationMixin):
         cauteryTipToCautery = slicer.mrmlScene.AddNewNodeByClass("vtkMRMLLinearTransformNode", self.CAUTERYTIP_TO_CAUTERY)
       parameterNode.SetNodeReferenceID(self.CAUTERYTIP_TO_CAUTERY, cauteryTipToCautery.GetID())
     cauteryTipToCautery.SetAndObserveTransformNodeID(cauteryToReference.GetID())
+
+    # add observer for cautery position data recording
+    self.addObserver(cauteryTipToCautery, slicer.vtkMRMLLinearTransformNode.TransformModifiedEvent, self.onTrackingDataModified)
 
     # Ultrasound image tracking
     probeToReference = self.addLinearTransformToScene(self.PROBE_TO_REFERENCE, parentTransform=referenceToRas)
@@ -2303,10 +2336,70 @@ class LumpNav2Logic(ScriptedLoadableModuleLogic, VTKObservationMixin):
       parameterNode.SetNodeReferenceID(self.PREDICTION_CONNECTOR_NODE, predictionConnectorNode.GetID())
       predictionConnectorNode.SaveWithSceneOff()
 
+    # create connector node for iKnife connection
+    iKnifeConnectorNode = parameterNode.GetNodeReference(self.IKNIFE_CONNECTOR_NODE)
+    if not iKnifeConnectorNode:
+      iKnifeConnectorNode = slicer.mrmlScene.AddNewNodeByClass("vtkMRMLIGTLConnectorNode", self.IKNIFE_CONNECTOR_NODE)
+      iKnifeConnectorNode.SetTypeClient(self.IKNIFE_HOSTNAME, self.IKNIFE_PORT)
+      parameterNode.SetNodeReferenceID(self.IKNIFE_CONNECTOR_NODE, iKnifeConnectorNode.GetID())
+      iKnifeConnectorNode.SaveWithSceneOff()
+
   def setTrackingSequenceBrowser(self, recording):
     parameterNode = self.getParameterNode()
     sequenceBrowserTracking = parameterNode.GetNodeReference(self.TRACKING_SEQUENCE_BROWSER)
     sequenceBrowserTracking.SetRecordingActive(recording)  # stop
+
+  def onTrackingDataModified(self, caller=None, event=None):
+    parameterNode = self.getParameterNode()
+    sequenceBrowserTracking = parameterNode.GetNodeReference(self.TRACKING_SEQUENCE_BROWSER)
+    if sequenceBrowserTracking.GetRecordingActive():
+      numItems = sequenceBrowserTracking.GetNumberOfItems()
+      currentTime = float(sequenceBrowserTracking.GetMasterSequenceNode().GetNthIndexValue(numItems - 1))
+      if currentTime > self.lastTime:
+        # get cautery tip position in RAS
+        cauteryTipToCautery = parameterNode.GetNodeReference(self.CAUTERYTIP_TO_CAUTERY)
+        cauteryTipToRASMatrix = vtk.vtkMatrix4x4()
+        cauteryTipToCautery.GetMatrixTransformToWorld(cauteryTipToRASMatrix)
+        cauteryTipRAS = cauteryTipToRASMatrix.MultiplyFloatPoint([0, 0, 0, 1])
+        cauteryTipRAS = np.array(cauteryTipRAS)
+        
+        # get distance travelled by cautery
+        cauteryTravelDistance = np.linalg.norm(cauteryTipRAS - self.lastCauteryTipRAS)
+        cauterySpeed = cauteryTravelDistance / (currentTime - self.lastTime)
+
+        # get tip position in needle coordinate
+        needleToReference = parameterNode.GetNodeReference(self.NEEDLE_TO_REFERENCE)
+        cauteryTipToNeedleMatrix = vtk.vtkMatrix4x4()
+        cauteryTipToCautery.GetMatrixTransformToNode(needleToReference, cauteryTipToNeedleMatrix)
+        cauteryTipNeedle = cauteryTipToNeedleMatrix.MultiplyFloatPoint([0, 0, 0, 1])
+        cauteryTipNeedle = np.array(cauteryTipNeedle)
+
+        # get distance to tumor
+        breachWarningNode = parameterNode.GetNodeReference(self.BREACH_WARNING)
+        distanceToTumor = breachWarningNode.GetClosestDistanceToModelFromToolTip()
+
+        # add iknife data if it exists
+        iKnifeTICNode = parameterNode.GetNodeReference(self.IKNIFE_TIC)
+        iKnifeTICArray = slicer.util.arrayFromVolume(iKnifeTICNode)
+        if not np.any(iKnifeTICArray):  # no scan number or tic
+          scanNumber = ""
+          tic = ""
+        else:
+          scanNumber = str(int(iKnifeTICArray[0]))
+          tic = str(int(iKnifeTICArray[1]))
+
+        # add data to list
+        currentData = [[currentTime], [scanNumber], [np.array2string(cauteryTipNeedle[:3])], [distanceToTumor], [cauterySpeed], [tic]]
+        self.positionMatrix = np.append(self.positionMatrix, currentData, axis=1)
+        self.lastTime = currentTime
+        self.lastCauteryTipRAS = cauteryTipRAS
+
+  def exportTrackingDataToCsv(self, csvFilePath):
+    df = pd.DataFrame(
+      self.positionMatrix, 
+      ["Time (s)", "Scan Number", "Cautery Tip Needle", "Distance To Tumour (mm)", "Cautery Speed (mm/s)", "TIC"]
+    ).T
+    df.to_csv(csvFilePath, index=False)
 
   def onUltrasoundSequenceBrowserClicked(self, toggled):
     self.setUltrasoundSequenceBrowser(toggled)
@@ -2336,8 +2429,30 @@ class LumpNav2Logic(ScriptedLoadableModuleLogic, VTKObservationMixin):
 
   def setUltrasoundSequenceBrowser(self, isRecording):
     parameterNode = self.getParameterNode()
-    sequenceBrowserUltrasound = parameterNode.GetNodeReference(self.ULTRASOUND_SEQUENCE_BROWSER)
-    sequenceBrowserUltrasound.SetRecordingActive(isRecording)
+    plusServerNode = parameterNode.GetNodeReference(self.PLUS_SERVER_NODE)
+    connectorNode = plusServerNode.GetNodeReference("plusServerConnectorNodeRef")
+    if connectorNode:
+      if isRecording:
+        commandXML = f"""
+          <Command Name=\"StartRecording\" CaptureDeviceId=\"CaptureDevice\">
+          </Command>
+        """
+        command = slicer.vtkSlicerOpenIGTLinkCommand()
+        command.SetName("StartRecording")
+        command.SetCommandContent(commandXML)
+        connectorNode.SendCommand(command)
+      else:
+        commandXML = f"""
+          <Command Name=\"StopRecording\" CaptureDeviceId=\"CaptureDevice\">
+          </Command>
+        """
+        command = slicer.vtkSlicerOpenIGTLinkCommand()
+        command.SetName("StopRecording")
+        command.SetCommandContent(commandXML)
+        connectorNode.SendCommand(command)
+
+    # sequenceBrowserUltrasound = parameterNode.GetNodeReference(self.ULTRASOUND_SEQUENCE_BROWSER)
+    # sequenceBrowserUltrasound.SetRecordingActive(isRecording)
   
   def setContourVisibility(self, toggled):
     parameterNode = self.getParameterNode()
@@ -2584,15 +2699,18 @@ class LumpNav2Logic(ScriptedLoadableModuleLogic, VTKObservationMixin):
     parameterNode = self.getParameterNode()
     plusServerNode = parameterNode.GetNodeReference(self.PLUS_SERVER_NODE)
     predictionConnectorNode = parameterNode.GetNodeReference(self.PREDICTION_CONNECTOR_NODE)
+    iKnifeConnectorNode = parameterNode.GetNodeReference(self.IKNIFE_CONNECTOR_NODE)
     if plusServerNode:
       if toggled:
         plusServerNode.StartServer()
         predictionConnectorNode.Start()
+        iKnifeConnectorNode.Start()
         self.removeObservers(self.onNodeAdded)
         self.addObserver(slicer.mrmlScene, slicer.vtkMRMLScene.NodeAddedEvent, self.onNodeAdded)
       else:
         plusServerNode.StopServer()
         predictionConnectorNode.Stop()
+        iKnifeConnectorNode.Stop()
 
   def setPlusConfigFile(self, configFilepath):
     parameterNode = self.getParameterNode()

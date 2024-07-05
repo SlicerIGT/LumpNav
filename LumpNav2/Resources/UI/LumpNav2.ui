@@ -1288,25 +1288,6 @@
        </widget>
       </item>
       <item>
-       <widget class="QPushButton" name="trackingSequenceBrowserButton">
-        <property name="sizePolicy">
-         <sizepolicy hsizetype="Minimum" vsizetype="Fixed">
-          <horstretch>0</horstretch>
-          <verstretch>0</verstretch>
-         </sizepolicy>
-        </property>
-        <property name="text">
-         <string>Record Tracking</string>
-        </property>
-        <property name="checkable">
-         <bool>true</bool>
-        </property>
-        <property name="checked">
-         <bool>false</bool>
-        </property>
-       </widget>
-      </item>
-      <item>
        <widget class="QPushButton" name="needleVisibilityButton">
         <property name="sizePolicy">
          <sizepolicy hsizetype="Minimum" vsizetype="Fixed">
@@ -1332,6 +1313,32 @@
         </property>
         <property name="checked">
          <bool>true</bool>
+        </property>
+       </widget>
+      </item>
+      <item>
+       <widget class="QPushButton" name="trackingSequenceBrowserButton">
+        <property name="sizePolicy">
+         <sizepolicy hsizetype="Minimum" vsizetype="Fixed">
+          <horstretch>0</horstretch>
+          <verstretch>0</verstretch>
+         </sizepolicy>
+        </property>
+        <property name="text">
+         <string>Record Tracking</string>
+        </property>
+        <property name="checkable">
+         <bool>true</bool>
+        </property>
+        <property name="checked">
+         <bool>false</bool>
+        </property>
+       </widget>
+      </item>
+      <item>
+       <widget class="QPushButton" name="exportCsvButton">
+        <property name="text">
+         <string>Export Tracking Data to CSV</string>
         </property>
        </widget>
       </item>
@@ -1590,7 +1597,7 @@
  <buttongroups>
   <buttongroup name="watchedModelButtonGroup"/>
   <buttongroup name="contourModifyGroup"/>
-  <buttongroup name="brightnessButtonGroup"/>
   <buttongroup name="depthButtonGroup"/>
+  <buttongroup name="brightnessButtonGroup"/>
  </buttongroups>
 </ui>
