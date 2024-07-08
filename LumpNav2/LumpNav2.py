@@ -1682,7 +1682,7 @@ class LumpNav2Logic(ScriptedLoadableModuleLogic, VTKObservationMixin):
     
     self.lastTime = 0
     self.lastCauteryTipRAS = np.array([0, 0, 0, 1])
-    self.positionMatrix = [[], [], [], [], [], []]
+    self.positionMatrix = [[], [], [], [], [], [], [], []]
     self.updateRecordingTimeCallback = None
 
     self.predictionStarted = False
@@ -2387,6 +2387,24 @@ class LumpNav2Logic(ScriptedLoadableModuleLogic, VTKObservationMixin):
         breachWarningNode = parameterNode.GetNodeReference(self.BREACH_WARNING)
         distanceToTumor = breachWarningNode.GetClosestDistanceToModelFromToolTip()
 
+        # get tumor center in RAS and tumor model range
+        tumorModel = parameterNode.GetNodeReference(self.TUMOR_MODEL)
+        polydata = tumorModel.GetPolyData()
+        if polydata:
+          points = polydata.GetPoints()
+          numPoints = points.GetNumberOfPoints()
+
+          # Convert points to NumPy array and change from LPS to RAS by negating the X and Y coordinates
+          coords = np.array([(-points.GetPoint(i)[0], -points.GetPoint(i)[1], points.GetPoint(i)[2]) for i in range(numPoints)])
+          center = np.array2string(np.mean(coords, axis=0))
+          xRange = np.max(coords[:, 0]) - np.min(coords[:, 0])
+          yRange = np.max(coords[:, 1]) - np.min(coords[:, 1])
+          zRange = np.max(coords[:, 2]) - np.min(coords[:, 2])
+          tumorRange = np.array2string(np.array([xRange, yRange, zRange]))
+        else:
+          center = ""
+          tumorRange = ""
+
         # add iknife data if it exists
         iKnifeTICNode = parameterNode.GetNodeReference(self.IKNIFE_TIC)
         iKnifeTICArray = slicer.util.arrayFromVolume(iKnifeTICNode)
@@ -2398,7 +2416,8 @@ class LumpNav2Logic(ScriptedLoadableModuleLogic, VTKObservationMixin):
           tic = str(int(iKnifeTICArray[1]))
 
         # add data to list
-        currentData = [[currentTime], [scanNumber], [np.array2string(cauteryTipNeedle[:3])], [distanceToTumor], [cauterySpeed], [tic]]
+        currentData = [[currentTime], [scanNumber], [np.array2string(cauteryTipNeedle[:3])], 
+                       [distanceToTumor], [cauterySpeed], [center], [tumorRange], [tic]]
         self.positionMatrix = np.append(self.positionMatrix, currentData, axis=1)
         self.lastTime = currentTime
         self.lastCauteryTipRAS = cauteryTipRAS
@@ -2406,7 +2425,8 @@ class LumpNav2Logic(ScriptedLoadableModuleLogic, VTKObservationMixin):
   def exportTrackingDataToCsv(self, csvFilePath):
     df = pd.DataFrame(
       self.positionMatrix, 
-      ["Time (s)", "Scan Number", "Cautery Tip Needle", "Distance To Tumour (mm)", "Cautery Speed (mm/s)", "TIC"]
+      ["Time (s)", "Scan Number", "Cautery Tip Needle", "Distance To Tumour (mm)", 
+       "Cautery Speed (mm/s)", "Tumor Center", "Tumor Dimensions", "TIC"]
     ).T
     df.to_csv(csvFilePath, index=False)
 

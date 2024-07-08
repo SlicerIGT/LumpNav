@@ -73,7 +73,7 @@
       Id="CaptureDeviceTracker"
       Type="VirtualCapture"
       BaseFilename="LumpNavTracking.mhd"
-      EnableCapturingOnStart="TRUE"
+      EnableCapturingOnStart="FALSE"
       EnableFileCompression="FALSE"
       RequestedFrameRate="15"
       FrameBufferSize="450" >
