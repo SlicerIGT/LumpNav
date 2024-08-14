@@ -530,6 +530,9 @@ class LumpNav2Widget(ScriptedLoadableModuleWidget, VTKObservationMixin):
       logging.error("Scene saving failed")
       slicer.util.showStatusMessage(f"Failed to save scene to {sceneSaveDirectory}.", 5000)
       self.ui.statusLabel.text = "Scene saving failed"
+    
+    # Save position csv
+    self.onExportCsvButtonClicked()
 
   def confirmExit(self):
     msgBox = qt.QMessageBox()
