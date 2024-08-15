@@ -714,17 +714,23 @@
            <item>
             <widget class="QLabel" name="label_12">
              <property name="text">
-              <string>Dilate:</string>
+              <string>Dilate (mm):</string>
              </property>
             </widget>
            </item>
            <item>
-            <widget class="QDoubleSpinBox" name="dilationSpinBox">
+            <widget class="qMRMLSliderWidget" name="dilationSpinBox">
              <property name="decimals">
               <number>1</number>
              </property>
-             <property name="value">
-              <double>1.000000000000000</double>
+             <property name="pageStep">
+              <double>5.000000000000000</double>
+             </property>
+             <property name="maximum">
+              <double>20.000000000000000</double>
+             </property>
+             <property name="quantity">
+              <string notr="true"/>
              </property>
             </widget>
            </item>
@@ -1628,6 +1634,11 @@
    <class>ctkSliderWidget</class>
    <extends>QWidget</extends>
    <header>ctkSliderWidget.h</header>
+  </customwidget>
+  <customwidget>
+   <class>qMRMLSliderWidget</class>
+   <extends>ctkSliderWidget</extends>
+   <header>qMRMLSliderWidget.h</header>
   </customwidget>
   <customwidget>
    <class>qMRMLTableView</class>

@@ -2684,48 +2684,79 @@ class LumpNav2Logic(ScriptedLoadableModuleLogic, VTKObservationMixin):
     modelNode = parameterNode.GetNodeReference(model)
     modelNode.SetAndObserveTransformNodeID(None)  # move out of transform
 
-    # convert model to labelmap
+    # create segmentation node
     modelSegmentation = slicer.mrmlScene.AddNewNodeByClass("vtkMRMLSegmentationNode")
     segmentationLogic.ImportModelToSegmentationNode(modelNode, modelSegmentation)
-    modelLabelmap = slicer.mrmlScene.AddNewNodeByClass("vtkMRMLLabelMapVolumeNode")
-    segmentationLogic.ExportAllSegmentsToLabelmapNode(modelSegmentation, modelLabelmap, slicer.vtkSegmentation.EXTENT_REFERENCE_GEOMETRY)
 
-    import vtkITK
+    # get coordinates of tumor center in RAS
+    centerOfMassFilter = vtk.vtkCenterOfMass()
+    centerOfMassFilter.SetInputData(modelNode.GetPolyData())
+    centerOfMassFilter.SetUseScalarsAsWeights(False)
+    centerOfMassFilter.Update()
+    center = centerOfMassFilter.GetCenter()
 
-    modelImageData = modelLabelmap.GetImageData()
-    margin = vtkITK.vtkITKImageMargin()
-    margin.SetInputData(modelImageData)
-    margin.CalculateMarginInMMOn()
-    margin.SetOuterMarginMM(abs(dilationValue))
-    margin.Update()
-    modelImageData.ShallowCopy(margin.GetOutput())
+    # create 10x10x10cm ROI around tumor center
+    roiNode = slicer.mrmlScene.AddNewNodeByClass("vtkMRMLMarkupsROINode")
+    roiNode.SetDisplayVisibility(False)
+    roiNode.SetXYZ(center)
+    roiNode.SetRadiusXYZ(100, 100, 100)
 
-    # convert to segmentation node
-    segmentationLogic.ImportLabelmapToSegmentationNode(modelLabelmap, modelSegmentation)
-    modelSegment = modelSegmentation.GetSegmentation().GetNthSegment(1)
+    # set source geometry to ROI
+    segGeometryLogic = slicer.vtkSlicerSegmentationGeometryLogic()
+    segGeometryLogic.SetInputSegmentationNode(modelSegmentation)
+    segGeometryLogic.SetSourceGeometryNode(roiNode)
+    segGeometryLogic.CalculateOutputGeometry()
+    geometryImageData = segGeometryLogic.GetOutputGeometryImageData()
+
+    # get binary labelmap representation of tumor
+    segmentIds = vtk.vtkStringArray()
+    modelSegmentation.GetSegmentation().GetSegmentIDs(segmentIds)
+    segmentId = segmentIds.GetValue(0)
+    modelLabelmap = modelSegmentation.GetBinaryLabelmapInternalRepresentation(segmentId)
+    slicer.vtkOrientedImageDataResample.ResampleOrientedImageToReferenceOrientedImage(modelLabelmap, geometryImageData, modelLabelmap)
+
+    # create segment editor widget to access effects
+    segmentEditorWidget = slicer.qMRMLSegmentEditorWidget()
+    segmentEditorWidget.setMRMLScene(slicer.mrmlScene)
+    segmentEditorNode = slicer.mrmlScene.AddNewNodeByClass("vtkMRMLSegmentEditorNode")  # temp
+    segmentEditorWidget.setMRMLSegmentEditorNode(segmentEditorNode)
+    segmentEditorWidget.setSegmentationNode(modelSegmentation)
+    segmentEditorWidget.setCurrentSegmentID(segmentId)
+
+    # dilate tumor
+    segmentEditorWidget.setActiveEffectByName("Margin")
+    effect = segmentEditorWidget.activeEffect()
+    effect.setParameter("MarginSizeMm", dilationValue)
+    effect.setParameter("SelectedSegmentID", segmentId)
+    effect.self().onApply()
+
+    # get segment and convert to model
+    modelSegment = modelSegmentation.GetSegmentation().GetSegment(segmentId)
     modelName = f"TumorModelDilate{dilationValue}mm"
     modelSegment.SetName(modelName)
-    segmentationLogic.ExportVisibleSegmentsToModels(modelSegmentation, 3)
-    dilatedModelNode = slicer.mrmlScene.GetFirstNodeByName(modelName)
+
+    # create folder for exported segmentation
+    shNode = slicer.vtkMRMLSubjectHierarchyNode.GetSubjectHierarchyNode(slicer.mrmlScene)
+    folderItem = shNode.CreateFolderItem(shNode.GetSceneItemID(), shNode.GenerateUniqueItemName(modelName))
+    segmentationLogic.ExportSegmentsToModels(modelSegmentation, [segmentId], folderItem)
 
     # move both tumor models back to NeedleToReference
+    dilatedModelNode = slicer.mrmlScene.GetFirstNodeByName(modelName)
     needleToReference = parameterNode.GetNodeReference(self.NEEDLE_TO_REFERENCE)
     modelNode.SetAndObserveTransformNodeID(needleToReference.GetID())
     dilatedModelNode.SetAndObserveTransformNodeID(needleToReference.GetID())
 
-    # fix opacity and color models
-    modelNode.GetDisplayNode().SetOpacity(0.3)
+    # set opacity and color
     dilatedModelDisplayNode = dilatedModelNode.GetDisplayNode()
     dilatedModelDisplayNode.SetOpacity(0.15)
-    dilatedModelDisplayNode.SetColor(0, 1, 0)  # green
-    dilatedModelDisplayNode.SliceIntersectionVisibilityOn()
+    dilatedModelDisplayNode.SetColor(modelNode.GetDisplayNode().GetColor())
+    dilatedModelDisplayNode.Visibility2DOn()
     dilatedModelDisplayNode.SetSliceIntersectionThickness(4)
 
     # cleanup temporary nodes
-    slicer.mrmlScene.RemoveNode(modelLabelmap.GetDisplayNode().GetColorNode())
-    slicer.mrmlScene.RemoveNode(modelLabelmap)
-    slicer.mrmlScene.RemoveNode(modelSegmentation.GetDisplayNode().GetColorNode())
+    slicer.mrmlScene.RemoveNode(roiNode)
     slicer.mrmlScene.RemoveNode(modelSegmentation)
+    slicer.mrmlScene.RemoveNode(segmentEditorNode)
 
   def setPlusServerClicked(self, toggled):
     parameterNode = self.getParameterNode()
