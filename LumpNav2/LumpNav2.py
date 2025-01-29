@@ -1,4 +1,5 @@
 import os
+import ast
 import datetime
 import time
 import json
@@ -162,7 +163,6 @@ class LumpNav2Widget(ScriptedLoadableModuleWidget, VTKObservationMixin):
   FONT_SIZE_DEFAULT = 20
   VIEW_COORD_HEIGHT_LIMIT = 0.6
   VIEW_COORD_WIDTH_LIMIT = 0.9
-  SAVE_FOLDER_SETTING = "LumpNav2/LastSaveFolder"
 
   # Tool calibration
   PIVOT_CALIBRATION = 0
@@ -343,6 +343,7 @@ class LumpNav2Widget(ScriptedLoadableModuleWidget, VTKObservationMixin):
     self.ui.needleVisibilityButton.checked = needleVisibilitySetting
     self.ui.needleVisibilityButton.connect('toggled(bool)', self.onNeedleVisibilityToggled)
     self.ui.trackingSequenceBrowserButton.connect('toggled(bool)', self.onTrackingSequenceBrowser)
+    self.ui.iKnifeSequenceBrowserButton.connect('toggled(bool)', self.onIKnifeSequenceBrowser)
     cauteryVisible = slicer.util.settingsValue(self.logic.CAUTERY_VISIBILITY_SETTING, True, converter=slicer.util.toBool)
     self.ui.cauteryVisibilityButton.checked = cauteryVisible
     self.ui.cauteryVisibilityButton.connect('toggled(bool)', self.onCauteryVisibilityToggled)
@@ -354,7 +355,7 @@ class LumpNav2Widget(ScriptedLoadableModuleWidget, VTKObservationMixin):
     self.ui.breachMarkupsThresholdSpinBox.connect('valueChanged(int)', self.onBreachMarkupsProximityChanged)
     self.ui.exitButton.connect('clicked()', self.onExitButtonClicked)
     self.ui.saveSceneButton.connect('clicked()', self.onSaveSceneClicked)
-    lastSavePath = slicer.util.settingsValue(self.SAVE_FOLDER_SETTING, os.path.dirname(slicer.util.modulePath(self.logic.moduleName)))
+    lastSavePath = slicer.util.settingsValue(self.logic.SAVE_FOLDER_SETTING, os.path.dirname(slicer.util.modulePath(self.logic.moduleName)))
     self.ui.saveFolderSelector.directory = lastSavePath
     self.ui.saveFolderSelector.connect('directoryChanged(const QString)', self.onSavePathChanged)
     lastHostname = slicer.util.settingsValue(self.logic.HOSTNAME_SETTING, "")
@@ -502,7 +503,7 @@ class LumpNav2Widget(ScriptedLoadableModuleWidget, VTKObservationMixin):
       abspath = os.path.abspath(path)
       self.ui.saveFolderSelector.directory = abspath
       settings = qt.QSettings()
-      settings.setValue(self.SAVE_FOLDER_SETTING, abspath)
+      settings.setValue(self.logic.SAVE_FOLDER_SETTING, abspath)
       logging.info(f"onSavePathChanged({abspath})")
 
   def onSaveSceneClicked(self):  # common
@@ -834,6 +835,10 @@ class LumpNav2Widget(ScriptedLoadableModuleWidget, VTKObservationMixin):
   def onTrackingSequenceBrowser(self, toggled):
     logging.info("onTrackingSequenceBrowserToggled({})".format(toggled))
     self.logic.setTrackingSequenceBrowser(toggled)
+
+  def onIKnifeSequenceBrowser(self, toggled):
+    logging.info("onIKnifeSequenceBrowserToggled({})".format(toggled))
+    self.logic.setIKnifeSequenceBrowser(toggled)
 
   def onUltrasoundSequenceBrowser(self, toggled):
     logging.info("onUltrasoundSequenceBrowserToggled({})".format(toggled))
@@ -1635,6 +1640,7 @@ class LumpNav2Logic(ScriptedLoadableModuleLogic, VTKObservationMixin):
   DISPLAY_DISTANCE_SETTING = "LumpNav2/DistanceRulerTextEnabled"
   RULER_DISTANCE_DEFAULT_FONT_SIZE = 5
   RULER_FONT_SIZE = "LumpNav2/RulerFontSize"
+  SAVE_FOLDER_SETTING = "LumpNav2/LastSaveFolder"
 
   # Model reconstruction
   ROI_NODE = "ROI"
@@ -1650,7 +1656,10 @@ class LumpNav2Logic(ScriptedLoadableModuleLogic, VTKObservationMixin):
   AI_VISIBLE = "AIVisible"
 
   # iKnife connection
+  IKNIFE_SCAN = "iKnifeScan"
+  IKNIFE_METADATA = "iKnifeMetadata"
   IKNIFE_TIC = "iKnifeTIC"
+  IKNIFE_SEQUENCE_BROWSER = "iKnifeSequenceBrowser"
 
   # Layout codes
   LAYOUT_2D3D = 501
@@ -2177,6 +2186,39 @@ class LumpNav2Logic(ScriptedLoadableModuleLogic, VTKObservationMixin):
       eventTableNode.SetUseColumnTitleAsColumnHeader(True)
       parameterNode.SetNodeReferenceID(self.EVENT_TABLE_NODE, eventTableNode.GetID())
 
+    # iKnife scan data
+    sceneSavePath = slicer.util.settingsValue(self.SAVE_FOLDER_SETTING, os.path.dirname(slicer.util.modulePath(self.moduleName)))
+    self.scanSaveFolder = os.path.join(sceneSavePath, f"{self.moduleName}-iKnifeScans-{time.strftime('%Y%m%d-%H%M%S')}")
+    if not os.path.exists(self.scanSaveFolder):
+      os.makedirs(self.scanSaveFolder)
+
+    iKnifeScanNode = parameterNode.GetNodeReference(self.IKNIFE_SCAN)
+    if iKnifeScanNode is None:
+      iKnifeScanNode = slicer.mrmlScene.AddNewNodeByClass("vtkMRMLScalarVolumeNode", self.IKNIFE_SCAN)
+      parameterNode.SetNodeReferenceID(self.IKNIFE_SCAN, iKnifeScanNode.GetID())
+    self.addObserver(iKnifeScanNode, slicer.vtkMRMLScalarVolumeNode.ImageDataModifiedEvent, self.onIKnifeScanModified)
+
+    iKnifeMetadataNode = parameterNode.GetNodeReference(self.IKNIFE_METADATA)
+    if not iKnifeMetadataNode:
+      iKnifeMetadataNode = slicer.mrmlScene.AddNewNodeByClass("vtkMRMLTextNode", self.IKNIFE_METADATA)
+      parameterNode.SetNodeReferenceID(self.IKNIFE_METADATA, iKnifeMetadataNode.GetID())
+
+    # Add sequence browser for iKnife scan data
+    iKnifeSeqBr = parameterNode.GetNodeReference(self.IKNIFE_SEQUENCE_BROWSER)
+    if not iKnifeSeqBr:
+      iKnifeSeqBr = slicer.mrmlScene.AddNewNodeByClass("vtkMRMLSequenceBrowserNode", self.IKNIFE_SEQUENCE_BROWSER)
+      iKnifeSeqBr.SetRecordMasterOnly(True)
+      parameterNode.SetNodeReferenceID(self.IKNIFE_SEQUENCE_BROWSER, iKnifeSeqBr.GetID())
+
+      # Add sequence node for iKnife scan data
+      iKnifeScanSeqNode = sequenceLogic.AddSynchronizedNode(None, iKnifeScanNode, iKnifeSeqBr)
+      iKnifeSeqBr.SetRecording(iKnifeScanSeqNode, True)
+      iKnifeSeqBr.SetPlayback(iKnifeScanSeqNode, True)
+
+      iKnifeMetadataSeqNode = sequenceLogic.AddSynchronizedNode(None, iKnifeMetadataNode, iKnifeSeqBr)
+      iKnifeSeqBr.SetRecording(iKnifeMetadataSeqNode, True)
+      iKnifeSeqBr.SetPlayback(iKnifeMetadataSeqNode, True)
+
     # iKnife TIC data
     iKnifeTICNode = parameterNode.GetNodeReference(self.IKNIFE_TIC)
     if iKnifeTICNode is None:
@@ -2357,6 +2399,11 @@ class LumpNav2Logic(ScriptedLoadableModuleLogic, VTKObservationMixin):
     sequenceBrowserTracking = parameterNode.GetNodeReference(self.TRACKING_SEQUENCE_BROWSER)
     sequenceBrowserTracking.SetRecordingActive(recording)  # stop
 
+  def setIKnifeSequenceBrowser(self, recording):
+    parameterNode = self.getParameterNode()
+    sequenceBrowserIKnife = parameterNode.GetNodeReference(self.IKNIFE_SEQUENCE_BROWSER)
+    sequenceBrowserIKnife.SetRecordingActive(recording)
+
   def onTrackingDataModified(self, caller=None, event=None):
     parameterNode = self.getParameterNode()
     sequenceBrowserTracking = parameterNode.GetNodeReference(self.TRACKING_SEQUENCE_BROWSER)
@@ -2425,6 +2472,18 @@ class LumpNav2Logic(ScriptedLoadableModuleLogic, VTKObservationMixin):
         self.lastTime = currentTime
         self.lastCauteryTipRAS = cauteryTipRAS
 
+  def onIKnifeScanModified(self, caller=None, event=None):
+    parameterNode = self.getParameterNode()
+    iKnifeScanNode = parameterNode.GetNodeReference(self.IKNIFE_SCAN)
+    iKnifeMetadataNode = parameterNode.GetNodeReference(self.IKNIFE_METADATA)
+    scanArr = slicer.util.arrayFromVolume(iKnifeScanNode)
+    scanMetadataDict = ast.literal_eval(iKnifeMetadataNode.GetText())
+
+    # reshape data and save to numpy array
+    scanSavePath = os.path.join(self.scanSaveFolder, f"iKnifeScan{scanMetadataDict['scan_number']:05}.npy")
+    peaks = np.reshape(scanArr, (-1,), order="C")
+    np.save(scanSavePath, peaks)
+
   def exportTrackingDataToCsv(self, csvFilePath):
     df = pd.DataFrame(
       self.positionMatrix, 
@@ -2483,8 +2542,8 @@ class LumpNav2Logic(ScriptedLoadableModuleLogic, VTKObservationMixin):
         command.SetCommandContent(commandXML)
         connectorNode.SendCommand(command)
 
-    # sequenceBrowserUltrasound = parameterNode.GetNodeReference(self.ULTRASOUND_SEQUENCE_BROWSER)
-    # sequenceBrowserUltrasound.SetRecordingActive(isRecording)
+    sequenceBrowserUltrasound = parameterNode.GetNodeReference(self.ULTRASOUND_SEQUENCE_BROWSER)
+    sequenceBrowserUltrasound.SetRecordingActive(isRecording)
   
   def setContourVisibility(self, toggled):
     parameterNode = self.getParameterNode()

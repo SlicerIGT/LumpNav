@@ -1391,6 +1391,16 @@
        </widget>
       </item>
       <item>
+       <widget class="QPushButton" name="iKnifeSequenceBrowserButton">
+        <property name="text">
+         <string>Record iKnife Data</string>
+        </property>
+        <property name="checkable">
+         <bool>true</bool>
+        </property>
+       </widget>
+      </item>
+      <item>
        <widget class="QPushButton" name="exportCsvButton">
         <property name="text">
          <string>Export Tracking Data to CSV</string>
@@ -1655,9 +1665,9 @@
  <resources/>
  <connections/>
  <buttongroups>
-  <buttongroup name="contourModifyGroup"/>
   <buttongroup name="watchedModelButtonGroup"/>
-  <buttongroup name="brightnessButtonGroup"/>
   <buttongroup name="depthButtonGroup"/>
+  <buttongroup name="brightnessButtonGroup"/>
+  <buttongroup name="contourModifyGroup"/>
  </buttongroups>
 </ui>
