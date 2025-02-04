@@ -513,13 +513,12 @@ class LumpNav2Widget(ScriptedLoadableModuleWidget, VTKObservationMixin):
     # save the mrml scene to a temp directory, then zip it
     qt.QApplication.setOverrideCursor(qt.Qt.WaitCursor)
     sceneSaveDirectory = self.ui.saveFolderSelector.directory
-    sceneSaveDirectory = sceneSaveDirectory + "/" + self.logic.moduleName + "-" + time.strftime("%Y%m%d-%H%M%S")
+    sceneSavePath = sceneSaveDirectory + "/" + self.logic.moduleName + "-" + time.strftime("%Y%m%d-%H%M%S") + ".mrb"
     logging.info("Saving scene to: {0}".format(sceneSaveDirectory))
     if not os.access(sceneSaveDirectory, os.F_OK):
       os.makedirs(sceneSaveDirectory)
 
-    applicationLogic = slicer.app.applicationLogic()
-    saveSuccess = applicationLogic.SaveSceneToSlicerDataBundleDirectory(sceneSaveDirectory, None)
+    saveSuccess = slicer.util.saveScene(sceneSavePath)
     qt.QApplication.restoreOverrideCursor()
     if saveSuccess:
       # Record time stamp of save
@@ -1308,7 +1307,6 @@ class LumpNav2Widget(ScriptedLoadableModuleWidget, VTKObservationMixin):
   
   def onSceneEndImport(self, caller, event):
     if self.parent.isEntered:
-      self.logic.setup()
       self.initializeParameterNode()
       self.updateGUIFromParameterNode()
       self.updateGUIFromMRML()
