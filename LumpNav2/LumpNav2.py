@@ -1,5 +1,6 @@
 import os
 import ast
+import shutil
 import datetime
 import time
 import json
@@ -512,11 +513,24 @@ class LumpNav2Widget(ScriptedLoadableModuleWidget, VTKObservationMixin):
 
     # save the mrml scene to a temp directory, then zip it
     qt.QApplication.setOverrideCursor(qt.Qt.WaitCursor)
-    sceneSaveDirectory = self.ui.saveFolderSelector.directory
-    sceneSavePath = sceneSaveDirectory + "/" + self.logic.moduleName + "-" + time.strftime("%Y%m%d-%H%M%S") + ".mrb"
+    saveName = self.logic.moduleName + "-" + time.strftime("%Y%m%d-%H%M%S")
+    sceneSaveDirectory = os.path.join(self.ui.saveFolderSelector.directory, saveName)
+    sceneSavePath = os.path.join(sceneSaveDirectory, f"{saveName}.mrb")
     logging.info("Saving scene to: {0}".format(sceneSaveDirectory))
     if not os.access(sceneSaveDirectory, os.F_OK):
       os.makedirs(sceneSaveDirectory)
+
+    # Save position csv
+    self.onExportCsvButtonClicked(sceneSaveDirectory)
+
+    # Move temp iKnife scan files to save directory
+    scanSaveFolder = os.path.join(sceneSaveDirectory, "iKnifeScans")
+    if not os.path.exists(scanSaveFolder):
+      os.makedirs(scanSaveFolder)
+    scan_files = os.listdir(self.logic.scanSaveTempFolder)
+    for scan_file in scan_files:
+      shutil.move(os.path.join(self.logic.scanSaveTempFolder, scan_file), scanSaveFolder)
+    shutil.rmtree(self.logic.scanSaveTempFolder)
 
     saveSuccess = slicer.util.saveScene(sceneSavePath)
     qt.QApplication.restoreOverrideCursor()
@@ -530,9 +544,6 @@ class LumpNav2Widget(ScriptedLoadableModuleWidget, VTKObservationMixin):
       logging.error("Scene saving failed")
       slicer.util.showStatusMessage(f"Failed to save scene to {sceneSaveDirectory}.", 5000)
       self.ui.statusLabel.text = "Scene saving failed"
-    
-    # Save position csv
-    self.onExportCsvButtonClicked()
 
   def confirmExit(self):
     msgBox = qt.QMessageBox()
@@ -826,9 +837,12 @@ class LumpNav2Widget(ScriptedLoadableModuleWidget, VTKObservationMixin):
   def updateRecordingTimeLabel(self, time):
     self.ui.recordingTimeLabel.text = f"{time} s"
 
-  def onExportCsvButtonClicked(self):
+  def onExportCsvButtonClicked(self, folder=None):
     csvFilename = f"iKnifeSyncData_{time.strftime('%Y%m%d-%H%M%S')}.csv"
-    csvFilePath = os.path.join(self.ui.saveFolderSelector.directory, csvFilename)
+    if folder:
+      csvFilePath = os.path.join(folder, csvFilename)
+    else:
+      csvFilePath = os.path.join(self.ui.saveFolderSelector.directory, csvFilename)
     self.logic.exportTrackingDataToCsv(csvFilePath)
 
   def onTrackingSequenceBrowser(self, toggled):
@@ -1308,6 +1322,7 @@ class LumpNav2Widget(ScriptedLoadableModuleWidget, VTKObservationMixin):
   def onSceneEndImport(self, caller, event):
     if self.parent.isEntered:
       self.initializeParameterNode()
+      self.logic.setup()
       self.updateGUIFromParameterNode()
       self.updateGUIFromMRML()
 
@@ -1319,12 +1334,6 @@ class LumpNav2Widget(ScriptedLoadableModuleWidget, VTKObservationMixin):
     # so that when the scene is saved and reloaded, these settings are restored.
 
     self.setParameterNode(self.logic.getParameterNode())
-
-    # Select default input nodes if nothing is selected yet to save a few clicks for the user
-    if not self._parameterNode.GetNodeReference("InputVolume"):
-      firstVolumeNode = slicer.mrmlScene.GetFirstNodeByClass("vtkMRMLScalarVolumeNode")
-      if firstVolumeNode:
-        self._parameterNode.SetNodeReferenceID("InputVolume", firstVolumeNode.GetID())
 
   def setParameterNode(self, inputParameterNode):
     """
@@ -1656,7 +1665,6 @@ class LumpNav2Logic(ScriptedLoadableModuleLogic, VTKObservationMixin):
   # iKnife connection
   IKNIFE_SCAN = "iKnifeScan"
   IKNIFE_METADATA = "iKnifeMetadata"
-  IKNIFE_TIC = "iKnifeTIC"
   IKNIFE_SEQUENCE_BROWSER = "iKnifeSequenceBrowser"
 
   # Layout codes
@@ -1690,9 +1698,10 @@ class LumpNav2Logic(ScriptedLoadableModuleLogic, VTKObservationMixin):
 
     self.viewpointLogic = Viewpoint.ViewpointLogic()
     
+    self.scanSaveTempFolder = None
     self.lastTime = 0
     self.lastCauteryTipRAS = np.array([0, 0, 0, 1])
-    self.positionMatrix = [[], [], [], [], [], [], [], []]
+    self.positionMatrix = [[], [], [], [], [], [], [], [], [], []]
     self.updateRecordingTimeCallback = None
 
     self.predictionStarted = False
@@ -2186,9 +2195,9 @@ class LumpNav2Logic(ScriptedLoadableModuleLogic, VTKObservationMixin):
 
     # iKnife scan data
     sceneSavePath = slicer.util.settingsValue(self.SAVE_FOLDER_SETTING, os.path.dirname(slicer.util.modulePath(self.moduleName)))
-    self.scanSaveFolder = os.path.join(sceneSavePath, f"{self.moduleName}-iKnifeScans-{time.strftime('%Y%m%d-%H%M%S')}")
-    if not os.path.exists(self.scanSaveFolder):
-      os.makedirs(self.scanSaveFolder)
+    self.scanSaveTempFolder = os.path.join(sceneSavePath, f"{self.moduleName}-iKnifeScansTemp-{time.strftime('%Y%m%d-%H%M%S')}")
+    if not os.path.exists(self.scanSaveTempFolder):
+      os.makedirs(self.scanSaveTempFolder)
 
     iKnifeScanNode = parameterNode.GetNodeReference(self.IKNIFE_SCAN)
     if iKnifeScanNode is None:
@@ -2216,14 +2225,6 @@ class LumpNav2Logic(ScriptedLoadableModuleLogic, VTKObservationMixin):
       iKnifeMetadataSeqNode = sequenceLogic.AddSynchronizedNode(None, iKnifeMetadataNode, iKnifeSeqBr)
       iKnifeSeqBr.SetRecording(iKnifeMetadataSeqNode, True)
       iKnifeSeqBr.SetPlayback(iKnifeMetadataSeqNode, True)
-
-    # iKnife TIC data
-    iKnifeTICNode = parameterNode.GetNodeReference(self.IKNIFE_TIC)
-    if iKnifeTICNode is None:
-      iKnifeTICNode = slicer.mrmlScene.AddNewNodeByClass("vtkMRMLScalarVolumeNode", self.IKNIFE_TIC)
-      ticArray = np.zeros(2)
-      slicer.util.updateVolumeFromArray(iKnifeTICNode, ticArray)
-      parameterNode.SetNodeReferenceID(self.IKNIFE_TIC, iKnifeTICNode.GetID())
 
     # OpenIGTLink connection
     self.setupPlusServer()
@@ -2454,18 +2455,22 @@ class LumpNav2Logic(ScriptedLoadableModuleLogic, VTKObservationMixin):
           tumorRange = ""
 
         # add iknife data if it exists
-        iKnifeTICNode = parameterNode.GetNodeReference(self.IKNIFE_TIC)
-        iKnifeTICArray = slicer.util.arrayFromVolume(iKnifeTICNode)
-        if not np.any(iKnifeTICArray):  # no scan number or tic
+        scanMetadata = parameterNode.GetNodeReference(self.IKNIFE_METADATA)
+        try:
+          scanMetadataDict = ast.literal_eval(iKnifeMetadataNode.GetText())
+          sendTime = scanMetadataDict["time"]
+          scanNumber = scanMetadataDict["scan_number"]
+          tic = scanMetadataDict["TIC"]
+        except:
+          sendTime = ""
           scanNumber = ""
           tic = ""
-        else:
-          scanNumber = str(int(iKnifeTICArray[0]))
-          tic = str(int(iKnifeTICArray[1]))
 
         # add data to list
-        currentData = [[currentTime], [scanNumber], [np.array2string(cauteryTipNeedle[:3])], 
-                       [distanceToTumor], [cauterySpeed], [center], [tumorRange], [tic]]
+        currentTimeWorld = time.strftime("%Y-%m-%d %H:%M:%S")
+        currentData = [[currentTimeWorld], [currentTime], [sendTime], [scanNumber], 
+                       [np.array2string(cauteryTipNeedle[:3])], [distanceToTumor], 
+                       [cauterySpeed], [center], [tumorRange], [tic]]
         self.positionMatrix = np.append(self.positionMatrix, currentData, axis=1)
         self.lastTime = currentTime
         self.lastCauteryTipRAS = cauteryTipRAS
@@ -2478,15 +2483,15 @@ class LumpNav2Logic(ScriptedLoadableModuleLogic, VTKObservationMixin):
     scanMetadataDict = ast.literal_eval(iKnifeMetadataNode.GetText())
 
     # reshape data and save to numpy array
-    scanSavePath = os.path.join(self.scanSaveFolder, f"iKnifeScan{scanMetadataDict['scan_number']:05}.npy")
+    scanSavePath = os.path.join(self.scanSaveTempFolder, f"iKnifeScan{scanMetadataDict['scan_number']:05}.npz")
     peaks = np.reshape(scanArr, (-1,), order="C")
-    np.save(scanSavePath, peaks)
+    np.savez(scanSavePath, peaks=peaks, metadata=scanMetadataDict)
 
   def exportTrackingDataToCsv(self, csvFilePath):
     df = pd.DataFrame(
       self.positionMatrix, 
-      ["Time (s)", "Scan Number", "Cautery Tip Needle", "Distance To Tumour (mm)", 
-       "Cautery Speed (mm/s)", "Tumor Center", "Tumor Dimensions", "TIC"]
+      ["Local Time", "Time (s)", "Scan Send Time", "Scan Number", "Cautery Tip Needle", 
+       "Distance To Tumour (mm)", "Cautery Speed (mm/s)", "Tumor Center", "Tumor Dimensions", "TIC"]
     ).T
     df.to_csv(csvFilePath, index=False)
 
